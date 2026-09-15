@@ -1,35 +1,18 @@
-# 🦸‍♂️ Sidekick
+# Sidekick
 
-*Predict equipment failures. Challenge the predictions. Decide with evidence.*
+A predictive-maintenance copilot for **ABB Accelerator 2026**, built by Adam Qablawi and Kareem Massoud. It evaluates whether equipment-failure models still give useful warnings when sensor data becomes unreliable.
 
-Sidekick is a predictive maintenance copilot proposed for the **ABB Accelerator 2026**. It helps engineers stress-test equipment failure models to ensure they still provide useful warnings—even when sensor data becomes unreliable or goes offline.
+## My work
 
-## 🛠️ How It Works
+- Built the React/FastAPI copilot, connecting MLflow results to LLM-assisted evidence reviews so engineers could inspect failure warnings and false alarms before deployment decisions.
+- Implemented a **5-stage validation workflow** on NASA C-MAPSS FD001, testing **3 prediction approaches** under missing or stuck readings and sensor drift to compare model reliability under faulty inputs.
 
-1. **📊 Upload & Inspect:** Bring in your sensor histories and check the data quality.
-2. **🧠 Train & Compare:** Build and evaluate different failure prediction models side-by-side.
-3. **🌪️ Stress Test:** Throw chaos at the models—missing readings, stuck sensors, and data drift.
-4. **🔄 Retrain & Measure:** Simulate faults, retrain the models, and see if the new data improves performance.
-5. **⚖️ Review & Decide:** Analyze warning timelines, missed failures, and false alarms before deciding what to take to trial.
+## Evaluation
 
-*Note: The copilot guides the workflow and explains recorded results, while separate machine learning models handle the predictions. **Deployment decisions always stay with the engineer.***
+The workflow compares warning timelines and counts missed failures alongside false alarms. Separate machine-learning models make the predictions; the LLM explains recorded results.
 
-## 🚀 Planned Prototype
+## Repository
 
-- **Dataset:** NASA C-MAPSS FD001 data for an initial simulation-based evaluation.
-- **Models:** Logistic Regression and XGBoost, benchmarked against a simple equipment-age baseline.
-- **Tech Stack:** ⚛️ React (interface), ⚡ FastAPI (backend), and 📈 MLflow (experiment tracking).
-- **AI Copilot:** An existing LLM to coordinate tools and answer questions about the generated evidence.
+The implementation is in a private repository. This public repo contains the original proposal.
 
-## 🚧 Status
-
-Sidekick is currently an **idea-phase** project. 💡 This repository contains the official proposal; implementation and measured results are still to come. *(Keep in mind: Tests on simulated data will not immediately establish readiness for a working, live plant.)*
-
-## 📄 Proposal
-
-- 📕 [Read the proposal (PDF)](Idea%20Phase/documents/Sidekick%20ABB%20Accelerator%202026%20Final%20Submission.pdf)
-- 📘 [Editable proposal (Word)](Idea%20Phase/documents/Sidekick%20ABB%20Accelerator%202026%20Final%20Submission.docx)
-
-## 🤝 Team
-
-Built by **Kareem Massoud** and **Adam Qablawi**.
+[Proposal (PDF)](Idea%20Phase/documents/Sidekick%20ABB%20Accelerator%202026%20Final%20Submission.pdf) | [Editable proposal (Word)](Idea%20Phase/documents/Sidekick%20ABB%20Accelerator%202026%20Final%20Submission.docx)
