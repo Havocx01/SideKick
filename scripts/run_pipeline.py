@@ -7,7 +7,7 @@ records every result in the evidence store and writes the bundle the hosted demo
 serves.
 
 The held-out engines are not touched here. They are scored once, by
-``scripts/final_evaluation.py``, after the configuration is frozen.
+``scripts/score_holdout.py``, after the configuration is frozen.
 
 Examples
 --------
