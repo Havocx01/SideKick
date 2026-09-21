@@ -177,6 +177,16 @@ class Settings:
         return self.data_dir / "cmapss"
 
     @property
+    def static_dir(self) -> Path:
+        """The built frontend, when one service serves both it and the API.
+
+        The hosted deployment has one free web service, so the API serves the
+        bundle it was built against. That also removes cross-origin requests from
+        the demo path entirely.
+        """
+        return _env_path("SIDEKICK_STATIC_DIR", REPO_ROOT / "frontend" / "dist")
+
+    @property
     def llm_available(self) -> bool:
         return bool(self.llm_api_key)
 

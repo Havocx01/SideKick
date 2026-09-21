@@ -14,6 +14,8 @@ cannot be trusted when it produces one.
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 from app.config import EXPERIMENT, ExperimentConfig
 from app.schemas import (
     AcceptanceCriteria,
@@ -131,7 +133,7 @@ def select(
         )
     elif len(qualifying) > 1:
         # Flag orderings the data does not actually establish.
-        for better, worse in zip(qualifying, qualifying[1:], strict=False):
+        for better, worse in pairwise(qualifying):
             if intervals_overlap(better.clean.detection_ci, worse.clean.detection_ci):
                 uncertain.append(
                     f"{better.candidate.value}/{better.config_id} vs "

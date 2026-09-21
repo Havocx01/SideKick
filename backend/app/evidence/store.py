@@ -14,7 +14,7 @@ for the local experiment UI (see :mod:`app.evidence.tracking`) and is optional.
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -66,7 +66,7 @@ class EvidenceStore:
         notes: list[str] | None = None,
     ) -> RunRecord:
         """Create a run record. Metrics and artifacts are attached afterwards."""
-        created = datetime.now(timezone.utc)
+        created = datetime.now(UTC)
         suffix = hash_obj(
             {
                 "kind": kind,

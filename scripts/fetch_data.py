@@ -42,7 +42,7 @@ EXPECTED = tuple(f"train_FD00{i}.txt" for i in range(1, 5))
 
 def _request(url: str, timeout: float = 60.0) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read()
 
 
@@ -103,7 +103,8 @@ def verify(target: Path) -> bool:
         print(f"  missing expected files: {missing}")
         return False
     train = target / "train_FD001.txt"
-    lines = sum(1 for _ in open(train, encoding="utf-8", errors="ignore"))
+    with open(train, encoding="utf-8", errors="ignore") as handle:
+        lines = sum(1 for _ in handle)
     print(f"  train_FD001.txt has {lines} rows")
     # The published FD001 training file has 20631 rows across 100 engines.
     if lines < 20_000:

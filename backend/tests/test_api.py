@@ -13,7 +13,7 @@ class TestHealth:
         # The hosted demo must not imply it trains.
         assert "recorded evidence" in payload["note"]
 
-    def test_the_root_points_at_the_documentation(self, client):
+    def test_the_root_points_at_the_documentation_when_no_frontend_is_built(self, client):
         payload = client.get("/").json()
         assert payload["docs"] == "/docs"
 
@@ -131,6 +131,61 @@ class TestCopilotRoutes:
         assert len(client.get("/api/copilot/suggestions").json()["suggestions"]) >= 5
 
 
+class TestStaticFrontend:
+    """The deployed image serves the frontend from this service, so routing matters."""
+
+    def _app(self, monkeypatch, tmp_path, bundle_path):
+        from app.config import reset_settings
+        from app.main import create_app
+
+        static = tmp_path / "dist"
+        (static / "assets").mkdir(parents=True)
+        (static / "index.html").write_text("<!doctype html><title>app</title>", encoding="utf-8")
+        (static / "assets" / "app.js").write_text("export const ok = 1;", encoding="utf-8")
+
+        monkeypatch.setenv("SIDEKICK_MODE", "replay")
+        monkeypatch.setenv("SIDEKICK_BUNDLE_PATH", str(bundle_path))
+        monkeypatch.setenv("SIDEKICK_STATIC_DIR", str(static))
+        reset_settings()
+        return create_app()
+
+    def test_a_client_side_route_survives_a_reload(self, monkeypatch, tmp_path, bundle_path):
+        from fastapi.testclient import TestClient
+
+        from app.api.deps import reload_bundle
+        from app.config import reset_settings
+
+        reload_bundle()
+        with TestClient(self._app(monkeypatch, tmp_path, bundle_path)) as client:
+            # A deep link is not a file on disk; it has to fall back to the app shell.
+            assert "<title>app</title>" in client.get("/replay").text
+            assert client.get("/assets/app.js").status_code == 200
+            # The API must not be shadowed by the catch-all route.
+            assert client.get("/api/health").json()["status"] == "ok"
+
+        reload_bundle()
+        reset_settings()
+
+    def test_a_path_outside_the_static_directory_is_not_served(
+        self, monkeypatch, tmp_path, bundle_path
+    ):
+        from fastapi.testclient import TestClient
+
+        from app.api.deps import reload_bundle
+        from app.config import reset_settings
+
+        secret = tmp_path / "secret.txt"
+        secret.write_text("not for the public", encoding="utf-8")
+
+        reload_bundle()
+        with TestClient(self._app(monkeypatch, tmp_path, bundle_path)) as client:
+            response = client.get("/../secret.txt")
+            assert "not for the public" not in response.text
+
+        reload_bundle()
+        reset_settings()
+
+
 class TestMissingBundle:
     def test_evidence_routes_explain_a_missing_bundle(self, monkeypatch, tmp_path):
         from fastapi.testclient import TestClient
@@ -141,6 +196,7 @@ class TestMissingBundle:
 
         monkeypatch.setenv("SIDEKICK_MODE", "replay")
         monkeypatch.setenv("SIDEKICK_BUNDLE_PATH", str(tmp_path / "absent.json"))
+        monkeypatch.setenv("SIDEKICK_STATIC_DIR", str(tmp_path / "no-frontend"))
         reset_settings()
         reload_bundle()
 

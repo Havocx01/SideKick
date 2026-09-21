@@ -13,7 +13,8 @@ the check does would be the same failure it exists to prevent.
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from app.schemas import NumericClaim
 

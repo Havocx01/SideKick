@@ -30,6 +30,10 @@ ignore = [
     "B008",   # FastAPI dependency injection relies on calls in defaults
     "N803",   # X, y are the conventional names for design matrices
     "N806",
+    # str + Enum is the Pydantic-compatible spelling: it keeps `.value` explicit at
+    # every call site, which StrEnum makes invisible by making the member itself a
+    # string. The generated TypeScript unions depend on that being deliberate.
+    "UP042",
 ]
 
 [tool.ruff.lint.per-file-ignores]

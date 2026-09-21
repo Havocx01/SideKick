@@ -99,7 +99,7 @@ def ts_type(node: dict, defs: dict) -> str:
         if node_type == "string" and node.get("format") in {"date-time", "date"}:
             return "string"
         return SCALARS[node_type]
-    return "unknown";
+    return "unknown"
 
 
 def emit_definition(name: str, node: dict, defs: dict) -> str:

@@ -23,7 +23,13 @@ from app.config import EXPERIMENT, ExperimentConfig
 from app.data.dataset import Dataset
 from app.data.profiler import profile_dataset
 from app.faults.matrix import full_scenarios, required_scenarios
-from app.faults.runner import MatrixOutcome, clean_scorings, run_matrix, score_clean, to_scenario_results
+from app.faults.runner import (
+    MatrixOutcome,
+    clean_scorings,
+    run_matrix,
+    score_clean,
+    to_scenario_results,
+)
 from app.models.calibration import calibration_report
 from app.models.candidates import candidate_grid
 from app.models.thresholds import ThresholdChoice, choose_threshold

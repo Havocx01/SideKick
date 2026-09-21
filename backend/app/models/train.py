@@ -29,7 +29,7 @@ from app.models.design import (
 )
 from app.models.splits import fold_pairs, make_splits
 from app.schemas import FaultDuration, FaultKind, FaultSpec, SplitAssignment
-from app.utils.determinism import derive_seed, rng
+from app.utils.determinism import derive_seed
 from app.utils.logging_setup import get_logger, timed
 
 logger = get_logger(__name__)

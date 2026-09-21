@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from app.features.build import FEATURES_PER_SENSOR, FeatureBuilder, assert_no_lookahead
+from app.features.build import FEATURES_PER_SENSOR, assert_no_lookahead
 from app.features.windows import rolling_mean, rolling_slope
 
 
