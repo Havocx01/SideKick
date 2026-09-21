@@ -1,0 +1,120 @@
+import { useMemo } from "react";
+
+import type { ScenarioResult } from "../api/types";
+import { percent } from "../format";
+
+/**
+ * Detection under every tested fault, as sensor against fault kind.
+ *
+ * A table of 64 numbers hides the pattern that matters: whether a candidate is
+ * broadly robust or has one specific blind spot. Colour is keyed to the
+ * engineer's minimum so cells below it read as failures rather than as merely
+ * darker.
+ */
+export function ScenarioHeatmap({
+  results,
+  minDetection,
+}: {
+  results: ScenarioResult[];
+  minDetection: number;
+}) {
+  const { sensors, kinds, grid } = useMemo(() => {
+    const cells = new Map<string, ScenarioResult[]>();
+    const sensorSet = new Set<string>();
+    const kindSet = new Set<string>();
+
+    for (const result of results) {
+      if (!result.fault) continue;
+      const kind =
+        result.fault.kind === "drift"
+          ? `drift ${result.fault.sign && result.fault.sign < 0 ? "down" : "up"}`
+          : result.fault.kind;
+      sensorSet.add(result.fault.sensor);
+      kindSet.add(kind);
+      const key = `${result.fault.sensor}|${kind}`;
+      cells.set(key, [...(cells.get(key) ?? []), result]);
+    }
+
+    return {
+      sensors: [...sensorSet].sort(),
+      kinds: [...kindSet].sort(),
+      grid: cells,
+    };
+  }, [results]);
+
+  if (sensors.length === 0) {
+    return <div className="state">No fault scenarios recorded for this candidate.</div>;
+  }
+
+  /** Worst case in the cell: a candidate is only as good as its weakest result. */
+  const worst = (sensor: string, kind: string): number | null => {
+    const entries = grid.get(`${sensor}|${kind}`);
+    if (!entries || entries.length === 0) return null;
+    return Math.min(...entries.map((entry) => entry.metrics.detection_fraction));
+  };
+
+  const colour = (value: number | null): string => {
+    if (value === null) return "var(--canvas)";
+    if (value < minDetection) {
+      // Below the engineer's minimum: red, deepening as it gets worse.
+      const depth = Math.min(1, (minDetection - value) / Math.max(0.01, minDetection));
+      return `rgba(216, 30, 46, ${0.22 + depth * 0.68})`;
+    }
+    const headroom = Math.min(1, (value - minDetection) / Math.max(0.01, 1 - minDetection));
+    return `rgba(26, 122, 87, ${0.14 + headroom * 0.5})`;
+  };
+
+  return (
+    <div>
+      <div className="table-scroll">
+        <table className="heatmap">
+          <thead>
+            <tr>
+              <th />
+              {kinds.map((kind) => (
+                <th key={kind} className="heat-col-label">
+                  {kind}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sensors.map((sensor) => (
+              <tr key={sensor}>
+                <td className="heat-row-label">{sensor}</td>
+                {kinds.map((kind) => {
+                  const value = worst(sensor, kind);
+                  return (
+                    <td key={kind}>
+                      <div
+                        className="heat-cell"
+                        style={{ background: colour(value) }}
+                        title={`${sensor}, ${kind}: worst detection ${percent(value, 1)}`}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="heat-scale">
+        <span>worse</span>
+        <span className="heat-scale-ramp">
+          {[0, 0.2, 0.4, 0.6, 0.8, 1].map((fraction) => (
+            <span
+              key={fraction}
+              style={{ flex: 1, background: colour(fraction * (1 - 0) ) }}
+            />
+          ))}
+        </span>
+        <span>better</span>
+        <span className="note" style={{ marginLeft: 8 }}>
+          red is below the required {percent(minDetection)}; each cell shows the worst case for
+          that sensor and fault kind
+        </span>
+      </div>
+    </div>
+  );
+}

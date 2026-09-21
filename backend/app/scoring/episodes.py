@@ -63,7 +63,10 @@ def alert_state(
 
 
 def episodes_from_state(
-    active: np.ndarray, cycles: np.ndarray, rul: np.ndarray
+    active: np.ndarray,
+    cycles: np.ndarray,
+    rul: np.ndarray,
+    scores: np.ndarray | None = None,
 ) -> list[AlertEpisode]:
     """Convert a per-cycle active flag into contiguous episodes."""
     active = np.asarray(active, dtype=bool)
@@ -71,6 +74,7 @@ def episodes_from_state(
         return []
     cycles = np.asarray(cycles, dtype=int)
     rul = np.asarray(rul, dtype=int)
+    values = None if scores is None else np.asarray(scores, dtype=np.float64)
 
     padded = np.concatenate(([False], active, [False]))
     edges = np.flatnonzero(padded[1:] != padded[:-1])
@@ -79,6 +83,11 @@ def episodes_from_state(
     episodes: list[AlertEpisode] = []
     for start, stop in zip(starts, stops, strict=True):
         last = stop - 1
+        peak = None
+        if values is not None:
+            window = values[start:stop]
+            finite = window[np.isfinite(window)]
+            peak = float(finite.max()) if finite.size else None
         episodes.append(
             AlertEpisode(
                 start_cycle=int(cycles[start]),
@@ -86,6 +95,7 @@ def episodes_from_state(
                 start_rul=int(rul[start]),
                 end_rul=int(rul[last]),
                 still_open_at_failure=bool(stop == active.shape[0]),
+                peak_score=peak,
             )
         )
     return episodes
@@ -108,4 +118,4 @@ def detect_episodes(
         off_consecutive=config.alert_off_consecutive,
         valid=valid,
     )
-    return active, episodes_from_state(active, cycles, rul)
+    return active, episodes_from_state(active, cycles, rul, scores)

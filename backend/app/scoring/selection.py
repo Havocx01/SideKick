@@ -94,8 +94,10 @@ def build_verdict(
         required_passed=len(passed),
         passes_all_required=bool(required) and len(passed) == len(required),
         mean_detection_required=(sum(detections) / len(detections)) if detections else 0.0,
-        worst_detection_required=min(detections) if detections else 0.0,
+        worst_detection_required=min(detections) if detections else clean.detection_fraction,
         worst_scenario_id=worst_scenario.scenario_id if worst_scenario else None,
+        worst_metrics=worst_scenario.metrics if worst_scenario else None,
+        failing_scenarios=[r.scenario_id for r in required if not meets(r.metrics, criteria)],
         qualifies=passes_clean and bool(required) and len(passed) == len(required),
         notes=notes,
     )

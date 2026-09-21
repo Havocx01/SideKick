@@ -229,6 +229,13 @@ class AlertEpisode(Strict):
     start_rul: int
     end_rul: int
     still_open_at_failure: bool = False
+    peak_score: float | None = Field(
+        default=None, description="Highest score reached while the alert was active."
+    )
+
+    @property
+    def length(self) -> int:
+        return self.end_cycle - self.start_cycle + 1
 
 
 class EngineOutcome(Strict):
@@ -353,8 +360,23 @@ class CandidateVerdict(Strict):
     mean_detection_required: float
     worst_detection_required: float
     worst_scenario_id: str | None = None
+    worst_metrics: AlertMetrics | None = Field(
+        default=None,
+        description="Full measures for the worst required scenario. Carrying the "
+        "interval as well as the point estimate keeps a small drop from being read "
+        "as real when the sample cannot support the comparison.",
+    )
+    failing_scenarios: list[str] = Field(
+        default_factory=list,
+        description="Required scenarios that fell short of the criteria.",
+    )
     qualifies: bool = False
     notes: list[str] = Field(default_factory=list)
+
+    @property
+    def detection_drop(self) -> float:
+        """Detection lost between clean data and the worst required fault."""
+        return self.clean.detection_fraction - self.worst_detection_required
 
 
 class SelectionResult(Strict):
@@ -392,6 +414,12 @@ class ReplaySeries(Strict):
     scenario_id: str
     threshold: float
     fault: FaultSpec | None = None
+    fault_onset_rul: int | None = Field(
+        default=None,
+        description="Cycles before failure at which the fault actually began on this "
+        "history. A random-onset scenario resolves to a different cycle per engine.",
+    )
+    fault_affected_cycles: int = 0
     points: list[ReplayPoint]
     episodes: list[AlertEpisode]
     outcome: EngineOutcome

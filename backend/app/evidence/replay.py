@@ -45,6 +45,8 @@ def build_series(
     readings = training.dataset.sensor_matrix(equipment_id)
     sensor_clean: np.ndarray | None = None
     sensor_faulted: np.ndarray | None = None
+    onset_rul: int | None = None
+    affected_cycles = 0
 
     if spec is None:
         design = design_from_blocks(
@@ -79,6 +81,9 @@ def build_series(
         )
         sensor_clean = readings[scorable, index]
         sensor_faulted = injected.values[scorable]
+        affected_cycles = injected.affected_cycles
+        if injected.onset_index is not None:
+            onset_rul = int(block.rul[injected.onset_index])
 
     scores = candidate.score(design)
     scoring = score_engine(
@@ -112,6 +117,8 @@ def build_series(
         scenario_id=spec.scenario_id if spec else CLEAN_SCENARIO_ID,
         threshold=threshold,
         fault=spec,
+        fault_onset_rul=onset_rul,
+        fault_affected_cycles=affected_cycles,
         points=points,
         episodes=scoring.episodes,
         outcome=scoring.outcome,
