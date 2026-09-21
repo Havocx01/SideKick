@@ -68,7 +68,9 @@ def write_json(path: Path, obj: Any, *, indent: int | None = 2) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(sanitise(obj), indent=indent, default=_default, allow_nan=False)
-    handle = tempfile.NamedTemporaryFile(
+    # delete=False is required: the file has to outlive the handle so os.replace can
+    # move it into place, which is what makes the write atomic.
+    handle = tempfile.NamedTemporaryFile(  # noqa: SIM115
         "w", encoding="utf-8", dir=path.parent, delete=False, suffix=".tmp"
     )
     try:
@@ -82,5 +84,5 @@ def write_json(path: Path, obj: Any, *, indent: int | None = 2) -> Path:
 
 
 def read_json(path: Path) -> Any:
-    with open(path, "r", encoding="utf-8") as handle:
+    with open(path, encoding="utf-8") as handle:
         return json.load(handle)

@@ -46,7 +46,7 @@ class Preprocessor:
     stds: np.ndarray
 
     @classmethod
-    def fit(cls, dataset: Dataset, rows: np.ndarray | None = None) -> "Preprocessor":
+    def fit(cls, dataset: Dataset, rows: np.ndarray | None = None) -> Preprocessor:
         """Fit on the given boolean row mask, defaulting to every scorable row."""
         mask = dataset.scorable_mask() if rows is None else np.asarray(rows, dtype=bool)
         if not mask.any():

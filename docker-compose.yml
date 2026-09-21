@@ -1,0 +1,45 @@
+# Local development: the API with the full pipeline importable, and the Vite dev
+# server with hot reload. This is not what is deployed — the deployed image is the
+# lean replay service in ./Dockerfile. Compose exists so a reviewer can run the
+# whole thing without a Python or Node toolchain on their machine.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.dev.Dockerfile
+    working_dir: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+    ports:
+      - "8000:8000"
+    environment:
+      SIDEKICK_MODE: full
+      SIDEKICK_DATA_DIR: /data
+      SIDEKICK_ARTIFACTS_DIR: /artifacts
+      SIDEKICK_BUNDLE_PATH: /evidence/bundle.json
+      SIDEKICK_CORS_ORIGINS: http://localhost:5173
+      # Read from the host shell or a local .env; never baked into an image.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./scripts:/app/scripts:ro
+      - ./evidence:/evidence
+      - ./data:/data
+      - ./artifacts:/artifacts
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      SIDEKICK_API_URL: http://api:8000
+    volumes:
+      - ./frontend:/app
+      - frontend_modules:/app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  frontend_modules:

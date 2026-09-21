@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from app.data.contract import CANONICAL_CYCLE, CANONICAL_EQUIPMENT, CANONICAL_RUL
+from app.data.contract import CANONICAL_CYCLE, CANONICAL_RUL
 from app.data.dataset import Dataset
 from app.features.build import FeatureBuilder
 from app.models.base import DesignMatrix

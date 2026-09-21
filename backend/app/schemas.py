@@ -7,7 +7,7 @@ so a change here cannot silently diverge from the UI.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
@@ -440,7 +440,7 @@ class RunRecord(Strict):
 
     run_id: str
     kind: Literal["profile", "training", "fault_matrix", "selection", "final_evaluation", "export"]
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     config_fingerprint: str
     data_hash: str | None = None
     seed: int | None = None
@@ -465,7 +465,7 @@ class EvidenceBundle(Strict):
     """What the hosted replay service serves. Committed to the repository."""
 
     schema_version: int = 1
-    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     config: dict[str, Any]
     config_fingerprint: str
     git_commit: str | None = None

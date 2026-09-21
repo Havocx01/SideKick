@@ -154,7 +154,7 @@ class AugmentedXGBoostCandidate(XGBoostCandidate):
             feature_names=train.feature_names,
         )
         super().fit(combined)
-        self.params["augmented_rows"] = int(len(augmented))
+        self.params["augmented_rows"] = len(augmented)
 
 
 class AgeBaselineCandidate(Candidate):

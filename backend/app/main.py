@@ -16,10 +16,12 @@ mistakes the hosted demo for a live training service.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.api import routes_copilot, routes_evidence
@@ -80,19 +82,50 @@ def create_app() -> FastAPI:
     app.include_router(routes_evidence.router)
     app.include_router(routes_copilot.router)
 
-    @app.get("/", include_in_schema=False)
-    def root() -> JSONResponse:
-        return JSONResponse(
-            {
-                "name": "Sidekick",
-                "version": __version__,
-                "mode": settings.mode,
-                "docs": "/docs",
-                "health": "/api/health",
-            }
-        )
+    if not _mount_frontend(app, settings.static_dir):
+
+        @app.get("/", include_in_schema=False)
+        def root() -> JSONResponse:
+            return JSONResponse(
+                {
+                    "name": "Sidekick",
+                    "version": __version__,
+                    "mode": settings.mode,
+                    "docs": "/docs",
+                    "health": "/api/health",
+                    "note": (
+                        "No built frontend found. Run the Vite dev server, or build it "
+                        "into frontend/dist to have this service serve it."
+                    ),
+                }
+            )
 
     return app
+
+
+def _mount_frontend(app: FastAPI, directory: Path) -> bool:
+    """Serve the built frontend from the API service, if it has been built.
+
+    Unknown paths fall back to ``index.html`` so a client-side route survives a
+    page reload. The API is registered first, so ``/api`` is never shadowed.
+    """
+    index = directory / "index.html"
+    if not index.is_file():
+        return False
+
+    assets = directory / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> FileResponse:
+        candidate = (directory / path).resolve()
+        if path and candidate.is_file() and directory.resolve() in candidate.parents:
+            return FileResponse(candidate)
+        return FileResponse(index)
+
+    logger.info("serving the built frontend from %s", directory)
+    return True
 
 
 app = create_app()

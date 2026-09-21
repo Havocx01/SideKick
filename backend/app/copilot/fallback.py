@@ -12,8 +12,8 @@ so nobody mistakes them for the model's own writing.
 from __future__ import annotations
 
 from app.copilot.tools import ToolRegistry
-from app.schemas import CopilotAnswer, ToolInvocation
 from app.copilot.verify import verify_answer
+from app.schemas import CopilotAnswer, ToolInvocation
 
 _ROBUSTNESS = ("fault", "robust", "dropout", "stuck", "drift", "sensor fail", "survive", "degrade")
 _RECOMMEND = ("recommend", "which model", "best", "choose", "pick", "select", "should i use", "winner")

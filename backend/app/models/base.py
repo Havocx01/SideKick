@@ -50,7 +50,7 @@ class DesignMatrix:
     def __len__(self) -> int:
         return len(self.y)
 
-    def select(self, mask: np.ndarray) -> "DesignMatrix":
+    def select(self, mask: np.ndarray) -> DesignMatrix:
         mask = np.asarray(mask)
         return DesignMatrix(
             X=self.X[mask],
@@ -62,7 +62,7 @@ class DesignMatrix:
             feature_names=self.feature_names,
         )
 
-    def for_equipment(self, equipment_ids: set[str] | list[str]) -> "DesignMatrix":
+    def for_equipment(self, equipment_ids: set[str] | list[str]) -> DesignMatrix:
         wanted = set(str(e) for e in equipment_ids)
         return self.select(np.isin(self.equipment_id, list(wanted)))
 

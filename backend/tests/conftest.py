@@ -114,6 +114,9 @@ def client(bundle_path, monkeypatch):
     monkeypatch.setenv("SIDEKICK_MODE", "replay")
     monkeypatch.setenv("SIDEKICK_BUNDLE_PATH", str(bundle_path))
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # Point the static directory at nothing, so these tests exercise the API and do
+    # not change behaviour depending on whether the frontend happens to be built.
+    monkeypatch.setenv("SIDEKICK_STATIC_DIR", str(bundle_path.parent / "no-frontend"))
     reset_settings()
 
     from app.api.deps import reload_bundle

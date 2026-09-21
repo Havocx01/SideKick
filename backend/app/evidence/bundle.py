@@ -17,8 +17,8 @@ from pathlib import Path
 from app.config import EXPERIMENT, ExperimentConfig, get_settings
 from app.evidence.replay import build_series, choose_replay_engines
 from app.evidence.store import git_commit
-from app.models.explain import explain_alert
 from app.models.design import design_from_blocks
+from app.models.explain import explain_alert
 from app.schemas import (
     AlertExplanation,
     EvidenceBundle,
