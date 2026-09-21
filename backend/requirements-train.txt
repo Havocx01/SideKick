@@ -1,0 +1,9 @@
+# Core local pipeline: data prep, splits, features, faults, scoring, training.
+# Kept deliberately lean so a fresh clone is runnable in a couple of minutes.
+-r requirements.txt
+
+numpy>=1.26,<3.0
+pandas>=2.1,<3.0
+scipy>=1.11,<2.0
+scikit-learn>=1.4,<2.0
+xgboost>=2.0,<4.0

@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Datasets are fetched by script, never committed.
+data/
+!data/.gitkeep
+
+# MLflow local tracking. The committed evidence bundle under evidence/ is the
+# durable record; mlruns/ is a local convenience mirror.
+mlruns/
+mlartifacts/
+
+# Local run outputs. The published replay bundle is committed explicitly.
+artifacts/runs/
+artifacts/exports/
+
+# Secrets and logs
+.env
+.env.local
+install.log
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json

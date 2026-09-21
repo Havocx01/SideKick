@@ -1,0 +1,9 @@
+# Adds explanation, calibration plots and MLflow tracking on top of the core
+# pipeline. These are heavier installs and are imported lazily, so the pipeline
+# degrades gracefully when they are absent (see app/evidence/tracking.py and
+# app/models/explain.py).
+-r requirements-train.txt
+
+shap>=0.45,<1.0
+mlflow>=2.16,<4.0
+matplotlib>=3.8,<4.0
