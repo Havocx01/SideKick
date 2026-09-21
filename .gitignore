@@ -23,9 +23,11 @@ data/
 mlruns/
 mlartifacts/
 
-# Local run outputs. The published replay bundle is committed explicitly.
-artifacts/runs/
-artifacts/exports/
+# Local run outputs. evidence/bundle.json is the durable, committed record; the
+# run store under artifacts/ is a local working directory that each machine
+# rebuilds for itself.
+artifacts/*
+!artifacts/.gitkeep
 
 # Secrets and logs
 .env

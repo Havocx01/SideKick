@@ -20,7 +20,6 @@ export function ModelComparison() {
   const selection = useApi(() => api.selection(), []);
   const final = useApi(() => api.finalEvaluation(), []);
   const calibration = useApi(() => api.calibration(), []);
-  const scenarios = useApi(() => api.scenarios({ includeClean: false }), []);
   const reproducibility = useApi(() => api.reproducibility(), []);
 
   const [focus, setFocus] = useState<string | null>(null);
@@ -32,13 +31,14 @@ export function ModelComparison() {
     ? verdicts.find((verdict) => candidateKey(verdict.candidate, verdict.config_id) === focus)
     : verdicts[0];
 
-  const focusedScenarios = useMemo(() => {
-    if (!focused) return [];
-    return (scenarios.data ?? []).filter(
-      (result) =>
-        result.candidate === focused.candidate && result.config_id === focused.config_id,
-    );
-  }, [scenarios.data, focused]);
+  // Fetched per candidate rather than all at once: the whole matrix is several
+  // megabytes, and the heatmap only ever shows one candidate.
+  const focusKey = focused ? candidateKey(focused.candidate, focused.config_id) : "";
+  const scenarios = useApi(
+    () => (focusKey ? api.scenarios({ candidate: focusKey, includeClean: false }) : Promise.resolve([])),
+    [focusKey],
+  );
+  const focusedScenarios = scenarios.data ?? [];
 
   return (
     <>
