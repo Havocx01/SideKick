@@ -1,9 +1,4 @@
-"""The contract shared by the pipeline, the API and the frontend.
-
-These models are the single definition of every shape that crosses a boundary.
-``scripts/generate_types.py`` derives the frontend's TypeScript types from them,
-so a change here cannot silently diverge from the UI.
-"""
+"""The contract shared by the pipeline, the API and the frontend."""
 
 from __future__ import annotations
 
@@ -15,14 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Strict(BaseModel):
-    """Base model: reject unknown fields so contract drift fails loudly."""
-
     model_config = ConfigDict(extra="forbid", frozen=False, populate_by_name=True)
 
 
-# ---------------------------------------------------------------------------
 # Enumerations
-# ---------------------------------------------------------------------------
 
 
 class ColumnRole(str, Enum):
@@ -67,14 +58,10 @@ class SelectionOutcome(str, Enum):
     none_qualified = "none_qualified"
 
 
-# ---------------------------------------------------------------------------
 # Data contract and profiling
-# ---------------------------------------------------------------------------
 
 
 class ColumnMapping(Strict):
-    """How uploaded columns map onto the roles the pipeline requires."""
-
     equipment_id: str
     cycle_index: str
     sensors: list[str]
@@ -83,8 +70,7 @@ class ColumnMapping(Strict):
     inferred: bool = False
     ambiguous: list[str] = Field(
         default_factory=list,
-        description="Columns the profiler could not assign confidently. The "
-        "engineer confirms these before training.",
+        description="Columns the profiler could not assign confidently. The engineer confirms these before training.",
     )
 
 
@@ -125,14 +111,10 @@ class DatasetProfile(Strict):
         return [s.name for s in self.sensors if s.varies]
 
 
-# ---------------------------------------------------------------------------
 # Partitions and candidates
-# ---------------------------------------------------------------------------
 
 
 class SplitAssignment(Strict):
-    """Engine-level partitions. No engine appears in more than one place."""
-
     holdout: list[str]
     development: list[str]
     folds: list[list[str]] = Field(description="Validation engines per fold.")
@@ -148,14 +130,10 @@ class CandidateConfig(Strict):
     description: str = ""
 
 
-# ---------------------------------------------------------------------------
 # Faults
-# ---------------------------------------------------------------------------
 
 
 class FaultSpec(Strict):
-    """One reproducible sensor fault applied to one sensor."""
-
     kind: FaultKind
     duration: FaultDuration
     sensor: str
@@ -164,9 +142,7 @@ class FaultSpec(Strict):
         description="Cycles before failure at which the fault begins. None means "
         "the onset was drawn at random from a recorded seed.",
     )
-    severity_sd: float | None = Field(
-        default=None, description="Drift magnitude in training standard deviations."
-    )
+    severity_sd: float | None = Field(default=None, description="Drift magnitude in training standard deviations.")
     sign: int | None = None
     ramp_cycles: int | None = None
     length: int | None = Field(default=None, description="Transient length in cycles.")
@@ -188,12 +164,7 @@ class FaultSpec(Strict):
         return "-".join(parts)
 
     def label(self) -> str:
-        """Human-readable description for the UI and reports."""
-        base = {
-            FaultKind.dropout: "Dropout",
-            FaultKind.stuck: "Stuck reading",
-            FaultKind.drift: "Drift",
-        }[self.kind]
+        base = {FaultKind.dropout: "Dropout", FaultKind.stuck: "Stuck reading", FaultKind.drift: "Drift"}[self.kind]
         bits = [f"{base} on {self.sensor}"]
         if self.kind == FaultKind.drift and self.severity_sd is not None:
             direction = "up" if (self.sign or 1) > 0 else "down"
@@ -211,10 +182,7 @@ class FaultSpec(Strict):
 
 CLEAN_SCENARIO_ID = "clean"
 
-
-# ---------------------------------------------------------------------------
 # Alerts and measures
-# ---------------------------------------------------------------------------
 
 
 class WilsonInterval(Strict):
@@ -229,9 +197,7 @@ class AlertEpisode(Strict):
     start_rul: int
     end_rul: int
     still_open_at_failure: bool = False
-    peak_score: float | None = Field(
-        default=None, description="Highest score reached while the alert was active."
-    )
+    peak_score: float | None = Field(default=None, description="Highest score reached while the alert was active.")
 
     @property
     def length(self) -> int:
@@ -239,8 +205,6 @@ class AlertEpisode(Strict):
 
 
 class EngineOutcome(Strict):
-    """Per-engine result, which keeps the engine counts auditable."""
-
     equipment_id: str
     detected: bool
     late: bool
@@ -250,11 +214,7 @@ class EngineOutcome(Strict):
 
 
 class AlertMetrics(Strict):
-    """Operational measures as defined in the proposal.
-
-    ``detection_fraction`` counts engines, never cycles, and repeated fault runs
-    on the same engine do not inflate the denominator.
-    """
+    """Detection counts equipment; repeated faults do not increase the sample size."""
 
     engines: int
     detected: int
@@ -262,9 +222,7 @@ class AlertMetrics(Strict):
     missed: int
     detection_fraction: float
     detection_ci: WilsonInterval
-    early_alarm_burden: float = Field(
-        description="Fraction of eligible cycles (rul > transition band) spent in alarm."
-    )
+    early_alarm_burden: float = Field(description="Fraction of eligible cycles (rul > transition band) spent in alarm.")
     new_episodes_per_1000: float
     median_lead_time: float | None
     eligible_cycles: int
@@ -276,8 +234,6 @@ class AlertMetrics(Strict):
 
 
 class ScenarioResult(Strict):
-    """One candidate, at one threshold, under one scenario, on one partition."""
-
     scenario_id: str
     candidate: CandidateKind
     config_id: str
@@ -285,15 +241,11 @@ class ScenarioResult(Strict):
     threshold: float
     fault: FaultSpec | None = None
     metrics: AlertMetrics
-    required: bool = Field(
-        default=False, description="Part of the bounded set used for selection."
-    )
+    required: bool = Field(default=False, description="Part of the bounded set used for selection.")
     run_id: str | None = None
 
 
-# ---------------------------------------------------------------------------
 # Calibration and explanation
-# ---------------------------------------------------------------------------
 
 
 class ReliabilityBin(Strict):
@@ -329,19 +281,13 @@ class AlertExplanation(Strict):
     base_value: float | None = None
     contributions: list[ShapContribution] = Field(default_factory=list)
     available: bool = True
-    note: str = (
-        "Attributions describe model behaviour, not physical fault causes."
-    )
+    note: str = "Attributions describe model behaviour, not physical fault causes."
 
 
-# ---------------------------------------------------------------------------
 # Selection
-# ---------------------------------------------------------------------------
 
 
 class AcceptanceCriteria(Strict):
-    """Set by the engineer before selection, recorded with the result."""
-
     min_detection_fraction: float
     max_early_alarm_burden: float
     min_useful_lead: int
@@ -367,15 +313,13 @@ class CandidateVerdict(Strict):
         "as real when the sample cannot support the comparison.",
     )
     failing_scenarios: list[str] = Field(
-        default_factory=list,
-        description="Required scenarios that fell short of the criteria.",
+        default_factory=list, description="Required scenarios that fell short of the criteria."
     )
     qualifies: bool = False
     notes: list[str] = Field(default_factory=list)
 
     @property
     def detection_drop(self) -> float:
-        """Detection lost between clean data and the worst required fault."""
         return self.clean.detection_fraction - self.worst_detection_required
 
 
@@ -388,14 +332,11 @@ class SelectionResult(Strict):
     notes: list[str] = Field(default_factory=list)
     uncertain_comparisons: list[str] = Field(
         default_factory=list,
-        description="Pairs whose detection intervals overlap, so the ordering is "
-        "not established by the data.",
+        description="Pairs whose detection intervals overlap, so the ordering is not established by the data.",
     )
 
 
-# ---------------------------------------------------------------------------
 # Replay
-# ---------------------------------------------------------------------------
 
 
 class ReplayPoint(Strict):
@@ -426,18 +367,10 @@ class ReplaySeries(Strict):
     failure_cycle: int
 
 
-# ---------------------------------------------------------------------------
 # Evidence
-# ---------------------------------------------------------------------------
 
 
 class RunRecord(Strict):
-    """An entry in the evidence store.
-
-    Every number shown in the application resolves to one of these, which is
-    what makes the report's claim of traceability checkable.
-    """
-
     run_id: str
     kind: Literal["profile", "training", "fault_matrix", "selection", "final_evaluation", "export"]
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -462,9 +395,13 @@ class ReproducibilityCheck(Strict):
 
 
 class EvidenceBundle(Strict):
-    """What the hosted replay service serves. Committed to the repository."""
-
     schema_version: int = 1
+    experiment_id: str | None = None
+    dataset_id: str | None = None
+    source_digest: str | None = None
+    confirmed_mapping: ColumnMapping | None = None
+    complete_histories_confirmed: bool | None = None
+    holdout_status: str = "Historical benchmark: previously examined holdout engines are exposed."
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     config: dict[str, Any]
     config_fingerprint: str
@@ -483,9 +420,82 @@ class EvidenceBundle(Strict):
     limitations: list[str] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
+class JobStatus(str, Enum):
+    queued = "queued"
+    running = "running"
+    cancelling = "cancelling"
+    completed = "completed"
+    cancelled = "cancelled"
+    timed_out = "timed_out"
+    interrupted = "interrupted"
+    failed = "failed"
+
+
+class DatasetConfirmation(Strict):
+    mapping: ColumnMapping
+    complete_histories: bool = False
+
+
+class DatasetRegistration(Strict):
+    dataset_id: str
+    name: str
+    source: Literal["synthetic", "upload"]
+    columns: list[str]
+    preview: list[dict[str, Any]]
+    row_count: int
+    mapping: ColumnMapping | None = None
+    complete_histories: bool = False
+    confirmed: bool = False
+    profile: DatasetProfile | None = None
+    splits: SplitAssignment | None = None
+
+
+class ExperimentCreate(Strict):
+    dataset_id: str
+    min_detection_fraction: float = Field(default=0.70, ge=0, le=1)
+    max_early_alarm_burden: float = Field(default=0.10, ge=0, le=1)
+
+
+class ExperimentRecord(Strict):
+    experiment_id: str
+    dataset_id: str
+    name: str
+    source: Literal["synthetic", "upload"]
+    status: JobStatus
+    created_at: float
+    started_at: float | None = None
+    finished_at: float | None = None
+    elapsed_seconds: float = 0
+    stage: str = "queued"
+    completed_work: int = 0
+    total_work: int | None = None
+    work_unit: str = ""
+    error: str | None = None
+    config: dict[str, Any]
+    config_fingerprint: str
+    data_hash: str
+    source_digest: str
+
+
+class GuideAnswer(Strict):
+    question: str
+    answer: str
+    link: str
+    link_label: str
+
+
+class DecisionReport(Strict):
+    title: str
+    summary: str
+    fault_summary: str
+    augmentation_summary: str
+    unaugmented: CandidateVerdict | None = None
+    augmented: CandidateVerdict | None = None
+    limitations: list[str]
+    guide: list[GuideAnswer]
+
+
 # Copilot
-# ---------------------------------------------------------------------------
 
 
 class ToolInvocation(Strict):
@@ -510,12 +520,8 @@ class CopilotAnswer(Strict):
     citations: list[str] = Field(default_factory=list)
     claims: list[NumericClaim] = Field(default_factory=list)
     unverified_claims: int = 0
-    truncated: bool = Field(
-        default=False, description="The tool-call budget was exhausted."
-    )
-    degraded: bool = Field(
-        default=False, description="No LLM was available; a deterministic answer was returned."
-    )
+    truncated: bool = Field(default=False, description="The tool-call budget was exhausted.")
+    degraded: bool = Field(default=False, description="No LLM was available; a deterministic answer was returned.")
 
 
 class CopilotRequest(Strict):

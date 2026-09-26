@@ -4,6 +4,8 @@
 
 export type Severity = "info" | "warning" | "blocker";
 
+export type JobStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "timed_out" | "interrupted" | "failed";
+
 export type CandidateKind = "logistic_regression" | "xgboost" | "xgboost_augmented" | "age_baseline";
 
 export type FaultDuration = "persistent" | "transient";
@@ -94,6 +96,17 @@ export interface CandidateVerdict {
   notes?: string[];
 }
 
+export interface ColumnMapping {
+  equipment_id: string;
+  cycle_index: string;
+  sensors: string[];
+  failure_cycle?: string | null;
+  ignored?: string[];
+  inferred?: boolean;
+  /** Columns the profiler could not assign confidently. The engineer confirms these before training. */
+  ambiguous?: string[];
+}
+
 export interface CopilotAnswer {
   text: string;
   tool_calls?: ToolInvocation[];
@@ -112,6 +125,11 @@ export interface CopilotRequest {
   scenario_id?: string | null;
 }
 
+export interface DatasetConfirmation {
+  mapping: ColumnMapping;
+  complete_histories?: boolean;
+}
+
 export interface DatasetProfile {
   dataset_id: string;
   source: string;
@@ -127,6 +145,31 @@ export interface DatasetProfile {
   usable?: boolean;
 }
 
+export interface DatasetRegistration {
+  dataset_id: string;
+  name: string;
+  source: "synthetic" | "upload";
+  columns: string[];
+  preview: Record<string, unknown>[];
+  row_count: number;
+  mapping?: ColumnMapping | null;
+  complete_histories?: boolean;
+  confirmed?: boolean;
+  profile?: DatasetProfile | null;
+  splits?: SplitAssignment | null;
+}
+
+export interface DecisionReport {
+  title: string;
+  summary: string;
+  fault_summary: string;
+  augmentation_summary: string;
+  unaugmented?: CandidateVerdict | null;
+  augmented?: CandidateVerdict | null;
+  limitations: string[];
+  guide: GuideAnswer[];
+}
+
 export interface EngineOutcome {
   equipment_id: string;
   detected: boolean;
@@ -138,6 +181,12 @@ export interface EngineOutcome {
 
 export interface EvidenceBundle {
   schema_version?: number;
+  experiment_id?: string | null;
+  dataset_id?: string | null;
+  source_digest?: string | null;
+  confirmed_mapping?: ColumnMapping | null;
+  complete_histories_confirmed?: boolean | null;
+  holdout_status?: string;
   generated_at?: string;
   config: Record<string, unknown>;
   config_fingerprint: string;
@@ -156,6 +205,33 @@ export interface EvidenceBundle {
   limitations?: string[];
 }
 
+export interface ExperimentCreate {
+  dataset_id: string;
+  min_detection_fraction?: number;
+  max_early_alarm_burden?: number;
+}
+
+export interface ExperimentRecord {
+  experiment_id: string;
+  dataset_id: string;
+  name: string;
+  source: "synthetic" | "upload";
+  status: JobStatus;
+  created_at: number;
+  started_at?: number | null;
+  finished_at?: number | null;
+  elapsed_seconds?: number;
+  stage?: string;
+  completed_work?: number;
+  total_work?: number | null;
+  work_unit?: string;
+  error?: string | null;
+  config: Record<string, unknown>;
+  config_fingerprint: string;
+  data_hash: string;
+  source_digest: string;
+}
+
 export interface FaultSpec {
   kind: FaultKind;
   duration: FaultDuration;
@@ -169,6 +245,13 @@ export interface FaultSpec {
   /** Transient length in cycles. */
   length?: number | null;
   seed?: number | null;
+}
+
+export interface GuideAnswer {
+  question: string;
+  answer: string;
+  link: string;
+  link_label: string;
 }
 
 export interface NumericClaim {

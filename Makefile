@@ -1,5 +1,4 @@
-# Task runner. Every command a reviewer or a teammate needs, named after what it
-# does. See tasks.ps1 for the PowerShell equivalents.
+# Local tasks. See tasks.ps1 for the PowerShell equivalents.
 
 PY ?= python
 VENV ?= .venv
@@ -10,15 +9,15 @@ else
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-full data pipeline pipeline-fast bundle api web build test test-all lint fmt types check docker clean
+.PHONY: help setup setup-full data pipeline pipeline-fast bundle api web build types docker
 
 help: ## List the available tasks
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-setup: ## Create the virtualenv and install the pipeline plus dev tools
+setup: ## Create the virtualenv and install the app and training dependencies
 	$(PY) -m venv $(VENV)
 	$(BIN)/python -m pip install -U pip
-	$(BIN)/pip install -r backend/requirements-dev.txt
+	$(BIN)/pip install -r backend/requirements-train.txt
 
 setup-full: setup ## Add SHAP, MLflow and matplotlib (optional, heavier)
 	$(BIN)/pip install -r backend/requirements-full.txt
@@ -47,24 +46,5 @@ build: types ## Build the frontend into frontend/dist
 types: ## Regenerate frontend types from the Pydantic schemas
 	$(BIN)/python scripts/generate_types.py
 
-test: ## Run the test suite, excluding the slow full-matrix tests
-	$(BIN)/python -m pytest -q -m "not slow"
-
-test-all: ## Run every test, including the full fault matrix
-	$(BIN)/python -m pytest -q
-
-lint: ## Lint the Python and typecheck the TypeScript
-	$(BIN)/ruff check backend scripts
-	cd frontend && npx tsc --noEmit
-
-fmt: ## Format and apply safe lint fixes
-	$(BIN)/ruff check --fix backend scripts
-	$(BIN)/ruff format backend scripts
-
-check: lint test ## What CI runs
-
 docker: ## Build the deployed replay image locally
 	docker build -t sidekick:local .
-
-clean: ## Remove caches and local run outputs, keeping the committed bundle
-	rm -rf .pytest_cache .ruff_cache artifacts/runs artifacts/exports mlruns frontend/dist

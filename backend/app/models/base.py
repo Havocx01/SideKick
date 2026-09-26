@@ -1,11 +1,4 @@
-"""The candidate interface.
-
-Two things are deliberately separated. Sensor models see only sensor-derived
-features: equipment identity, cycle count and remaining life are excluded from
-``DesignMatrix.X``. Running time is carried alongside in ``cycle`` and is visible
-only to the age baseline, so any benefit from knowing a machine is simply old
-shows up as baseline performance rather than hiding inside a sensor model.
-"""
+"""The candidate interface."""
 
 from __future__ import annotations
 
@@ -19,11 +12,7 @@ from app.schemas import CandidateConfig, CandidateKind
 
 @dataclass
 class DesignMatrix:
-    """Feature matrix plus the bookkeeping needed to score alerts.
-
-    ``rows`` indexes back into the source frame, so any prediction can be traced
-    to the exact reading that produced it.
-    """
+    """Sensor features exclude equipment ID, cycle count and remaining life."""
 
     X: np.ndarray
     y: np.ndarray
@@ -34,14 +23,7 @@ class DesignMatrix:
     feature_names: list[str]
 
     def __post_init__(self) -> None:
-        lengths = {
-            len(self.X),
-            len(self.y),
-            len(self.cycle),
-            len(self.equipment_id),
-            len(self.rul),
-            len(self.rows),
-        }
+        lengths = {len(self.X), len(self.y), len(self.cycle), len(self.equipment_id), len(self.rul), len(self.rows)}
         if len(lengths) != 1:
             raise ValueError(f"design matrix components disagree on length: {lengths}")
         if self.X.shape[1] != len(self.feature_names):
@@ -62,12 +44,7 @@ class DesignMatrix:
             feature_names=self.feature_names,
         )
 
-    def for_equipment(self, equipment_ids: set[str] | list[str]) -> DesignMatrix:
-        wanted = set(str(e) for e in equipment_ids)
-        return self.select(np.isin(self.equipment_id, list(wanted)))
-
     def assert_finite(self) -> None:
-        """Guard against warm-up NaNs reaching an estimator."""
         if not np.isfinite(self.X).all():
             bad = int((~np.isfinite(self.X)).sum())
             raise ValueError(
@@ -77,8 +54,6 @@ class DesignMatrix:
 
 
 class Candidate(ABC):
-    """One model family at one configuration."""
-
     kind: CandidateKind
     uses_sensors: bool = True
     requires_augmentation: bool = False
@@ -106,16 +81,15 @@ class Candidate(ABC):
 
     @abstractmethod
     def fit(self, train: DesignMatrix, *, augmented: DesignMatrix | None = None) -> None:
-        """Fit on the training rows. ``augmented`` carries corrupted copies."""
+        pass
 
     @abstractmethod
     def score(self, data: DesignMatrix) -> np.ndarray:
-        """Higher means failure is more likely inside the horizon."""
+        """Higher scores indicate greater risk inside the prediction horizon."""
 
     @property
     def fitted(self) -> bool:
         return self._fitted
 
     def feature_importance(self) -> dict[str, float] | None:
-        """Global importance, when the family exposes one."""
         return None

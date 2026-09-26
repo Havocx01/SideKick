@@ -1,13 +1,4 @@
-"""Cross-validated training and out-of-fold prediction.
-
-Preprocessing is fitted inside each fold, on that fold's training engines only.
-Imputation medians and the standard deviations that scale drift severity therefore
-never see a validation engine, which is what lets an out-of-fold score stand in
-for performance on an unseen machine.
-
-Fault augmentation is also per fold, with its own derived seed, so the corrupted
-copies mixed into one fold's training set are independent of another's.
-"""
+"""Cross-validated training and out-of-fold prediction."""
 
 from __future__ import annotations
 
@@ -21,12 +12,7 @@ from app.faults.inject import apply_fault
 from app.features.build import FeatureBuilder, Preprocessor
 from app.models.base import Candidate, DesignMatrix
 from app.models.candidates import candidate_grid
-from app.models.design import (
-    EngineBlock,
-    assert_engine_disjoint,
-    design_from_blocks,
-    engine_blocks,
-)
+from app.models.design import EngineBlock, assert_engine_disjoint, design_from_blocks, engine_blocks
 from app.models.splits import fold_pairs, make_splits
 from app.schemas import FaultDuration, FaultKind, FaultSpec, SplitAssignment
 from app.utils.determinism import derive_seed
@@ -34,14 +20,11 @@ from app.utils.logging_setup import get_logger, timed
 
 logger = get_logger(__name__)
 
-#: Corrupted copies added per training engine in the augmented variant.
 AUGMENTATION_COPIES_PER_ENGINE = 2
 
 
 @dataclass
 class EngineScores:
-    """One candidate's scores for one engine's scorable cycles."""
-
     equipment_id: str
     cycles: np.ndarray
     rul: np.ndarray
@@ -62,8 +45,6 @@ class FoldFit:
 
 @dataclass
 class TrainingResult:
-    """Everything produced by development training."""
-
     dataset: Dataset
     splits: SplitAssignment
     folds: list[FoldFit]
@@ -71,14 +52,10 @@ class TrainingResult:
     specs: dict[str, Candidate]
     config: ExperimentConfig
 
-    def candidate_names(self) -> list[str]:
-        return list(self.specs)
-
     def pooled(self, candidate_name: str) -> tuple[np.ndarray, np.ndarray]:
-        """Concatenated out-of-fold scores and labels for one candidate."""
-        per_engine = self.out_of_fold[candidate_name]
-        scores = np.concatenate([per_engine[e].scores for e in sorted(per_engine)])
-        labels = np.concatenate([per_engine[e].labels for e in sorted(per_engine)])
+        perEngine = self.out_of_fold[candidate_name]
+        scores = np.concatenate([perEngine[e].scores for e in sorted(perEngine)])
+        labels = np.concatenate([perEngine[e].labels for e in sorted(perEngine)])
         return scores, labels
 
     def fold_for(self, equipment_id: str) -> FoldFit:
@@ -88,20 +65,12 @@ class TrainingResult:
         raise KeyError(f"{equipment_id} is not a validation engine in any fold")
 
 
-def sample_augmentation_faults(
-    sensors: list[str], seed: int, copies: int, config: ExperimentConfig
-) -> list[FaultSpec]:
-    """Draw fault specifications for training-time augmentation.
-
-    Positions, kinds and severities are sampled rather than fixed, so the
-    augmented model sees variety instead of memorising the exact cases it will
-    later be tested on. Onsets are drawn from a wider range than the test onsets
-    for the same reason.
-    """
+def sample_augmentation_faults(sensors: list[str], seed: int, copies: int, config: ExperimentConfig) -> list[FaultSpec]:
+    """Training faults are sampled independently of the fixed evaluation grid."""
     generator = np.random.default_rng(seed)
     kinds = [FaultKind.dropout, FaultKind.stuck, FaultKind.drift]
     specs: list[FaultSpec] = []
-    for copy_index in range(copies):
+    for copyIndex in range(copies):
         sensor = str(generator.choice(sensors))
         kind = kinds[int(generator.integers(0, len(kinds)))]
         onset = int(generator.integers(config.min_useful_lead + 5, 120))
@@ -114,7 +83,7 @@ def sample_augmentation_faults(
                 severity_sd=float(generator.uniform(0.5, 2.5)) if kind == FaultKind.drift else None,
                 sign=int(generator.choice([-1, 1])) if kind == FaultKind.drift else None,
                 ramp_cycles=config.drift_ramp_cycles if kind == FaultKind.drift else None,
-                seed=derive_seed(seed, "augment", copy_index),
+                seed=derive_seed(seed, "augment", copyIndex),
             )
         )
     return specs
@@ -130,17 +99,16 @@ def build_augmented_design(
     config: ExperimentConfig,
     copies: int = AUGMENTATION_COPIES_PER_ENGINE,
 ) -> DesignMatrix | None:
-    """Corrupted copies of the training engines, with labels unchanged."""
     eligible = [s for s in builder.sensors if builder.preprocessor.std_of(s) > 0]
     if not eligible:
         return None
 
     parts: list[EngineBlock] = []
-    for engine_index, equipment_id in enumerate(train_engines):
-        block = blocks[equipment_id]
-        readings = dataset.sensor_matrix(equipment_id)
-        engine_seed = derive_seed(seed, "augment_engine", equipment_id)
-        for spec in sample_augmentation_faults(eligible, engine_seed, copies, config):
+    for equipmentId in train_engines:
+        block = blocks[equipmentId]
+        readings = dataset.sensor_matrix(equipmentId)
+        engineSeed = derive_seed(seed, "augment_engine", equipmentId)
+        for copyIndex, spec in enumerate(sample_augmentation_faults(eligible, engineSeed, copies, config)):
             result = apply_fault(
                 readings[:, builder.preprocessor.index_of(spec.sensor)],
                 block.rul,
@@ -154,7 +122,7 @@ def build_augmented_design(
             builder.rebuild_sensor(features, result.values, spec.sensor)
             parts.append(
                 EngineBlock(
-                    equipment_id=f"{equipment_id}~aug{engine_index}",
+                    equipment_id=f"{equipmentId}~aug{copyIndex}",
                     features=features,
                     labels=block.labels,
                     cycles=block.cycles,
@@ -177,34 +145,30 @@ def train_development(
     candidates: list[Candidate] | None = None,
     splits: SplitAssignment | None = None,
     augmentation_copies: int = AUGMENTATION_COPIES_PER_ENGINE,
+    progress=None,
 ) -> TrainingResult:
-    """Run grouped cross-validation and collect out-of-fold scores."""
     config.validate()
     splits = splits or make_splits(dataset, config)
     grid = candidates if candidates is not None else candidate_grid(config)
     specs = {candidate.name: candidate for candidate in grid}
 
     development = dataset.subset(splits.development)
-    out_of_fold: dict[str, dict[str, EngineScores]] = {name: {} for name in specs}
+    outOfFold: dict[str, dict[str, EngineScores]] = {name: {} for name in specs}
     folds: list[FoldFit] = []
 
-    for fold_index, (train_engines, validation_engines) in enumerate(fold_pairs(splits)):
-        with timed(logger, f"fold {fold_index + 1}/{len(splits.folds)}"):
-            train_rows = development.frame["equipment_id"].isin(train_engines).to_numpy()
-            train_rows &= development.scorable_mask()
-            preprocessor = Preprocessor.fit(development, train_rows)
+    for foldIndex, (trainEngines, validationEngines) in enumerate(fold_pairs(splits)):
+        with timed(logger, f"fold {foldIndex + 1}/{len(splits.folds)}"):
+            trainRows = development.frame["equipment_id"].isin(trainEngines).to_numpy()
+            trainRows &= development.scorable_mask()
+            preprocessor = Preprocessor.fit(development, trainRows)
             builder = FeatureBuilder(preprocessor, config)
 
             blocks = engine_blocks(development, builder)
-            train_design = design_from_blocks(
-                blocks, builder.feature_names(), equipment_ids=train_engines
-            )
-            validation_design = design_from_blocks(
-                blocks, builder.feature_names(), equipment_ids=validation_engines
-            )
-            assert_engine_disjoint(train_design, validation_design)
-            train_design.assert_finite()
-            validation_design.assert_finite()
+            trainDesign = design_from_blocks(blocks, builder.feature_names(), equipment_ids=trainEngines)
+            validationDesign = design_from_blocks(blocks, builder.feature_names(), equipment_ids=validationEngines)
+            assert_engine_disjoint(trainDesign, validationDesign)
+            trainDesign.assert_finite()
+            validationDesign.assert_finite()
 
             augmented: DesignMatrix | None = None
             if any(c.requires_augmentation for c in grid):
@@ -212,55 +176,52 @@ def train_development(
                     development,
                     builder,
                     blocks,
-                    train_engines,
-                    seed=derive_seed(config.base_seed, "augmentation", fold_index),
+                    trainEngines,
+                    seed=derive_seed(config.base_seed, "augmentation", foldIndex),
                     config=config,
                     copies=augmentation_copies,
                 )
                 if augmented is None:
-                    logger.warning("fold %d produced no augmented rows", fold_index)
+                    logger.warning("fold %d produced no augmented rows", foldIndex)
 
             fitted: dict[str, Candidate] = {}
             for template in grid:
                 candidate = type(template)(template.config_id, dict(template.params))
-                candidate.fit(train_design, augmented=augmented)
+                candidate.fit(trainDesign, augmented=augmented)
                 fitted[candidate.name] = candidate
 
-                scores = candidate.score(validation_design)
-                for equipment_id in validation_engines:
-                    mask = validation_design.equipment_id == equipment_id
-                    out_of_fold[candidate.name][equipment_id] = EngineScores(
-                        equipment_id=equipment_id,
-                        cycles=validation_design.cycle[mask],
-                        rul=validation_design.rul[mask],
+                scores = candidate.score(validationDesign)
+                for equipmentId in validationEngines:
+                    mask = validationDesign.equipment_id == equipmentId
+                    outOfFold[candidate.name][equipmentId] = EngineScores(
+                        equipment_id=equipmentId,
+                        cycles=validationDesign.cycle[mask],
+                        rul=validationDesign.rul[mask],
                         scores=scores[mask],
-                        labels=validation_design.y[mask],
+                        labels=validationDesign.y[mask],
                     )
 
             folds.append(
                 FoldFit(
-                    fold_index=fold_index,
-                    train_engines=list(train_engines),
-                    validation_engines=list(validation_engines),
+                    fold_index=foldIndex,
+                    train_engines=list(trainEngines),
+                    validation_engines=list(validationEngines),
                     preprocessor=preprocessor,
                     builder=builder,
                     candidates=fitted,
                     blocks=blocks,
                 )
             )
+            if progress:
+                progress("training", foldIndex + 1, len(splits.folds), "folds completed")
 
-    covered = {e for scores in out_of_fold.values() for e in scores}
+    covered = {e for scores in outOfFold.values() for e in scores}
     if covered != set(splits.development):
         missing = set(splits.development) - covered
         raise AssertionError(f"engines have no out-of-fold prediction: {sorted(missing)}")
 
     return TrainingResult(
-        dataset=development,
-        splits=splits,
-        folds=folds,
-        out_of_fold=out_of_fold,
-        specs=specs,
-        config=config,
+        dataset=development, splits=splits, folds=folds, out_of_fold=outOfFold, specs=specs, config=config
     )
 
 
@@ -272,11 +233,7 @@ def fit_final(
     config: ExperimentConfig = EXPERIMENT,
     augmentation_copies: int = AUGMENTATION_COPIES_PER_ENGINE,
 ) -> tuple[Candidate, FeatureBuilder, Preprocessor]:
-    """Refit one candidate on every development engine, for the final evaluation.
-
-    Called once, after the configuration is frozen. The holdout engines are not
-    touched here; they are only ever scored.
-    """
+    """Refit on development equipment only; the reserved equipment must remain unseen."""
     development = dataset.subset(splits.development)
     rows = development.scorable_mask()
     preprocessor = Preprocessor.fit(development, rows)

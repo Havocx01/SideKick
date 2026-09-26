@@ -1,7 +1,4 @@
-# Local development: the API with the full pipeline importable, and the Vite dev
-# server with hot reload. This is not what is deployed — the deployed image is the
-# lean replay service in ./Dockerfile. Compose exists so a reviewer can run the
-# whole thing without a Python or Node toolchain on their machine.
+# Local development includes training dependencies and frontend hot reload.
 
 services:
   api:

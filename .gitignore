@@ -15,8 +15,8 @@ frontend/dist/
 frontend/.vite/
 
 # Datasets are fetched by script, never committed.
-data/
-!data/.gitkeep
+/data/
+!/data/.gitkeep
 
 # MLflow local tracking. The committed evidence bundle under evidence/ is the
 # durable record; mlruns/ is a local convenience mirror.
@@ -36,6 +36,7 @@ install.log
 *.log
 
 # OS / editor
+.playwright-cli/
 .DS_Store
 Thumbs.db
 .idea/

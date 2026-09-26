@@ -1,18 +1,9 @@
-"""Deterministic answers, used when no language model is available.
-
-This exists so three things hold. The hosted demo works without an API key. The
-recorded video does not depend on a live API call during filming. And a provider
-outage degrades the copilot to a plainer answer instead of breaking the product.
-
-Answers here are assembled from the same tools the model would have called, so
-their figures are recorded values by construction. They are labelled as degraded
-so nobody mistakes them for the model's own writing.
-"""
+"""Deterministic answers, used when no language model is available."""
 
 from __future__ import annotations
 
 from app.copilot.tools import ToolRegistry
-from app.copilot.verify import verify_answer
+from app.copilot.verify import annotate, unverified, verify_answer
 from app.schemas import CopilotAnswer, ToolInvocation
 
 _ROBUSTNESS = ("fault", "robust", "dropout", "stuck", "drift", "sensor fail", "survive", "degrade")
@@ -38,18 +29,30 @@ def answer_without_llm(question: str, registry: ToolRegistry, *, reason: str) ->
     )
     claims = verify_answer(text, payloads)
     return CopilotAnswer(
-        text=preface + text,
+        text=preface + annotate(text, claims),
         tool_calls=calls,
-        citations=sorted({run_id for call in calls for run_id in call.run_ids}),
+        citations=sorted({runId for call in calls for runId in call.run_ids}),
         claims=claims,
-        unverified_claims=0,
+        unverified_claims=len(unverified(claims)),
         degraded=True,
     )
 
 
 def _invoke(registry: ToolRegistry, name: str, arguments: dict | None = None):
     payload = registry.call(name, arguments or {})
-    return payload, ToolInvocation(name=name, arguments=arguments or {}, ok=True)
+    # Keep source links for deterministic answers as well as model-written ones.
+    runIds: set[str] = set()
+    pending: list[object] = [payload]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, dict):
+            if isinstance(item.get("run_id"), str):
+                runIds.add(item["run_id"])
+            runIds.update(value for value in item.get("run_ids", []) if isinstance(value, str))
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+    return payload, ToolInvocation(name=name, arguments=arguments or {}, ok=True, run_ids=sorted(runIds))
 
 
 def _percent(value: float | None) -> str:
@@ -109,22 +112,18 @@ def _recommendation_answer(registry: ToolRegistry):
     )
     if not report["final_evaluation_run"]:
         lines.append(
-            "The held-out engines have not been scored yet, so these are development "
-            "figures."
+            "No final evaluation is attached to this protocol revision. These are "
+            "development figures, not final validation."
         )
     return "\n".join(lines), [call], [report]
 
 
 def _robustness_answer(registry: ToolRegistry):
-    faults, fault_call = _invoke(registry, "run_fault_tests", {"required_only": True})
-    report, report_call = _invoke(registry, "draft_report")
+    faults, faultCall = _invoke(registry, "run_fault_tests", {"required_only": True})
+    report, reportCall = _invoke(registry, "draft_report")
 
     if not faults.get("per_candidate"):
-        return (
-            "No fault scenarios are recorded in this evidence bundle.",
-            [fault_call],
-            [faults],
-        )
+        return ("No fault scenarios are recorded in this evidence bundle.", [faultCall], [faults])
 
     lines = [
         f"**Fault tests:** {faults['scenarios']} required cases covering "
@@ -134,9 +133,7 @@ def _robustness_answer(registry: ToolRegistry):
         "| Candidate | Clean | Mean under fault | Worst case |",
         "| --- | --- | --- | --- |",
     ]
-    ordered = sorted(
-        faults["per_candidate"].items(), key=lambda item: -item[1]["mean_detection_fraction"]
-    )
+    ordered = sorted(faults["per_candidate"].items(), key=lambda item: -item[1]["mean_detection_fraction"])
     for name, entry in ordered:
         lines.append(
             f"| {name} | {_percent(entry['clean_detection_fraction'])} | "
@@ -144,21 +141,21 @@ def _robustness_answer(registry: ToolRegistry):
             f"{_percent(entry['worst_detection_fraction'])} ({entry['worst_case']}) |"
         )
 
-    worst_hit = min(ordered, key=lambda item: item[1]["worst_detection_fraction"])
-    best_hit = max(ordered, key=lambda item: item[1]["worst_detection_fraction"])
+    worstHit = min(ordered, key=lambda item: item[1]["worst_detection_fraction"])
+    bestHit = max(ordered, key=lambda item: item[1]["worst_detection_fraction"])
     lines.append("")
     lines.append(
-        f"The largest exposure is {worst_hit[0]}, which falls to "
-        f"{_percent(worst_hit[1]['worst_detection_fraction'])} on "
-        f"{worst_hit[1]['worst_case']}. The most stable is {best_hit[0]}, holding "
-        f"{_percent(best_hit[1]['worst_detection_fraction'])} in its worst case."
+        f"The largest exposure is {worstHit[0]}, which falls to "
+        f"{_percent(worstHit[1]['worst_detection_fraction'])} on "
+        f"{worstHit[1]['worst_case']}. The most stable is {bestHit[0]}, holding "
+        f"{_percent(bestHit[1]['worst_detection_fraction'])} in its worst case."
     )
     lines.append(
         "\nThe age baseline reads no sensor, so it is unaffected by every one of these "
         "cases by construction. A sensor model that falls below it under fault is not "
         "worth deploying for that fault."
     )
-    return "\n".join(lines), [fault_call, report_call], [faults, report]
+    return "\n".join(lines), [faultCall, reportCall], [faults, report]
 
 
 def _metric_answer(registry: ToolRegistry):
@@ -181,11 +178,12 @@ def _metric_answer(registry: ToolRegistry):
             f"{_percent(metrics['detection_fraction'])} | "
             f"{metrics['detection_ci_lower']:.2f}-{metrics['detection_ci_upper']:.2f} | "
             f"{metrics['early_alarm_burden']:.1%} | "
-            f"{'-' if lead is None else f'{lead:.0f}'} |"
+            f"{'-' if lead is None else f'{lead:.1f}'} |"
         )
     lines.append(
         "\nA late warning arrived inside the final cycles, too late to act on. A miss "
-        "produced no warning at all. They are counted separately on purpose."
+        "produced neither a useful nor a late warning; early-only alarms may still "
+        "have occurred. They are counted separately on purpose."
     )
     return "\n".join(lines), [call], [rows]
 
@@ -197,16 +195,13 @@ def _data_answer(registry: ToolRegistry):
         "",
         f"- {profile['rows']} readings across {profile['equipment_count']} pieces of equipment",
         f"- Histories run {profile['cycles_min']} to {profile['cycles_max']} cycles "
-        f"(median {profile['cycles_median']:.0f})",
+        f"(median {profile['cycles_median']:.1f})",
         f"- {len(profile['fault_eligible_channels'])} channels vary and are eligible for "
         f"fault testing; {len(profile['constant_channels'])} never change",
         f"- Data hash {profile['data_hash']}",
     ]
     if profile["positive_label_fraction"] is not None:
-        lines.append(
-            f"- {profile['positive_label_fraction']:.1%} of scorable cycles fall inside "
-            "the warning horizon"
-        )
+        lines.append(f"- {profile['positive_label_fraction']:.1%} of scorable cycles fall inside the warning horizon")
 
     blockers = [f for f in profile["findings"] if f["severity"] == "blocker"]
     warnings = [f for f in profile["findings"] if f["severity"] == "warning"]

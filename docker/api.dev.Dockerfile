@@ -1,5 +1,4 @@
-# Development API image: the full pipeline, so scripts/run_pipeline.py works
-# inside the container. Heavier than the deployed image by design.
+# Include training dependencies for local experiments.
 
 FROM python:3.11-slim
 

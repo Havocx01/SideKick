@@ -1,17 +1,8 @@
-"""Numeric claim verification.
-
-The copilot is allowed to write prose. It is not allowed to invent figures. Every
-number in a drafted answer is checked against the values the tools actually
-returned, and anything unmatched is reported rather than displayed as fact.
-
-This is a guard, not a proof of correctness: it catches a fabricated or misremembered
-figure, and it does not check that a correctly quoted number is being used to
-support a sensible argument. The interface says as much, because overstating what
-the check does would be the same failure it exists to prevent.
-"""
+"""Numeric claim verification."""
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable
 from typing import Any
@@ -19,22 +10,10 @@ from typing import Any
 from app.schemas import NumericClaim
 
 #: Matches integers, decimals and percentages, with optional thousands separators.
-_NUMBER = re.compile(r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\s*(%)?")
-
-#: Numbers that carry no claim: small counts in ordinary prose, and the
-#: percentage bounds themselves.
-_FREE = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 100.0}
-
-RELATIVE_TOLERANCE = 0.011
-ABSOLUTE_TOLERANCE = 0.006
+_NUMBER = re.compile(r"(?<![\w.])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?!\w|\.\d)(?:\s*%)?")
 
 
 def collect_values(payload: Any, *, depth: int = 0) -> set[float]:
-    """Every number reachable in a tool result, plus its percentage form.
-
-    A tool returning ``0.93`` licenses an answer saying either "0.93" or "93%",
-    so both forms are admitted.
-    """
     values: set[float] = set()
     if depth > 8:
         return values
@@ -43,17 +22,15 @@ def collect_values(payload: Any, *, depth: int = 0) -> set[float]:
         return values
     if isinstance(payload, (int, float)):
         number = float(payload)
-        values.add(number)
-        values.add(number * 100.0)
-        # Rounded forms, since an answer will say "93%" rather than "93.33%".
-        for digits in (0, 1, 2):
-            values.add(round(number, digits))
-            values.add(round(number * 100.0, digits))
+        if math.isfinite(number):
+            values.add(number)
         return values
     if isinstance(payload, str):
         for match in _NUMBER.finditer(payload):
             try:
-                values.add(float(match.group(0).replace(",", "").rstrip("% ").strip()))
+                raw = match.group(0).strip()
+                value = float(raw.replace(",", "").rstrip("% ").strip())
+                values.add(value / 100 if raw.endswith("%") else value)
             except ValueError:
                 continue
         return values
@@ -74,7 +51,6 @@ def collect_values(payload: Any, *, depth: int = 0) -> set[float]:
 
 
 def extract_claims(text: str) -> list[tuple[str, float]]:
-    """Pull numeric claims out of drafted prose."""
     claims: list[tuple[str, float]] = []
     for match in _NUMBER.finditer(text):
         raw = match.group(0).strip()
@@ -87,30 +63,30 @@ def extract_claims(text: str) -> list[tuple[str, float]]:
     return claims
 
 
-def matches(value: float, allowed: set[float]) -> float | None:
-    """The closest admissible value, or ``None`` if nothing is close enough."""
+def matches(value: float, allowed: set[float], tolerance: float = 1e-9) -> float | None:
     best: float | None = None
-    best_gap = float("inf")
+    bestGap = float("inf")
     for candidate in allowed:
         gap = abs(value - candidate)
-        tolerance = max(ABSOLUTE_TOLERANCE, RELATIVE_TOLERANCE * abs(candidate))
-        if gap <= tolerance and gap < best_gap:
-            best, best_gap = candidate, gap
+        if gap <= tolerance and gap < bestGap:
+            best, bestGap = candidate, gap
     return best
 
 
 def verify_answer(text: str, tool_results: list[Any]) -> list[NumericClaim]:
-    """Check every number in ``text`` against the values the tools returned."""
-    allowed: set[float] = set(_FREE)
+    allowed: set[float] = set()
     for result in tool_results:
         allowed |= collect_values(result)
 
     claims: list[NumericClaim] = []
     for raw, value in extract_claims(text):
-        if value in _FREE:
-            claims.append(NumericClaim(text=raw, value=value, verified=True, matched_metric="prose"))
-            continue
-        matched = matches(value, allowed)
+        digits = raw.rstrip("% ").replace(",", "")
+        places = len(digits.split(".")[1]) if "." in digits else 0
+        scale = 100 if raw.endswith("%") else 1
+        # Permit only rounding at the precision actually printed, not a blanket
+        # relative tolerance. An integer count must match exactly.
+        tolerance = (0.5 * 10**-places / scale + 1e-12) if places or scale == 100 else 1e-9
+        matched = matches(value / scale, allowed, tolerance)
         claims.append(
             NumericClaim(
                 text=raw,
@@ -127,7 +103,6 @@ def unverified(claims: list[NumericClaim]) -> list[NumericClaim]:
 
 
 def correction_prompt(claims: list[NumericClaim]) -> str:
-    """Message sent back to the model when a figure could not be matched."""
     figures = ", ".join(sorted({claim.text for claim in unverified(claims)}))
     return (
         "These figures in your answer do not match any value returned by the tools: "
@@ -138,7 +113,6 @@ def correction_prompt(claims: list[NumericClaim]) -> str:
 
 
 def annotate(text: str, claims: list[NumericClaim]) -> str:
-    """Append a visible warning when figures remain unmatched."""
     outstanding = unverified(claims)
     if not outstanding:
         return text

@@ -1,17 +1,11 @@
-"""Read routes over the evidence bundle.
-
-Every response comes from a recorded result. Nothing here computes a metric, which
-is what lets the same endpoints back both the local application and the hosted
-replay demo.
-"""
+"""Read routes over the evidence bundle."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.api.deps import bundle, settings
+from app.api.deps import _cached_bundle, bundle, settings
 from app.config import EXPERIMENT, Settings
-from app.evidence.store import EvidenceStore
 from app.schemas import (
     CLEAN_SCENARIO_ID,
     AlertExplanation,
@@ -19,6 +13,7 @@ from app.schemas import (
     CandidateConfig,
     DatasetProfile,
     EvidenceBundle,
+    Partition,
     ReplaySeries,
     RunRecord,
     ScenarioResult,
@@ -33,8 +28,8 @@ router = APIRouter(prefix="/api", tags=["evidence"])
 def health(config: Settings = Depends(settings)) -> dict:
     """Liveness plus what this deployment can actually do."""
     try:
-        loaded = bundle()
-        bundle_state = {
+        loaded = _cached_bundle()
+        bundleState = {
             "available": True,
             "dataset_id": loaded.profile.dataset_id,
             "config_fingerprint": loaded.config_fingerprint,
@@ -42,15 +37,17 @@ def health(config: Settings = Depends(settings)) -> dict:
             "scenario_results": len(loaded.scenario_results),
             "replay_series": len(loaded.replay_series),
         }
-    except HTTPException:
-        bundle_state = {"available": False}
+    except (HTTPException, FileNotFoundError):
+        bundleState = {"available": False}
 
     return {
         "status": "ok",
         "mode": config.mode,
         "can_train": config.mode == "full",
-        "copilot": "language model" if config.llm_available else "recorded evidence only",
-        "bundle": bundle_state,
+        "can_upload": config.mode == "full",
+        "evidence_guide": True,
+        "copilot": "recorded evidence only",
+        "bundle": bundleState,
         "note": (
             "This deployment serves recorded evidence. Training, fault injection and "
             "attribution run locally; see the repository for how to reproduce them."
@@ -66,6 +63,9 @@ def experiment_config(loaded: EvidenceBundle = Depends(bundle)) -> dict:
         "config": loaded.config,
         "config_fingerprint": loaded.config_fingerprint,
         "git_commit": loaded.git_commit,
+        "source_digest": loaded.source_digest,
+        "experiment_id": loaded.experiment_id,
+        "holdout_status": loaded.holdout_status,
         "current_code_fingerprint": EXPERIMENT.fingerprint(),
         "matches_current_code": loaded.config_fingerprint == EXPERIMENT.fingerprint(),
     }
@@ -98,9 +98,9 @@ def final_evaluation(loaded: EvidenceBundle = Depends(bundle)) -> dict:
         return {
             "available": False,
             "note": (
-                "The held-out engines have not been scored. They are scored once, "
-                "after the configuration is frozen, so that the reported figure is "
-                "not the best of several attempts."
+                "No final evaluation is attached to this protocol revision. "
+                "Development results guide model selection; historical holdout "
+                "scores from another revision do not validate the current model."
             ),
         }
     return {"available": True, "selection": loaded.final_evaluation.model_dump(mode="json")}
@@ -114,14 +114,11 @@ def scenarios(
     include_clean: bool = Query(True),
     fault_kind: str | None = Query(None),
     sensor: str | None = Query(None),
+    partition: Partition = Query(Partition.out_of_fold),
 ) -> list[ScenarioResult]:
-    results = loaded.scenario_results
+    results = [r for r in loaded.scenario_results if r.partition == partition]
     if candidate:
-        results = [
-            r
-            for r in results
-            if candidate in (r.candidate.value, f"{r.candidate.value}/{r.config_id}")
-        ]
+        results = [r for r in results if candidate in (r.candidate.value, f"{r.candidate.value}/{r.config_id}")]
     if required_only:
         results = [r for r in results if r.required or (include_clean and r.scenario_id == CLEAN_SCENARIO_ID)]
     if not include_clean:
@@ -182,8 +179,7 @@ def replay(
 
 @router.get("/explanations", response_model=list[AlertExplanation])
 def explanations(
-    loaded: EvidenceBundle = Depends(bundle),
-    equipment_id: str | None = Query(None),
+    loaded: EvidenceBundle = Depends(bundle), equipment_id: str | None = Query(None)
 ) -> list[AlertExplanation]:
     items = loaded.explanations
     if equipment_id:
@@ -204,11 +200,6 @@ def runs(
     config: Settings = Depends(settings),
 ) -> list[RunRecord]:
     """Recorded runs. Read from the bundle in replay mode, from disk locally."""
-    if config.mode == "full":
-        store = EvidenceStore()
-        local = store.list_runs(kind=kind, limit=limit)
-        if local:
-            return local
     records = loaded.runs
     if kind:
         records = [r for r in records if r.kind == kind]
@@ -217,15 +208,8 @@ def runs(
 
 @router.get("/runs/{run_id}", response_model=RunRecord)
 def run_detail(
-    run_id: str,
-    loaded: EvidenceBundle = Depends(bundle),
-    config: Settings = Depends(settings),
+    run_id: str, loaded: EvidenceBundle = Depends(bundle), config: Settings = Depends(settings)
 ) -> RunRecord:
-    if config.mode == "full":
-        try:
-            return EvidenceStore().get(run_id)
-        except KeyError:
-            pass
     for record in loaded.runs:
         if record.run_id == run_id:
             return record
@@ -235,8 +219,5 @@ def run_detail(
 @router.get("/reproducibility")
 def reproducibility(loaded: EvidenceBundle = Depends(bundle)) -> dict:
     if loaded.reproducibility is None:
-        return {
-            "available": False,
-            "note": "No repeat run has been compared against the original yet.",
-        }
+        return {"available": False, "note": "No repeat run has been compared against the original yet."}
     return {"available": True, "check": loaded.reproducibility.model_dump(mode="json")}

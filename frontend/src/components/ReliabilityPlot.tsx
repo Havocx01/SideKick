@@ -1,13 +1,6 @@
 import type { CalibrationReport } from "../api/types";
 import { candidateLabel, number } from "../format";
 
-/**
- * Observed failure rate against predicted score.
- *
- * This is here to stop a score being read as a probability when it is not. Points
- * far from the diagonal mean the number is usable as a ranking and misleading as a
- * likelihood, and the view says so rather than leaving the reader to infer it.
- */
 export function ReliabilityPlot({ reports }: { reports: CalibrationReport[] }) {
   const size = 300;
   const margin = 34;
@@ -20,9 +13,14 @@ export function ReliabilityPlot({ reports }: { reports: CalibrationReport[] }) {
 
   return (
     <div>
-      <svg className="chart" viewBox={`0 0 ${size} ${size}`} style={{ maxWidth: size }} role="img"
-        aria-label="Reliability plot">
-        {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
+      <svg
+        className="chart"
+        viewBox={`0 0 ${size} ${size}`}
+        style={{ maxWidth: size }}
+        role="img"
+        aria-label="Reliability plot"
+      >
+        {[0, 0.25, 0.5, 0.75, 1].map(tick => (
           <g key={tick}>
             <line className="gridline" x1={x(0)} x2={x(1)} y1={y(tick)} y2={y(tick)} />
             <line className="gridline" x1={x(tick)} x2={x(tick)} y1={y(0)} y2={y(1)} />
@@ -41,14 +39,15 @@ export function ReliabilityPlot({ reports }: { reports: CalibrationReport[] }) {
         {reports.map((report, index) => {
           const colour = palette[index % palette.length];
           const path = report.bins
-            .map((bin, position) =>
-              `${position === 0 ? "M" : "L"}${x(Math.min(1, bin.mean_predicted)).toFixed(1)},${y(bin.observed_rate).toFixed(1)}`,
+            .map(
+              (bin, position) =>
+                `${position === 0 ? "M" : "L"}${x(Math.min(1, bin.mean_predicted)).toFixed(1)},${y(bin.observed_rate).toFixed(1)}`
             )
             .join(" ");
           return (
             <g key={`${report.candidate}/${report.config_id}`}>
               <path d={path} fill="none" stroke={colour} strokeWidth={1.6} />
-              {report.bins.map((bin) => (
+              {report.bins.map(bin => (
                 <circle
                   key={bin.lower}
                   cx={x(Math.min(1, bin.mean_predicted))}
@@ -77,10 +76,7 @@ export function ReliabilityPlot({ reports }: { reports: CalibrationReport[] }) {
       <div className="legend">
         {reports.map((report, index) => (
           <span className="legend-item" key={`${report.candidate}/${report.config_id}`}>
-            <span
-              className="legend-swatch"
-              style={{ background: palette[index % palette.length] }}
-            />
+            <span className="legend-swatch" style={{ background: palette[index % palette.length] }} />
             {candidateLabel(report.candidate, report.config_id)} — Brier {number(report.brier, 4)}
           </span>
         ))}

@@ -1,21 +1,4 @@
-"""Run the development evaluation and write the evidence bundle.
-
-This is the local pipeline. It profiles the data, trains every candidate with
-grouped cross-validation, freezes each candidate's alert threshold on clean
-out-of-fold predictions, runs the fault matrix, applies the acceptance criteria,
-records every result in the evidence store and writes the bundle the hosted demo
-serves.
-
-The held-out engines are not touched here. They are scored once, by
-``scripts/score_holdout.py``, after the configuration is frozen.
-
-Examples
---------
-    python scripts/run_pipeline.py                        # FD001, full matrix
-    python scripts/run_pipeline.py --required-only        # selection set only
-    python scripts/run_pipeline.py --fast                 # quick wiring check
-    python scripts/run_pipeline.py --source synthetic     # no download needed
-"""
+"""Run the development evaluation and write the evidence bundle."""
 
 from __future__ import annotations
 
@@ -71,17 +54,13 @@ def main(argv: list[str] | None = None) -> int:
 
     config = EXPERIMENT
     if args.fast:
-        config = replace(
-            config, holdout_engines=10, n_folds=3, configs_per_candidate=1
-        )
+        config = replace(config, holdout_engines=10, n_folds=3, configs_per_candidate=1)
     config.validate()
 
     if args.source == "synthetic":
         dataset = make_synthetic_dataset(n_equipment=args.engines, config=config)
     else:
-        dataset = load_dataset(
-            args.source, subset=args.subset, path=args.path, config=config
-        )
+        dataset = load_dataset(args.source, subset=args.subset, path=args.path, config=config)
     logger.info("%s", dataset.describe())
     logger.info("data hash %s, config fingerprint %s", dataset.data_hash, config.fingerprint())
 
@@ -91,28 +70,33 @@ def main(argv: list[str] | None = None) -> int:
             min_detection_fraction=(
                 args.min_detection if args.min_detection is not None else config.min_detection_fraction
             ),
-            max_early_alarm_burden=(
-                args.max_burden if args.max_burden is not None else config.max_early_alarm_burden
-            ),
+            max_early_alarm_burden=(args.max_burden if args.max_burden is not None else config.max_early_alarm_burden),
             min_useful_lead=config.min_useful_lead,
             horizon_cycles=config.horizon_cycles,
         )
 
-    fault_sensors: list[str] | None = None
+    if criteria:
+        config = replace(
+            config,
+            min_detection_fraction=criteria.min_detection_fraction,
+            max_early_alarm_burden=criteria.max_early_alarm_burden,
+        )
+        dataset.config = config
+    faultSensors: list[str] | None = None
     if args.sensors:
-        fault_sensors = [s.strip() for s in args.sensors.split(",") if s.strip()]
+        faultSensors = [s.strip() for s in args.sensors.split(",") if s.strip()]
     elif args.fast:
         from app.data.profiler import profile_dataset
 
-        fault_sensors = profile_dataset(dataset, config=config).varying_sensors[:3]
+        faultSensors = profile_dataset(dataset, config=config).varying_sensors[:3]
     elif args.max_sensors:
         from app.data.profiler import profile_dataset
 
-        fault_sensors = profile_dataset(dataset, config=config).varying_sensors[: args.max_sensors]
+        faultSensors = profile_dataset(dataset, config=config).varying_sensors[: args.max_sensors]
 
-    if fault_sensors:
-        logger.info("fault matrix over %d sensors: %s", len(fault_sensors), ", ".join(fault_sensors))
-        logger.info("scenario counts: %s", describe_matrix(fault_sensors, config))
+    if faultSensors:
+        logger.info("fault matrix over %d sensors: %s", len(faultSensors), ", ".join(faultSensors))
+        logger.info("scenario counts: %s", describe_matrix(faultSensors, config))
 
     store = EvidenceStore()
     parent = store.start_run(
@@ -133,17 +117,15 @@ def main(argv: list[str] | None = None) -> int:
         dataset,
         config=config,
         criteria=criteria,
-        fault_sensors=fault_sensors,
+        fault_sensors=faultSensors,
         include_full_matrix=not args.required_only,
     )
 
     # One run record per candidate, so every reported metric has an owner.
-    for candidate_name, candidate in result.training.specs.items():
-        clean = result.clean[candidate_name]
+    for candidateName, candidate in result.training.specs.items():
+        clean = result.clean[candidateName]
         verdict = next(
-            v
-            for v in result.selection.ranked
-            if v.candidate == candidate.kind and v.config_id == candidate.config_id
+            v for v in result.selection.ranked if v.candidate == candidate.kind and v.config_id == candidate.config_id
         )
         record = store.start_run(
             "fault_matrix",
@@ -154,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
                 "candidate": candidate.kind.value,
                 "config_id": candidate.config_id,
                 **{f"param.{k}": v for k, v in candidate.params.items()},
-                "threshold": result.thresholds[candidate_name],
+                "threshold": result.thresholds[candidateName],
             },
         )
         store.log_metrics(
@@ -175,8 +157,11 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
         mirror_run(record)
+        for scenario in result.scenario_results:
+            if scenario.candidate == candidate.kind and scenario.config_id == candidate.config_id:
+                scenario.run_id = record.run_id
 
-    selection_run = store.start_run(
+    selectionRun = store.start_run(
         "selection",
         config=config,
         data_hash=dataset.data_hash,
@@ -186,24 +171,25 @@ def main(argv: list[str] | None = None) -> int:
             "min_detection_fraction": result.criteria.min_detection_fraction,
             "max_early_alarm_burden": result.criteria.max_early_alarm_burden,
             "recommended": (
-                f"{result.selection.recommended.candidate.value}/"
-                f"{result.selection.recommended.config_id}"
+                f"{result.selection.recommended.candidate.value}/{result.selection.recommended.config_id}"
                 if result.selection.recommended
                 else "none"
             ),
         },
         notes=result.selection.notes,
     )
-    store.log_json_artifact(selection_run, "selection", result.selection.model_dump(mode="json"))
-    mirror_run(selection_run)
+    store.log_json_artifact(selectionRun, "selection", result.selection.model_dump(mode="json"))
+    mirror_run(selectionRun)
 
     print_summary(result)
 
     if not args.no_bundle:
-        runs = store.list_runs(limit=60)
-        bundle = build_bundle(
-            result, config=config, runs=runs, replay_engines=args.replay_engines
-        )
+        runs = [
+            run
+            for run in store.list_runs(limit=500)
+            if run.run_id == parent.run_id or run.parent_run_id == parent.run_id
+        ]
+        bundle = build_bundle(result, config=config, runs=runs, replay_engines=args.replay_engines)
         write_bundle(bundle, args.bundle)
 
     return 0

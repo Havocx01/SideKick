@@ -1,24 +1,13 @@
-"""The copilot's tool surface.
-
-The copilot has no direct access to data or models. It can only call these six
-tools, each with a JSON schema the arguments are validated against, and each
-returning a structured result drawn from the evidence store. Raw sensor files stay
-server-side; the model sees summaries and metrics, never the readings.
-
-The division of labour is deliberate. The copilot maps columns, translates a
-stated alert requirement into settings, triggers work and drafts prose. It does
-not produce predictions, and it does not compute metrics. Separate machine-learning
-models produce predictions; these tools return numbers that were already computed
-and recorded.
-"""
+"""The copilot's tool surface."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any
 
-from app.schemas import CLEAN_SCENARIO_ID, EvidenceBundle
+from app.schemas import CLEAN_SCENARIO_ID, EvidenceBundle, Partition
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -34,44 +23,21 @@ class Tool:
     def openai_schema(self) -> dict[str, Any]:
         return {
             "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
+            "function": {"name": self.name, "description": self.description, "parameters": self.parameters},
         }
 
 
 class ToolError(RuntimeError):
-    """A tool refused the request. The message is shown to the user."""
-
-
-def _string(schema_properties: dict, name: str, arguments: dict, *, required: bool = True) -> str | None:
-    value = arguments.get(name)
-    if value is None:
-        if required:
-            raise ToolError(f"{name} is required")
-        return None
-    if not isinstance(value, str):
-        raise ToolError(f"{name} must be a string")
-    return value
+    """The message is returned to the caller as a tool error."""
 
 
 class ToolRegistry:
-    """The six tools, bound to one evidence bundle.
-
-    Read-only against a bundle. Tools that would start work return a description
-    of what would run plus the command to run it, rather than launching training
-    inside a request; the hosted service has neither the memory nor the time
-    budget, and pretending otherwise would be the wrong demo.
-    """
+    """Tools read one evidence bundle. Training requests return local instructions only."""
 
     def __init__(self, bundle: EvidenceBundle, *, allow_training: bool = False) -> None:
         self.bundle = bundle
         self.allow_training = allow_training
         self._tools = {tool.name: tool for tool in self._build()}
-
-    # -- registry ----------------------------------------------------------
 
     def __contains__(self, name: str) -> bool:
         return name in self._tools
@@ -88,9 +54,34 @@ class ToolRegistry:
         return list(self._tools)
 
     def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        return self.get(name).handler(arguments or {})
-
-    # -- tool implementations ---------------------------------------------
+        tool = self.get(name)
+        if not isinstance(arguments, dict):
+            raise ToolError("tool arguments must be an object")
+        properties = tool.parameters.get("properties", {})
+        unknown = set(arguments) - set(properties)
+        if unknown:
+            raise ToolError(f"unknown arguments: {sorted(unknown)}")
+        for key, value in arguments.items():
+            rule = properties[key]
+            kind = rule["type"]
+            valid = {
+                "string": isinstance(value, str),
+                "boolean": isinstance(value, bool),
+                "integer": type(value) is int,
+                "number": type(value) in (int, float),
+            }[kind]
+            if not valid:
+                raise ToolError(f"{key} must be a {kind}")
+            if "enum" in rule and value not in rule["enum"]:
+                raise ToolError(f"{key} must be one of {rule['enum']}")
+            if kind in {"integer", "number"}:
+                if not isfinite(value):
+                    raise ToolError(f"{key} must be finite")
+                if "minimum" in rule and value < rule["minimum"]:
+                    raise ToolError(f"{key} must be at least {rule['minimum']}")
+                if "maximum" in rule and value > rule["maximum"]:
+                    raise ToolError(f"{key} must be at most {rule['maximum']}")
+        return tool.handler(arguments)
 
     def _build(self) -> list[Tool]:
         return [
@@ -197,11 +188,13 @@ class ToolRegistry:
                             "type": "string",
                             "description": "Scenario identifier, or 'clean' for unfaulted results.",
                         },
-                        "metric": {
-                            "type": "string",
-                            "description": "Restrict to one metric name.",
-                        },
+                        "metric": {"type": "string", "description": "Restrict to one metric name."},
                         "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                        "partition": {
+                            "type": "string",
+                            "enum": ["out_of_fold", "holdout"],
+                            "description": "Defaults to out_of_fold. Never pool development and holdout results.",
+                        },
                     },
                     "additionalProperties": False,
                 },
@@ -220,8 +213,6 @@ class ToolRegistry:
             ),
         ]
 
-    # -- handlers ----------------------------------------------------------
-
     def _profile_dataset(self, arguments: dict[str, Any]) -> dict[str, Any]:
         profile = self.bundle.profile
         payload: dict[str, Any] = {
@@ -238,8 +229,7 @@ class ToolRegistry:
             "constant_channels": [s.name for s in profile.sensors if s.constant],
             "fault_eligible_channels": profile.varying_sensors,
             "findings": [
-                {"code": f.code, "severity": f.severity.value, "message": f.message}
-                for f in profile.findings
+                {"code": f.code, "severity": f.severity.value, "message": f.message} for f in profile.findings
             ],
         }
         if arguments.get("include_channels"):
@@ -277,11 +267,9 @@ class ToolRegistry:
             if key in arguments
         }
         command = "python scripts/run_pipeline.py"
+        setupNote = None
         if "horizon_cycles" in requested and requested["horizon_cycles"] != config.get("horizon_cycles"):
-            command = (
-                "python scripts/run_pipeline.py  # then set horizon_cycles in "
-                "backend/app/config.py, which changes the configuration fingerprint"
-            )
+            setupNote = "First update horizon_cycles and related alert windows in backend/app/config.py, then run the command below."
         if "min_detection_fraction" in requested:
             command += f" --min-detection {requested['min_detection_fraction']}"
         if "max_early_alarm_burden" in requested:
@@ -297,6 +285,7 @@ class ToolRegistry:
                 else "Training is available in this deployment but is not started by the copilot."
             ),
             "command": command,
+            "setup_note": setupNote,
             "requested_settings": requested,
             "current_settings": {
                 "horizon_cycles": config.get("horizon_cycles"),
@@ -317,14 +306,15 @@ class ToolRegistry:
         }
 
     def _run_fault_tests(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        required_only = arguments.get("required_only", True)
+        requiredOnly = arguments.get("required_only", True)
         wanted = arguments.get("candidate")
 
         results = [
             r
             for r in self.bundle.scenario_results
             if r.scenario_id != CLEAN_SCENARIO_ID
-            and (not required_only or r.required)
+            and r.partition == Partition.out_of_fold
+            and (not requiredOnly or r.required)
             and (wanted is None or r.candidate.value == wanted)
         ]
         if not results:
@@ -336,10 +326,10 @@ class ToolRegistry:
                 ),
             }
 
-        per_candidate: dict[str, dict[str, Any]] = {}
+        perCandidate: dict[str, dict[str, Any]] = {}
         for result in results:
             key = f"{result.candidate.value}/{result.config_id}"
-            entry = per_candidate.setdefault(
+            entry = perCandidate.setdefault(
                 key, {"detections": [], "worst": None, "worst_scenario": None, "run_ids": []}
             )
             entry["detections"].append(result.metrics.detection_fraction)
@@ -350,47 +340,51 @@ class ToolRegistry:
             if result.run_id:
                 entry["run_ids"].append(result.run_id)
 
-        clean_by_candidate = {
+        cleanByCandidate = {
             f"{r.candidate.value}/{r.config_id}": r.metrics.detection_fraction
             for r in self.bundle.scenario_results
-            if r.scenario_id == CLEAN_SCENARIO_ID
+            if r.scenario_id == CLEAN_SCENARIO_ID and r.partition == Partition.out_of_fold
         }
 
         return {
             "scenarios": len(results),
-            "required_only": bool(required_only),
+            "required_only": bool(requiredOnly),
             "fault_kinds": sorted({r.fault.kind.value for r in results if r.fault}),
             "sensors_tested": sorted({r.fault.sensor for r in results if r.fault}),
             "per_candidate": {
                 key: {
-                    "clean_detection_fraction": clean_by_candidate.get(key),
+                    "clean_detection_fraction": cleanByCandidate.get(key),
                     "mean_detection_fraction": sum(entry["detections"]) / len(entry["detections"]),
                     "worst_detection_fraction": entry["worst"],
                     "worst_scenario_id": entry["worst_scenario"],
                     "worst_case": entry.get("worst_label"),
                     "scenarios": len(entry["detections"]),
+                    "run_ids": sorted(set(entry["run_ids"])),
                 }
-                for key, entry in sorted(per_candidate.items())
+                for key, entry in sorted(perCandidate.items())
             },
         }
 
     def _query_runs(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        wanted_candidate = arguments.get("candidate")
-        wanted_scenario = arguments.get("scenario_id")
-        wanted_metric = arguments.get("metric")
+        wantedCandidate = arguments.get("candidate")
+        wantedScenario = arguments.get("scenario_id")
+        wantedMetric = arguments.get("metric")
         limit = int(arguments.get("limit", 20))
 
         rows: list[dict[str, Any]] = []
         for result in self.bundle.scenario_results:
-            key = f"{result.candidate.value}/{result.config_id}"
-            if wanted_candidate and wanted_candidate not in ("all", result.candidate.value, key):
+            if result.partition.value != arguments.get("partition", "out_of_fold"):
                 continue
-            if wanted_scenario and result.scenario_id != wanted_scenario:
+            key = f"{result.candidate.value}/{result.config_id}"
+            if wantedCandidate and wantedCandidate not in ("all", result.candidate.value, key):
+                continue
+            if wantedScenario and result.scenario_id != wantedScenario:
                 continue
             metrics = {
                 "detection_fraction": result.metrics.detection_fraction,
                 "detection_ci_lower": result.metrics.detection_ci.lower,
                 "detection_ci_upper": result.metrics.detection_ci.upper,
+                "detection_ci_level": result.metrics.detection_ci.level,
                 "early_alarm_burden": result.metrics.early_alarm_burden,
                 "median_lead_time": result.metrics.median_lead_time,
                 "engines": result.metrics.engines,
@@ -399,12 +393,10 @@ class ToolRegistry:
                 "missed": result.metrics.missed,
                 "new_episodes_per_1000": result.metrics.new_episodes_per_1000,
             }
-            if wanted_metric:
-                if wanted_metric not in metrics:
-                    raise ToolError(
-                        f"unknown metric {wanted_metric!r}; available: {sorted(metrics)}"
-                    )
-                metrics = {wanted_metric: metrics[wanted_metric]}
+            if wantedMetric:
+                if wantedMetric not in metrics:
+                    raise ToolError(f"unknown metric {wantedMetric!r}; available: {sorted(metrics)}")
+                metrics = {wantedMetric: metrics[wantedMetric]}
             rows.append(
                 {
                     "candidate": key,
@@ -482,5 +474,6 @@ class ToolRegistry:
             "limitations": self.bundle.limitations,
             "config_fingerprint": self.bundle.config_fingerprint,
             "git_commit": self.bundle.git_commit,
+            "run_ids": [r.run_id for r in self.bundle.runs if r.kind == "selection"],
             "final_evaluation_run": self.bundle.final_evaluation is not None,
         }

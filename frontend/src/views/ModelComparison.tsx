@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
-import { api } from "../api/client";
+import { useEvidence } from "../hooks/useEvidence";
+import { DecisionSummary } from "../components/DecisionSummary";
 import type { CandidateVerdict } from "../api/types";
 import { Badge, Callout, Panel, StateBlock, Stat } from "../components/Chrome";
 import { IntervalBar } from "../components/IntervalBar";
@@ -9,18 +10,12 @@ import { ScenarioHeatmap } from "../components/ScenarioHeatmap";
 import { candidateKey, candidateLabel, cycles, integer, interval, number, percent } from "../format";
 import { useApi } from "../hooks/useApi";
 
-/**
- * The recommendation and the evidence behind it.
- *
- * Ordered by worst-case detection rather than clean-data performance, because the
- * ranking that changes when faults are applied is the result worth showing. The
- * leaderboard exists to make disagreement with the recommendation possible.
- */
 export function ModelComparison() {
-  const selection = useApi(() => api.selection(), []);
-  const final = useApi(() => api.finalEvaluation(), []);
-  const calibration = useApi(() => api.calibration(), []);
-  const reproducibility = useApi(() => api.reproducibility(), []);
+  const api = useEvidence();
+  const selection = useApi(() => api.selection(), [api]);
+  const final = useApi(() => api.finalEvaluation(), [api]);
+  const calibration = useApi(() => api.calibration(), [api]);
+  const reproducibility = useApi(() => api.reproducibility(), [api]);
 
   const [focus, setFocus] = useState<string | null>(null);
 
@@ -28,15 +23,14 @@ export function ModelComparison() {
   const verdicts = useMemo(() => selection.data?.ranked ?? [], [selection.data]);
 
   const focused = focus
-    ? verdicts.find((verdict) => candidateKey(verdict.candidate, verdict.config_id) === focus)
+    ? verdicts.find(verdict => candidateKey(verdict.candidate, verdict.config_id) === focus)
     : verdicts[0];
 
-  // Fetched per candidate rather than all at once: the whole matrix is several
-  // megabytes, and the heatmap only ever shows one candidate.
+  // Fetch only the selected candidate; the complete matrix is several megabytes.
   const focusKey = focused ? candidateKey(focused.candidate, focused.config_id) : "";
   const scenarios = useApi(
     () => (focusKey ? api.scenarios({ candidate: focusKey, includeClean: false }) : Promise.resolve([])),
-    [focusKey],
+    [api, focusKey]
   );
   const focusedScenarios = scenarios.data ?? [];
 
@@ -45,12 +39,14 @@ export function ModelComparison() {
       <header className="page-head">
         <h1>Model comparison</h1>
         <p>
-          Candidates ranked by the detection rate they keep when a sensor fails, not by their
-          performance on undamaged readings. Where those two orderings disagree, the second one is
-          the one that predicts field behaviour.
+          Candidates must pass the detection and alarm-burden limits on clean data and every required fault case.
+          Qualifying models are ranked by mean detection across those cases, with clean alarm burden breaking ties.
+          These simulated tests do not establish field performance.
         </p>
       </header>
 
+      <DecisionSummary />
+      <div id="fault-results" />
       <StateBlock loading={selection.loading} error={selection.error}>
         {selection.data && criteria ? (
           <>
@@ -67,12 +63,9 @@ export function ModelComparison() {
               title="Leaderboard"
               description={
                 <>
-                  Worst case is the weakest result across the {integer(
-                    verdicts[0]?.required_scenarios ?? 0,
-                  )}{" "}
-                  required fault scenarios. Bars show the 95% interval; a wide bar means the
-                  held-out data cannot separate these candidates, and reading the point estimates
-                  as a ranking would overstate what was measured.
+                  Worst case is the weakest result across the {integer(verdicts[0]?.required_scenarios ?? 0)} required
+                  fault scenarios. Bars show per-case 95% detection intervals on development engines. They are not a
+                  statistical test of the ranking. Select a candidate to inspect its faults.
                 </>
               }
               tight
@@ -93,11 +86,9 @@ export function ModelComparison() {
                     </tr>
                   </thead>
                   <tbody>
-                    {verdicts.map((verdict) => {
+                    {verdicts.map(verdict => {
                       const key = candidateKey(verdict.candidate, verdict.config_id);
-                      const isFocus = focused
-                        ? key === candidateKey(focused.candidate, focused.config_id)
-                        : false;
+                      const isFocus = focused ? key === candidateKey(focused.candidate, focused.config_id) : false;
                       const isRecommended =
                         selection.data?.recommended?.candidate === verdict.candidate &&
                         selection.data?.recommended?.config_id === verdict.config_id;
@@ -106,6 +97,14 @@ export function ModelComparison() {
                         <tr
                           key={key}
                           onClick={() => setFocus(key)}
+                          tabIndex={0}
+                          aria-label={`Inspect ${candidateLabel(verdict.candidate, verdict.config_id)}`}
+                          onKeyDown={event => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setFocus(key);
+                            }
+                          }}
                           className={isFocus ? "row-focus" : undefined}
                           style={{ cursor: "pointer" }}
                         >
@@ -113,9 +112,7 @@ export function ModelComparison() {
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span>{candidateLabel(verdict.candidate, verdict.config_id)}</span>
                               {isRecommended ? <Badge tone="ok">recommended</Badge> : null}
-                              {verdict.candidate === "age_baseline" ? (
-                                <Badge tone="neutral">no sensors</Badge>
-                              ) : null}
+                              {verdict.candidate === "age_baseline" ? <Badge tone="neutral">no sensors</Badge> : null}
                             </div>
                           </td>
                           <td>
@@ -140,17 +137,11 @@ export function ModelComparison() {
                             )}
                           </td>
                           <td className="num">
-                            {verdict.worst_metrics
-                              ? percent(verdict.worst_metrics.detection_fraction, 1)
-                              : "—"}
+                            {verdict.worst_metrics ? percent(verdict.worst_metrics.detection_fraction, 1) : "—"}
                           </td>
                           <td className="num">
                             {verdict.worst_metrics ? (
-                              <span
-                                style={{
-                                  color: drop > 0.15 ? "var(--fault)" : "var(--ink-soft)",
-                                }}
-                              >
+                              <span style={{ color: drop > 0.15 ? "var(--fault)" : "var(--ink-soft)" }} >
                                 {drop > 0 ? "−" : ""}
                                 {percent(Math.abs(drop), 1)}
                               </span>
@@ -158,9 +149,7 @@ export function ModelComparison() {
                               "—"
                             )}
                           </td>
-                          <td className="num">
-                            {percent(verdict.clean.early_alarm_burden, 1)}
-                          </td>
+                          <td className="num">{percent(verdict.clean.early_alarm_burden, 1)}</td>
                           <td className="num">{cycles(verdict.clean.median_lead_time)}</td>
                           <td>
                             {verdict.qualifies ? (
@@ -178,9 +167,8 @@ export function ModelComparison() {
                 </table>
               </div>
               <p className="note" style={{ marginTop: 10 }}>
-                Burden is the share of alarm-free cycles spent in alarm, excluding the transition
-                band. Lead is the median cycles of warning before failure. Select a row to see its
-                fault detail below.
+                Burden is the share of eligible early-life cycles spent in alarm, excluding the transition band. Lead is
+                the median lead time for useful detections. Select a row to see its fault detail below.
               </p>
             </Panel>
 
@@ -191,15 +179,11 @@ export function ModelComparison() {
                   description="Every fault scenario tested, as the sensor that failed against how it failed. One dark row means a single channel this candidate depends on; a dark column means a failure mode it cannot tolerate on any channel."
                   aside={
                     <div className="pill-row">
-                      {verdicts.map((verdict) => {
+                      {verdicts.map(verdict => {
                         const key = candidateKey(verdict.candidate, verdict.config_id);
                         const active = key === candidateKey(focused.candidate, focused.config_id);
                         return (
-                          <button
-                            key={key}
-                            onClick={() => setFocus(key)}
-                            className={active ? "active" : undefined}
-                          >
+                          <button key={key} onClick={() => setFocus(key)} className={active ? "active" : undefined}>
                             {candidateLabel(verdict.candidate, verdict.config_id)}
                           </button>
                         );
@@ -207,15 +191,8 @@ export function ModelComparison() {
                     </div>
                   }
                 >
-                  <StateBlock
-                    loading={scenarios.loading}
-                    error={scenarios.error}
-                    empty={focusedScenarios.length === 0}
-                  >
-                    <ScenarioHeatmap
-                      results={focusedScenarios}
-                      minDetection={criteria.min_detection_fraction}
-                    />
+                  <StateBlock loading={scenarios.loading} error={scenarios.error} empty={focusedScenarios.length === 0}>
+                    <ScenarioHeatmap results={focusedScenarios} minDetection={criteria.min_detection_fraction} />
                   </StateBlock>
                 </Panel>
 
@@ -229,29 +206,36 @@ export function ModelComparison() {
       {final.data ? (
         <Panel
           title="Held-back equipment"
-          description="Scored once, on machines no model or threshold ever saw, after the configuration was frozen. Development numbers above guided the choice; this is the number that estimates field behaviour."
+          description="Final evaluation is separate from model selection. Even an untouched holdout from this simulated dataset cannot establish performance on plant equipment."
         >
-          {final.data.available && final.data.selection?.recommended ? (
-            <div className="grid cols-3" style={{ marginBottom: 0 }}>
-              <Stat
-                label="Detection, clean"
-                value={percent(final.data.selection.recommended.clean.detection_fraction, 1)}
-                note={interval(
-                  final.data.selection.recommended.clean.detection_ci.lower,
-                  final.data.selection.recommended.clean.detection_ci.upper,
-                )}
-              />
-              <Stat
-                label="Detection, worst fault"
-                value={percent(final.data.selection.recommended.worst_detection_required, 1)}
-                note={final.data.selection.recommended.worst_scenario_id ?? "—"}
-              />
-              <Stat
-                label="Median lead"
-                value={cycles(final.data.selection.recommended.clean.median_lead_time)}
-                note="cycles of warning before failure"
-              />
-            </div>
+          {final.data.available && final.data.selection?.ranked[0] ? (
+            <>
+              {final.data.selection.outcome === "none_qualified" ? (
+                <Callout tone="fault" title="The selected model failed the final criteria">
+                  No deployment recommendation is supported by this final evaluation.
+                </Callout>
+              ) : null}
+              <div className="grid cols-3" style={{ marginBottom: 0 }}>
+                <Stat
+                  label="Detection, clean"
+                  value={percent(final.data.selection.ranked[0].clean.detection_fraction, 1)}
+                  note={interval(
+                    final.data.selection.ranked[0].clean.detection_ci.lower,
+                    final.data.selection.ranked[0].clean.detection_ci.upper
+                  )}
+                />
+                <Stat
+                  label="Detection, worst fault"
+                  value={percent(final.data.selection.ranked[0].worst_detection_required, 1)}
+                  note={final.data.selection.ranked[0].worst_scenario_id ?? "—"}
+                />
+                <Stat
+                  label="Median lead"
+                  value={cycles(final.data.selection.ranked[0].clean.median_lead_time)}
+                  note="cycles of warning before failure"
+                />
+              </div>
+            </>
           ) : (
             <p className="note">{final.data.note ?? "Not yet scored."}</p>
           )}
@@ -278,15 +262,13 @@ export function ModelComparison() {
             {reproducibility.data.check.reproduced ? (
               <Badge tone="ok">reproduced</Badge>
             ) : (
-              <Badge tone="bad">
-                differs by {number(reproducibility.data.check.max_absolute_difference, 6)}
-              </Badge>
+              <Badge tone="bad">differs by {number(reproducibility.data.check.max_absolute_difference, 6)}</Badge>
             )}
             <span className="note">
               {integer(reproducibility.data.check.metrics_compared)} metrics compared between{" "}
               <span className="mono">{reproducibility.data.check.run_id}</span> and{" "}
-              <span className="mono">{reproducibility.data.check.repeat_run_id}</span>, to a
-              tolerance of {number(reproducibility.data.check.tolerance, 9)}
+              <span className="mono">{reproducibility.data.check.repeat_run_id}</span>, to a tolerance of{" "}
+              {number(reproducibility.data.check.tolerance, 9)}
             </span>
           </div>
         </Panel>
@@ -295,14 +277,7 @@ export function ModelComparison() {
   );
 }
 
-function Recommendation({
-  outcome,
-  recommended,
-  notes,
-  uncertain,
-  minDetection,
-  maxBurden,
-}: {
+function Recommendation({ outcome, recommended, notes, uncertain, minDetection, maxBurden }: {
   outcome: string;
   recommended: CandidateVerdict | null;
   notes: string[];
@@ -314,24 +289,20 @@ function Recommendation({
     return (
       <Callout tone="fault" title="No candidate is recommended">
         <p>
-          Nothing tested kept {percent(minDetection)} detection under every required sensor fault
-          while staying within a {percent(maxBurden)} alarm burden. This is a result, not a failure
-          of the tool: deploying any of these on this data would mean accepting alerts that
-          disappear when a sensor does.
+          Nothing tested kept {percent(minDetection)} detection under every required sensor fault while staying within a{" "}
+          {percent(maxBurden)} alarm burden. This is a result, not a failure of the tool: deploying any of these on this
+          data would mean accepting alerts that disappear when a sensor does.
         </p>
         {notes.length > 0 ? (
           <ul>
-            {notes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
+            {notes.map(note => (<li key={note}>{note}</li>))}
           </ul>
         ) : null}
       </Callout>
     );
   }
 
-  // An overlapping interval means the ranking is not established by the data, so
-  // the heading is softened rather than leaving a confident claim in place.
+  // Overlapping intervals do not establish a reliable ranking.
   const contested = uncertain.length > 0;
   const drop = recommended.clean.detection_fraction - recommended.worst_detection_required;
 
@@ -342,26 +313,29 @@ function Recommendation({
         {candidateLabel(recommended.candidate, recommended.config_id)}
       </h3>
       <p>
-        It keeps {percent(recommended.worst_detection_required, 1)} detection in its worst required
-        fault scenario
+        It keeps {percent(recommended.worst_detection_required, 1)} detection in its worst required fault scenario
         {recommended.worst_scenario_id ? (
           <>
             {" "}
             (<span className="mono">{recommended.worst_scenario_id}</span>)
           </>
         ) : null}
-        , against {percent(recommended.clean.detection_fraction, 1)} on undamaged readings — a drop
-        of {percent(drop, 1)}. Median warning is {cycles(recommended.clean.median_lead_time)} cycles
-        before failure, at an alarm burden of {percent(recommended.clean.early_alarm_burden, 1)}.
-        Passing required scenarios: {integer(recommended.required_passed)} of{" "}
-        {integer(recommended.required_scenarios)}.
+        , against {percent(recommended.clean.detection_fraction, 1)} on undamaged readings, a drop of{" "}
+        {number(drop * 100, 1)} percentage points. Median warning is {cycles(recommended.clean.median_lead_time)} before
+        failure, at an alarm burden of {percent(recommended.clean.early_alarm_burden, 1)}. Passing required scenarios:{" "}
+        {integer(recommended.required_passed)} of {integer(recommended.required_scenarios)}.
       </p>
       {[...notes, ...uncertain].length > 0 ? (
-        <ul>
-          {[...notes, ...uncertain].map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
+        <details>
+          <summary>Why the ranking remains uncertain</summary>
+          <p className="note">
+            The clean-data detection intervals overlap. A paired analysis of fault outcomes would be needed to establish
+            whether the leading candidates differ.
+          </p>
+          <ul>
+            {[...notes, ...uncertain].map(note => (<li key={note}>{note}</li>))}
+          </ul>
+        </details>
       ) : null}
       {outcome === "qualified" ? null : (
         <p className="note" style={{ margin: 0 }}>
@@ -372,20 +346,13 @@ function Recommendation({
   );
 }
 
-/** The numbers behind one candidate's verdict, including what it misses. */
-function FailureDetail({
-  verdict,
-  minDetection,
-}: {
-  verdict: CandidateVerdict;
-  minDetection: number;
-}) {
+function FailureDetail({ verdict, minDetection }: { verdict: CandidateVerdict; minDetection: number }) {
   const failing = verdict.failing_scenarios ?? [];
 
   return (
     <Panel
       title="Outcome breakdown"
-      description="How the held-out histories resolved on undamaged readings, and which required scenarios fell below the minimum."
+      description="Out-of-fold development outcomes on the original readings, followed by required cases that failed a detection or alarm-burden limit."
     >
       <div className="grid cols-4" style={{ marginBottom: failing.length > 0 ? 14 : 0 }}>
         <Stat
@@ -393,27 +360,23 @@ function FailureDetail({
           value={`${integer(verdict.clean.detected)} / ${integer(verdict.clean.engines)}`}
           note={`${percent(verdict.clean.detection_fraction, 1)} of histories`}
         />
+        <Stat label="Warned too late" value={integer(verdict.clean.late)} note="alert opened inside the final cycles" />
         <Stat
-          label="Warned too late"
-          value={integer(verdict.clean.late)}
-          note="alert opened inside the final cycles"
-        />
-        <Stat
-          label="No warning"
+          label="Missed"
           value={integer(verdict.clean.missed)}
-          note="failed without an alert"
+          note="no useful or late warning; an early-only alarm may still have occurred"
         />
         <Stat
           label="New alerts"
           value={number(verdict.clean.new_episodes_per_1000, 1)}
-          note={`per 1000 alarm-free cycles, at threshold ${number(verdict.threshold, 3)}`}
+          note={`per 1000 eligible early-life cycles, at threshold ${number(verdict.threshold, 3)}`}
         />
       </div>
 
       {failing.length > 0 ? (
         <>
           <p className="note" style={{ marginBottom: 6 }}>
-            Required scenarios below {percent(minDetection)} detection:
+            Required scenarios failing the {percent(minDetection)} detection minimum or the alarm-burden limit:
           </p>
           <div className="pill-row">
             {failing.map((scenario: string) => (

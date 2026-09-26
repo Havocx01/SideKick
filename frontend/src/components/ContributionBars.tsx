@@ -1,20 +1,13 @@
 import type { AlertExplanation } from "../api/types";
 import { number } from "../format";
 
-/**
- * What moved this model's score at one cycle.
- *
- * Deliberately titled as model behaviour rather than diagnosis. Under an injected
- * fault these attributions usually point at the corrupted channel, which tells you
- * how much the model leaned on it, not what is physically wrong with the machine.
- */
 export function ContributionBars({ explanation }: { explanation: AlertExplanation }) {
   if (!explanation.available || (explanation.contributions ?? []).length === 0) {
     return <p className="note">{explanation.note}</p>;
   }
 
   const contributions = explanation.contributions ?? [];
-  const largest = Math.max(...contributions.map((c) => Math.abs(c.contribution)), 1e-9);
+  const largest = Math.max(...contributions.map(c => Math.abs(c.contribution)), 1e-9);
 
   return (
     <div>
@@ -28,7 +21,7 @@ export function ContributionBars({ explanation }: { explanation: AlertExplanatio
           </tr>
         </thead>
         <tbody>
-          {contributions.map((contribution) => {
+          {contributions.map(contribution => {
             const magnitude = (Math.abs(contribution.contribution) / largest) * 100;
             const raises = contribution.contribution >= 0;
             return (
@@ -46,7 +39,7 @@ export function ContributionBars({ explanation }: { explanation: AlertExplanatio
                             height: 10,
                             background: "var(--clean)",
                             opacity: 0.75,
-                            borderRadius: "2px 0 0 2px",
+                            borderRadius: "2px 0 0 2px"
                           }}
                         />
                       ) : null}
@@ -60,7 +53,7 @@ export function ContributionBars({ explanation }: { explanation: AlertExplanatio
                             height: 10,
                             background: "var(--fault)",
                             opacity: 0.75,
-                            borderRadius: "0 2px 2px 0",
+                            borderRadius: "0 2px 2px 0"
                           }}
                         />
                       ) : null}

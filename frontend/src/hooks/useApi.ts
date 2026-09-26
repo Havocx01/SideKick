@@ -9,35 +9,35 @@ export interface AsyncState<T> {
   reload: () => void;
 }
 
-/** Fetch once on mount, with an explicit reload. */
 export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | Error | null>(null);
   const [nonce, setNonce] = useState(0);
 
-  // The fetcher is a fresh closure on every render, so the caller's deps decide
-  // when to refetch rather than identity of the function.
+  // Refetch on caller dependencies, not a new closure identity.
   const run = useCallback(fetcher, deps);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setData(null);
     setError(null);
-    run()
-      .then((value) => {
+    async function load() {
+      try {
+        const value = await run();
         if (!cancelled) setData(value);
-      })
-      .catch((cause: Error) => {
-        if (!cancelled) setError(cause);
-      })
-      .finally(() => {
+      } catch (error) {
+        if (!cancelled) setError(error as Error);
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }
+    void load();
     return () => {
       cancelled = true;
     };
   }, [run, nonce]);
 
-  return { data, loading, error, reload: () => setNonce((value) => value + 1) };
+  return { data, loading, error, reload: () => setNonce(value => value + 1) };
 }

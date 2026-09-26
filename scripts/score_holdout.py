@@ -1,20 +1,4 @@
-"""Score the held-back equipment once, and attach the result to the evidence bundle.
-
-Everything on the comparison view up to this point is a development number: the
-thresholds were chosen on it, the candidates were ranked on it, and the winner was
-selected on it. Reporting those as expected field performance would be reporting
-the best of many attempts.
-
-So this script runs once, after the configuration is frozen, and it scores **only
-the candidate that development already chose**. Scoring all ten here and then
-picking the best would reintroduce exactly the selection pressure the holdout
-exists to escape. The age baseline can be added as a fixed reference, because it
-was never a selection option and reads no sensor at all.
-
-The models are refit on every development engine, with preprocessing statistics
-taken from the development engines alone, so the held-back histories are never an
-input to anything — only ever an input to scoring.
-"""
+"""Score the held-back equipment once, and attach the result to the evidence bundle."""
 
 from __future__ import annotations
 
@@ -40,15 +24,9 @@ from app.models.candidates import candidate_grid  # noqa: E402
 from app.models.design import EngineBlock, design_from_blocks, engine_blocks  # noqa: E402
 from app.models.splits import make_splits  # noqa: E402
 from app.models.train import fit_final  # noqa: E402
-from app.schemas import (  # noqa: E402
-    AlertMetrics,
-    CandidateVerdict,
-    FaultSpec,
-    Partition,
-    ScenarioResult,
-)
+from app.schemas import AlertMetrics, CandidateVerdict, FaultSpec, Partition, ScenarioResult  # noqa: E402
 from app.scoring.metrics import aggregate, score_engine  # noqa: E402
-from app.scoring.selection import build_verdict, default_criteria, select  # noqa: E402
+from app.scoring.selection import build_verdict, select  # noqa: E402
 from app.utils.logging_setup import get_logger, setup_logging, timed  # noqa: E402
 
 logger = get_logger("score_holdout")
@@ -66,16 +44,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "development recommended, which is the disciplined choice.",
     )
     parser.add_argument(
-        "--include-baseline",
-        action="store_true",
-        help="also score the age baseline as a fixed reference",
+        "--include-baseline", action="store_true", help="also score the age baseline as a fixed reference"
     )
     parser.add_argument("--bundle", type=Path, default=None)
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="report the result without writing it into the bundle",
-    )
+    parser.add_argument("--dry-run", action="store_true", help="report the result without writing it into the bundle")
     return parser.parse_args(argv)
 
 
@@ -89,24 +61,23 @@ def score_scenarios(
     scenarios: list[FaultSpec],
     config: ExperimentConfig,
 ) -> tuple[AlertMetrics, list[ScenarioResult], np.ndarray, np.ndarray]:
-    """Clean and per-scenario measures for one candidate on the held-back engines."""
-    feature_names = builder.feature_names()
-    equipment_ids = sorted(blocks)
+    featureNames = builder.feature_names()
+    equipmentIds = sorted(blocks)
 
-    clean_design = design_from_blocks(blocks, feature_names, equipment_ids=equipment_ids)
-    clean_scores = candidate.score(clean_design)
-    clean_scorings = [
+    cleanDesign = design_from_blocks(blocks, featureNames, equipment_ids=equipmentIds)
+    cleanScores = candidate.score(cleanDesign)
+    cleanScorings = [
         score_engine(
-            equipment_id,
-            clean_scores[clean_design.equipment_id == equipment_id],
-            clean_design.cycle[clean_design.equipment_id == equipment_id],
-            clean_design.rul[clean_design.equipment_id == equipment_id],
+            equipmentId,
+            cleanScores[cleanDesign.equipment_id == equipmentId],
+            cleanDesign.cycle[cleanDesign.equipment_id == equipmentId],
+            cleanDesign.rul[cleanDesign.equipment_id == equipmentId],
             threshold,
             config=config,
         )
-        for equipment_id in equipment_ids
+        for equipmentId in equipmentIds
     ]
-    clean = aggregate(clean_scorings, config=config)
+    clean = aggregate(cleanScorings, config=config)
 
     results: list[ScenarioResult] = []
     for spec in scenarios:
@@ -116,14 +87,10 @@ def score_scenarios(
         std = builder.preprocessor.std_of(spec.sensor)
 
         scorings = []
-        for equipment_id in equipment_ids:
-            block = blocks[equipment_id]
+        for equipmentId in equipmentIds:
+            block = blocks[equipmentId]
             injected = apply_fault(
-                dataset.sensor_matrix(equipment_id)[:, index],
-                block.rul,
-                spec,
-                sensor_std=std,
-                config=config,
+                dataset.sensor_matrix(equipmentId)[:, index], block.rul, spec, sensor_std=std, config=config
             )
             if not injected.applied:
                 # An engine too short to reach the onset is skipped, not counted as
@@ -132,7 +99,7 @@ def score_scenarios(
             features = block.features.copy()
             builder.rebuild_sensor(features, injected.values, spec.sensor)
             faulted = EngineBlock(
-                equipment_id=equipment_id,
+                equipment_id=equipmentId,
                 features=features,
                 labels=block.labels,
                 cycles=block.cycles,
@@ -140,18 +107,9 @@ def score_scenarios(
                 rows=block.rows,
                 scorable=block.scorable,
             )
-            design = design_from_blocks(
-                {equipment_id: faulted}, feature_names, equipment_ids=[equipment_id]
-            )
+            design = design_from_blocks({equipmentId: faulted}, featureNames, equipment_ids=[equipmentId])
             scorings.append(
-                score_engine(
-                    equipment_id,
-                    candidate.score(design),
-                    design.cycle,
-                    design.rul,
-                    threshold,
-                    config=config,
-                )
+                score_engine(equipmentId, candidate.score(design), design.cycle, design.rul, threshold, config=config)
             )
 
         if not scorings:
@@ -169,7 +127,7 @@ def score_scenarios(
             )
         )
 
-    return clean, results, clean_design.y, clean_scores
+    return clean, results, cleanDesign.y, cleanScores
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -178,11 +136,27 @@ def main(argv: list[str] | None = None) -> int:
     settings = get_settings()
     settings.ensure_dirs()
 
-    bundle_path = args.bundle or settings.bundle_path
-    if not bundle_path.is_file():
-        logger.error("no bundle at %s. Run scripts/run_pipeline.py first.", bundle_path)
+    bundlePath = args.bundle or settings.bundle_path
+    if not bundlePath.is_file():
+        logger.error("no bundle at %s. Run scripts/run_pipeline.py first.", bundlePath)
         return 1
-    bundle = load_bundle(bundle_path)
+    bundle = load_bundle(bundlePath)
+    if bundle.final_evaluation is not None:
+        logger.error("This bundle already contains a final evaluation. Refusing to rescore it.")
+        return 1
+    # Rebuilding development evidence must not make an exposed holdout "fresh".
+    for archivedPath in sorted((bundlePath.parent / "archive").glob("*.json")):
+        archived = load_bundle(archivedPath)
+        if (
+            archived.final_evaluation is not None
+            and archived.profile.data_hash == bundle.profile.data_hash
+            and set(archived.splits.holdout) == set(bundle.splits.holdout)
+        ):
+            logger.error(
+                "The archived evaluation %s already exposed this holdout. Use new independent data for final validation.",
+                archivedPath.name,
+            )
+            return 1
 
     config = ExperimentConfig(**{k: v for k, v in bundle.config.items() if hasattr(EXPERIMENT, k)})
     config.validate()
@@ -194,12 +168,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    development_selection = bundle.development_selection
-    recommended = development_selection.recommended
+    developmentSelection = bundle.development_selection
+    recommended = developmentSelection.recommended
+    recommendedName = f"{recommended.candidate.value}/{recommended.config_id}" if recommended else None
+    if args.candidate and args.candidate != recommendedName:
+        logger.error("Only the candidate selected during development may be scored on the holdout.")
+        return 1
     chosen = args.candidate or (
-        f"{recommended.candidate.value}/{recommended.config_id}"
-        if recommended is not None
-        else None
+        f"{recommended.candidate.value}/{recommended.config_id}" if recommended is not None else None
     )
     if chosen is None:
         logger.error(
@@ -209,9 +185,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    thresholds = {
-        f"{v.candidate.value}/{v.config_id}": v.threshold for v in development_selection.ranked
-    }
+    thresholds = {f"{v.candidate.value}/{v.config_id}": v.threshold for v in developmentSelection.ranked}
     wanted = [chosen]
     if args.include_baseline:
         wanted += [name for name in thresholds if name.startswith("age_baseline/")]
@@ -237,11 +211,11 @@ def main(argv: list[str] | None = None) -> int:
 
     grid = {candidate.name: candidate for candidate in candidate_grid(config)}
     holdout = dataset.subset(splits.holdout)
-    criteria = default_criteria(config)
+    criteria = developmentSelection.criteria
     store = EvidenceStore()
 
     verdicts: list[CandidateVerdict] = []
-    all_results: list[ScenarioResult] = []
+    allResults: list[ScenarioResult] = []
     reports = []
 
     for name in wanted:
@@ -255,9 +229,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # Features for the held-back engines, built with development-only statistics.
         blocks = engine_blocks(holdout, builder)
-        scenarios = required_scenarios(
-            [s for s in builder.sensors if builder.preprocessor.std_of(s) > 0], config
-        )
+        scenarios = required_scenarios([s for s in builder.sensors if builder.preprocessor.std_of(s) > 0], config)
         threshold = thresholds[name]
 
         with timed(logger, f"scoring {name} on the holdout over {len(scenarios)} scenarios"):
@@ -280,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
             criteria=criteria,
         )
         verdicts.append(verdict)
-        all_results.extend(results)
+        allResults.extend(results)
         reports.append(
             calibration_report(
                 candidate=fitted.kind,
@@ -303,10 +275,7 @@ def main(argv: list[str] | None = None) -> int:
                 "partition": Partition.holdout.value,
                 "threshold_source": "development out-of-fold",
             },
-            notes=[
-                "Scored once. The threshold was fixed on development data and not "
-                "retuned here.",
-            ],
+            notes=["Scored once. The threshold was fixed on development data and not retuned here."],
         )
         store.log_metrics(
             record,
@@ -330,7 +299,9 @@ def main(argv: list[str] | None = None) -> int:
             verdict.worst_scenario_id or "none",
         )
 
-    final = select(verdicts, criteria, partition=Partition.holdout)
+    # A reference baseline must never replace the development nominee here.
+    final = select(verdicts[:1], criteria, partition=Partition.holdout)
+    final.ranked.extend(verdicts[1:])
     final.notes.insert(
         0,
         f"Scored once on {len(splits.holdout)} held-back engines, using the candidate "
@@ -342,15 +313,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     bundle.final_evaluation = final
-    bundle.scenario_results = [
-        r for r in bundle.scenario_results if r.partition != Partition.holdout
-    ] + all_results
-    bundle.calibration = [
-        r for r in bundle.calibration if r.partition != Partition.holdout
-    ] + reports
+    bundle.scenario_results = [r for r in bundle.scenario_results if r.partition != Partition.holdout] + allResults
+    bundle.calibration = [r for r in bundle.calibration if r.partition != Partition.holdout] + reports
     bundle.runs = store.list_runs(limit=80)
-    write_bundle(bundle, bundle_path)
-    logger.info("attached the held-out evaluation to %s", bundle_path)
+    write_bundle(bundle, bundlePath)
+    logger.info("attached the held-out evaluation to %s", bundlePath)
     return 0
 
 

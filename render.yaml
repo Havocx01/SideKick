@@ -1,13 +1,4 @@
-# Render Blueprint for the hosted demo.
-#
-# One free web service. It serves the committed evidence bundle and the built
-# frontend; it does not train. Two constraints of the free tier shaped this:
-# 512 MB of memory rules out loading the training stack, and an ephemeral
-# filesystem means nothing written at runtime survives a restart. So the pipeline
-# runs locally, the bundle is committed, and the service is read-only.
-#
-# A cold start after spin-down takes roughly a minute. The demo instructions say
-# so rather than leaving a reviewer looking at a blank page.
+# Serve committed evidence; local uploads cannot persist on this service.
 
 services:
   - type: web
@@ -22,14 +13,5 @@ services:
         value: replay
       - key: SIDEKICK_LOG_LEVEL
         value: INFO
-      # Same origin, so no cross-origin request is involved in the hosted demo.
       - key: SIDEKICK_CORS_ORIGINS
         value: ""
-      # Set in the dashboard, never committed. Without it the copilot still answers
-      # from the recorded evidence and labels itself as doing so.
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: SIDEKICK_LLM_MODEL
-        value: gpt-5.4-mini
-      - key: SIDEKICK_MAX_TOOL_CALLS
-        value: "8"

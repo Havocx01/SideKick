@@ -3,21 +3,7 @@ import { useMemo } from "react";
 import type { ScenarioResult } from "../api/types";
 import { percent } from "../format";
 
-/**
- * Detection under every tested fault, as sensor against fault kind.
- *
- * A table of 64 numbers hides the pattern that matters: whether a candidate is
- * broadly robust or has one specific blind spot. Colour is keyed to the
- * engineer's minimum so cells below it read as failures rather than as merely
- * darker.
- */
-export function ScenarioHeatmap({
-  results,
-  minDetection,
-}: {
-  results: ScenarioResult[];
-  minDetection: number;
-}) {
+export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioResult[]; minDetection: number }) {
   const { sensors, kinds, grid } = useMemo(() => {
     const cells = new Map<string, ScenarioResult[]>();
     const sensorSet = new Set<string>();
@@ -35,22 +21,17 @@ export function ScenarioHeatmap({
       cells.set(key, [...(cells.get(key) ?? []), result]);
     }
 
-    return {
-      sensors: [...sensorSet].sort(),
-      kinds: [...kindSet].sort(),
-      grid: cells,
-    };
+    return { sensors: [...sensorSet].sort(), kinds: [...kindSet].sort(), grid: cells };
   }, [results]);
 
   if (sensors.length === 0) {
     return <div className="state">No fault scenarios recorded for this candidate.</div>;
   }
 
-  /** Worst case in the cell: a candidate is only as good as its weakest result. */
   const worst = (sensor: string, kind: string): number | null => {
     const entries = grid.get(`${sensor}|${kind}`);
     if (!entries || entries.length === 0) return null;
-    return Math.min(...entries.map((entry) => entry.metrics.detection_fraction));
+    return Math.min(...entries.map(entry => entry.metrics.detection_fraction));
   };
 
   const colour = (value: number | null): string => {
@@ -71,7 +52,7 @@ export function ScenarioHeatmap({
           <thead>
             <tr>
               <th />
-              {kinds.map((kind) => (
+              {kinds.map(kind => (
                 <th key={kind} className="heat-col-label">
                   {kind}
                 </th>
@@ -79,10 +60,10 @@ export function ScenarioHeatmap({
             </tr>
           </thead>
           <tbody>
-            {sensors.map((sensor) => (
+            {sensors.map(sensor => (
               <tr key={sensor}>
                 <td className="heat-row-label">{sensor}</td>
-                {kinds.map((kind) => {
+                {kinds.map(kind => {
                   const value = worst(sensor, kind);
                   return (
                     <td key={kind}>
@@ -102,17 +83,14 @@ export function ScenarioHeatmap({
       <div className="heat-scale">
         <span>worse</span>
         <span className="heat-scale-ramp">
-          {[0, 0.2, 0.4, 0.6, 0.8, 1].map((fraction) => (
-            <span
-              key={fraction}
-              style={{ flex: 1, background: colour(fraction * (1 - 0) ) }}
-            />
+          {[0, 0.2, 0.4, 0.6, 0.8, 1].map(fraction => (
+            <span key={fraction} style={{ flex: 1, background: colour(fraction * (1 - 0)) }} />
           ))}
         </span>
         <span>better</span>
         <span className="note" style={{ marginLeft: 8 }}>
-          red is below the required {percent(minDetection)}; each cell shows the worst case for
-          that sensor and fault kind
+          red is below the required {percent(minDetection)}; each cell shows the worst case for that sensor and fault
+          kind
         </span>
       </div>
     </div>

@@ -1,37 +1,21 @@
-"""Building and reading the replay bundle.
-
-The hosted demo has 512 MB of memory, no persistent disk and cold starts. It
-therefore trains nothing and loads no model. It serves this bundle: a single JSON
-document holding the profile, the partitions, every scenario result, the
-selection, the calibration reports and a handful of replay series.
-
-The bundle is generated locally, committed to the repository, and is the same data
-the local application shows. What the hosted demo cannot do is run a new
-experiment, and the interface says so rather than implying otherwise.
-"""
+"""Building and reading the replay bundle."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.config import EXPERIMENT, ExperimentConfig, get_settings
-from app.evidence.replay import build_series, choose_replay_engines
 from app.evidence.store import git_commit
-from app.models.design import design_from_blocks
-from app.models.explain import explain_alert
-from app.schemas import (
-    AlertExplanation,
-    EvidenceBundle,
-    FaultSpec,
-    ReplaySeries,
-    RunRecord,
-    SelectionResult,
-)
-from app.scoring.pipeline import EvaluationResult
+from app.experiments.provenance import source_digest
+from app.schemas import AlertExplanation, EvidenceBundle, FaultSpec, ReplaySeries, RunRecord, SelectionResult
 from app.utils.jsonio import read_json, write_json
 from app.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from app.scoring.pipeline import EvaluationResult
 
 #: Stated on every report and in the bundle itself. Taken from the proposal's
 #: limitations, kept here so they travel with the data rather than living only in
@@ -41,8 +25,7 @@ LIMITATIONS = [
     "mode. It does not validate behaviour on ABB motors or pumps.",
     "Injected fault severities are plausible but not calibrated against field "
     "measurements. They need input from maintenance engineers to be realistic.",
-    "Feature attributions describe what moved a model's score, not which physical "
-    "component is failing.",
+    "Feature attributions describe what moved a model's score, not which physical component is failing.",
     "Score calibration can deteriorate under sensor faults, so scores should be "
     "read as rankings rather than probabilities unless the reliability plot supports "
     "otherwise.",
@@ -50,8 +33,7 @@ LIMITATIONS = [
     "candidates are not established by this evaluation.",
     "Histories are assumed complete. Censored histories, where the machine had not "
     "failed by the last reading, need a different protocol.",
-    "A run in which no candidate meets the criteria is a valid outcome, not a "
-    "malfunction.",
+    "A run in which no candidate meets the criteria is a valid outcome, not a malfunction.",
 ]
 
 
@@ -65,21 +47,27 @@ def build_bundle(
     replay_fault: FaultSpec | None = None,
     reproducibility=None,
 ) -> EvidenceBundle:
-    """Assemble the bundle from a completed evaluation."""
+    config = result.training.config
     recommended = result.selection.recommended
-    candidate_name = (
+    candidateName = (
         f"{recommended.candidate.value}/{recommended.config_id}"
         if recommended
         else result.selection.ranked[0].candidate.value + "/" + result.selection.ranked[0].config_id
     )
-    threshold = result.thresholds[candidate_name]
+    threshold = result.thresholds[candidateName]
 
-    replay_series = _build_replay(
-        result, candidate_name, threshold, replay_engines, replay_fault, config
-    )
-    explanations = _build_explanations(result, candidate_name, replay_series)
+    replaySeries = _build_replay(result, candidateName, threshold, replay_engines, replay_fault, config)
+    explanations = _build_explanations(result, candidateName, replaySeries)
 
     return EvidenceBundle(
+        schema_version=2,
+        source_digest=source_digest(),
+        confirmed_mapping=result.training.dataset.mapping,
+        holdout_status=(
+            "Holdout scored; these equipment histories are exposed."
+            if final_evaluation
+            else "No holdout scores are attached. Check prior exposure before any final evaluation."
+        ),
         config=config.as_dict(),
         config_fingerprint=config.fingerprint(),
         git_commit=git_commit(),
@@ -90,7 +78,7 @@ def build_bundle(
         final_evaluation=final_evaluation,
         scenario_results=result.scenario_results,
         calibration=result.calibration,
-        replay_series=replay_series,
+        replay_series=replaySeries,
         explanations=explanations,
         runs=list(runs or []),
         reproducibility=reproducibility,
@@ -106,12 +94,11 @@ def _build_replay(
     replay_fault: FaultSpec | None,
     config: ExperimentConfig,
 ) -> list[ReplaySeries]:
-    engines = choose_replay_engines(
-        result.training, candidate_name, threshold, limit=limit, config=config
-    )
+    from app.evidence.replay import build_series, choose_replay_engines
 
-    # Default to the required case that hurt this candidate most, since that is
-    # the comparison the view exists to make legible.
+    engines = choose_replay_engines(result.training, candidate_name, threshold, limit=limit, config=config)
+
+    # Default replay to the weakest required scenario.
     if replay_fault is None:
         worst = None
         for scenario in result.scenario_results:
@@ -125,20 +112,13 @@ def _build_replay(
         replay_fault = worst.fault if worst else None
 
     series: list[ReplaySeries] = []
-    for equipment_id in engines:
-        clean = build_series(
-            result.training, candidate_name, equipment_id, threshold, spec=None, config=config
-        )
+    for equipmentId in engines:
+        clean = build_series(result.training, candidate_name, equipmentId, threshold, spec=None, config=config)
         if clean:
             series.append(clean)
         if replay_fault is not None:
             faulted = build_series(
-                result.training,
-                candidate_name,
-                equipment_id,
-                threshold,
-                spec=replay_fault,
-                config=config,
+                result.training, candidate_name, equipmentId, threshold, spec=replay_fault, config=config
             )
             if faulted:
                 series.append(faulted)
@@ -148,15 +128,20 @@ def _build_replay(
 def _build_explanations(
     result: EvaluationResult, candidate_name: str, series: list[ReplaySeries]
 ) -> list[AlertExplanation]:
-    """Attribute the first alert of each replayed engine."""
+    from app.models.design import design_from_blocks
+    from app.models.explain import explain_alert
+
     explanations: list[AlertExplanation] = []
     seen: set[tuple[str, int]] = set()
 
     for entry in series:
+        # Original readings can explain only the clean history.
+        if entry.fault is not None:
+            continue
         if not entry.episodes:
             continue
-        target_cycle = entry.episodes[0].start_cycle
-        key = (entry.equipment_id, target_cycle)
+        targetCycle = entry.episodes[0].start_cycle
+        key = (entry.equipment_id, targetCycle)
         if key in seen:
             continue
         seen.add(key)
@@ -165,11 +150,9 @@ def _build_explanations(
             candidate = fold.candidates[candidate_name]
             block = fold.blocks[entry.equipment_id]
             design = design_from_blocks(
-                {entry.equipment_id: block},
-                fold.builder.feature_names(),
-                equipment_ids=[entry.equipment_id],
+                {entry.equipment_id: block}, fold.builder.feature_names(), equipment_ids=[entry.equipment_id]
             )
-            positions = (design.cycle == target_cycle).nonzero()[0]
+            positions = (design.cycle == targetCycle).nonzero()[0]
             if positions.size == 0:
                 continue
             explanations.append(explain_alert(candidate, design, int(positions[0])))
@@ -181,13 +164,13 @@ def _build_explanations(
 def write_bundle(bundle: EvidenceBundle, path: Path | None = None) -> Path:
     target = Path(path) if path else get_settings().bundle_path
     write_json(target, bundle.model_dump(mode="json"))
-    size_mb = target.stat().st_size / 1e6
-    logger.info("wrote evidence bundle to %s (%.2f MB)", target, size_mb)
-    if size_mb > 40:
+    sizeMb = target.stat().st_size / 1e6
+    logger.info("wrote evidence bundle to %s (%.2f MB)", target, sizeMb)
+    if sizeMb > 40:
         logger.warning(
             "the bundle is %.1f MB; trim replay series before committing so the "
             "source archive stays under the 50 MB submission limit",
-            size_mb,
+            sizeMb,
         )
     return target
 

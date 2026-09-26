@@ -1,80 +1,90 @@
-import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
-
-import { api } from "../api/client";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
-import { CopilotPanel } from "./CopilotPanel";
-
-/** The three views follow the order the work happens in, not alphabetical order. */
-const VIEWS = [
-  { to: "/", label: "Data setup", step: "1" },
-  { to: "/comparison", label: "Model comparison", step: "2" },
-  { to: "/replay", label: "Warning replay", step: "3" },
-];
+import { useExperimentId } from "../hooks/useEvidence";
+import { EvidenceGuide } from "./EvidenceGuide";
 
 export function Layout() {
-  const [copilotOpen, setCopilotOpen] = useState(false);
   const health = useApi(() => api.health(), []);
-
+  const id = useExperimentId();
+  const location = useLocation();
+  const record = useApi(() => (id ? experiments.get(id) : Promise.resolve(null)), [id, location.pathname]);
+  const prefix = id ? `/experiments/${id}` : "";
+  const isEvidence = ["comparison", "replay", "data", "benchmark"].some(p => location.pathname.endsWith(`/${p}`));
+  const views = [
+    { to: "/", label: "Start here" },
+    { to: "/experiments", label: "Your experiments" },
+    { to: id ? `${prefix}/data` : "/benchmark", label: "Data and protocol" },
+    { to: `${prefix}/comparison`, label: "Model comparison" },
+    { to: `${prefix}/replay`, label: "Warning replay" }
+  ];
   return (
-    <div className="shell">
-      <nav className="sidebar">
-        <div className="brand">
+    <div className={isEvidence ? "shell has-evidence-guide" : "shell"}>
+      <nav className="sidebar" aria-label="Main navigation">
+        <Link to="/" className="brand">
           <div className="brand-mark">
             Side<span>kick</span>
           </div>
-          <div className="brand-tag">
-            Selects failure models by how their alerts survive sensor faults
-          </div>
-        </div>
-
+          <div className="brand-tag">Test failure warnings before trusting them.</div>
+        </Link>
         <div className="nav">
-          {VIEWS.map((view) => (
-            <NavLink key={view.to} to={view.to} end={view.to === "/"}>
-              <span className="nav-step">{view.step}</span>
-              {view.label}
-            </NavLink>
-          ))}
+          {views .filter(v => health.data?.can_train || v.to !== "/experiments")
+            .map(v => (
+              <NavLink key={v.to} to={v.to} end>
+                {v.label}
+              </NavLink>
+            ))}
         </div>
-
+        {id && <Link to="/comparison">Back to recorded benchmark</Link>}
         <div className="sidebar-foot">
           {health.data ? (
             <>
-              <div>
+              <strong>{health.data.mode === "replay" ? "Recorded demo" : "Local workspace"}</strong>
+              <p>
                 {health.data.mode === "replay"
-                  ? "Serving recorded evidence. Training runs locally."
-                  : "Local deployment."}
-              </div>
-              <dl>
-                <dt>dataset</dt>
-                <dd>{health.data.bundle.dataset_id ?? "none"}</dd>
-                <dt>config</dt>
-                <dd>{health.data.bundle.config_fingerprint ?? "—"}</dd>
-                <dt>copilot</dt>
-                <dd>{health.data.copilot}</dd>
-              </dl>
+                  ? "Explore saved results. Training and upload are disabled."
+                  : "Training runs on your computer. No API key needed."}
+              </p>
             </>
-          ) : health.error ? (
-            <div>Backend unreachable.</div>
-          ) : (
-            <div>Connecting…</div>
-          )}
+          ) : health.error ? ("Backend unreachable. Check that the local server is running.") : ("Connecting…")}
         </div>
       </nav>
-
       <main className="main">
         <div className="main-inner">
-          <Outlet />
+          {isEvidence && (
+            <div className="evidence-source" role="note">
+              {id ? (
+                <>
+                  <strong>
+                    {record.data?.source === "synthetic"
+                      ? "Synthetic experiment"
+                      : record.data?.source === "upload" ? "Uploaded-data experiment" : "Local experiment"}
+                  </strong>
+                  <span>
+                    {record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source…"} ·{" "}
+                    {id.slice(0, 8)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>Recorded NASA benchmark</strong>
+                  <span>
+                    Previously evaluated holdout engines are exposed. These results do not validate ABB field
+                    performance.
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+          {isEvidence && (
+            <a className="guide-jump" href="#evidence-guide">
+              Jump to Evidence guide
+            </a>
+          )}
+          <Outlet key={id ?? "benchmark"} />
         </div>
       </main>
-
-      {copilotOpen ? (
-        <CopilotPanel onClose={() => setCopilotOpen(false)} />
-      ) : (
-        <button className="copilot-toggle" onClick={() => setCopilotOpen(true)}>
-          Ask the copilot
-        </button>
-      )}
+      {isEvidence && <EvidenceGuide key={id ?? "benchmark"} />}
     </div>
   );
 }

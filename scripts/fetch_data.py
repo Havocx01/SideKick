@@ -1,18 +1,4 @@
-"""Download and unpack the NASA C-MAPSS turbofan degradation archive.
-
-Resolution order, so a portal outage cannot block the build:
-
-1. ``--url`` if given.
-2. The NASA open-data CKAN API, which holds the canonical resource URL.
-3. A short list of known mirrors.
-4. ``--archive`` pointing at an already-downloaded zip.
-
-Usage
------
-    python scripts/fetch_data.py
-    python scripts/fetch_data.py --archive ~/Downloads/CMAPSSData.zip
-    python scripts/fetch_data.py --url https://example.org/CMAPSSData.zip
-"""
+"""Download and unpack the NASA C-MAPSS turbofan degradation archive."""
 
 from __future__ import annotations
 
@@ -29,9 +15,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
-CKAN_ENDPOINT = (
-    "https://data.nasa.gov/api/3/action/package_show?id=cmapss-jet-engine-simulated-data"
-)
+CKAN_ENDPOINT = "https://data.nasa.gov/api/3/action/package_show?id=cmapss-jet-engine-simulated-data"
 MIRRORS = (
     "https://ti.arc.nasa.gov/c/6/",
     "https://phm-datasets.s3.amazonaws.com/NASA/6.+Turbofan+Engine+Degradation+Simulation+Data+Set.zip",
@@ -47,18 +31,13 @@ def _request(url: str, timeout: float = 60.0) -> bytes:
 
 
 def resolve_from_ckan() -> list[str]:
-    """Ask the NASA portal for the archive's download URL."""
     try:
         payload = json.loads(_request(CKAN_ENDPOINT, timeout=30).decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
         print(f"  portal lookup failed: {exc}")
         return []
     resources = payload.get("result", {}).get("resources", []) or []
-    urls = [
-        r.get("url")
-        for r in resources
-        if r.get("url") and str(r.get("url")).lower().endswith(".zip")
-    ]
+    urls = [r.get("url") for r in resources if r.get("url") and str(r.get("url")).lower().endswith(".zip")]
     return [u for u in urls if u]
 
 
@@ -80,7 +59,6 @@ def download(urls: list[str], destination: Path) -> Path | None:
 
 
 def extract(archive: Path, target: Path) -> list[Path]:
-    """Pull the data files out of the archive, ignoring directory nesting."""
     target.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     with zipfile.ZipFile(archive) as bundle:
@@ -132,7 +110,7 @@ def main() -> int:
         return 0
 
     archive: Path | None = args.archive
-    temp_dir: Path | None = None
+    tempDir: Path | None = None
 
     if archive is None:
         candidates: list[str] = []
@@ -146,8 +124,8 @@ def main() -> int:
             print("No candidate URLs available.")
             return _manual_instructions()
 
-        temp_dir = Path(tempfile.mkdtemp(prefix="cmapss-"))
-        archive = download(candidates, temp_dir / "CMAPSSData.zip")
+        tempDir = Path(tempfile.mkdtemp(prefix="cmapss-"))
+        archive = download(candidates, tempDir / "CMAPSSData.zip")
         if archive is None:
             return _manual_instructions()
     elif not archive.exists():
@@ -158,8 +136,8 @@ def main() -> int:
     written = extract(archive, target)
     print(f"  wrote {len(written)} files")
 
-    if temp_dir is not None:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    if tempDir is not None:
+        shutil.rmtree(tempDir, ignore_errors=True)
 
     return 0 if verify(target) else 1
 
