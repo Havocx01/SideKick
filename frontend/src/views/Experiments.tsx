@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, experiments } from "../api/client";
 import type { ColumnMapping, DatasetRegistration, ExperimentRecord } from "../api/types";
-import { Badge, Field, Panel, Spinner, StateBlock } from "../components/Chrome";
+import { Badge, Field, Panel, StateBlock } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
 
 export const activeJob = (status: string) => ["queued", "running", "cancelling"].includes(status);
@@ -236,11 +236,7 @@ function ExperimentSetup() {
           {error} <Link to="/experiments">View experiments</Link>
         </div>
       )}
-      {busy && (
-        <div className="status-progress-banner" role="status">
-          <Spinner size="sm" label="Processing equipment telemetry locally. Please wait…" />
-        </div>
-      )}
+      {busy && <p role="status">Working locally. Please wait…</p>}
       {!data && (
         <Panel title={isSample ? "Generate a practice dataset" : "Choose a CSV"}>
           {isSample ? (
@@ -585,70 +581,31 @@ function Progress() {
           {error}
         </div>
       )}
-      {!record && !error && (
-        <div className="state loading-state">
-          <Spinner size="lg" label="Synchronizing experiment telemetry…" />
-        </div>
-      )}
+      {!record && !error && <p role="status">Loading experiment…</p>}
       {record && (
         <Panel
           title={
             activeJob(record.status) ? "Experiment in progress" : `Experiment ${record.status.replaceAll("_", " ")}`
           }
-          aside={<Badge tone={activeJob(record.status) ? "info" : record.status === "completed" ? "ok" : "warn"}>{record.source === "synthetic" ? "Synthetic data" : "Uploaded data"}</Badge>}
+          aside={<Badge>{record.source === "synthetic" ? "Synthetic data" : "Uploaded data"}</Badge>}
         >
-          <div className="progress-metrics-banner">
-            <div className="elapsed-display">
-              <span className="elapsed-label">Elapsed Time</span>
-              <span className="elapsed">{duration(record.elapsed_seconds ?? 0)}</span>
-            </div>
-            {activeJob(record.status) && (
-              <div className="live-job-pulse">
-                <Spinner size="sm" label="Pipeline running" />
-              </div>
-            )}
-          </div>
-
-          <div className="cyber-progress-track-wrapper">
-            <div
-              className="cyber-progress-bar"
-              style={{
-                width: record.total_work && record.completed_work
-                  ? `${Math.min(100, Math.max(5, (record.completed_work / record.total_work) * 100))}%`
-                  : activeJob(record.status) ? "35%" : "100%"
-              }}
-            >
-              <div className="cyber-progress-glow" />
-            </div>
-          </div>
-
+          <p className="elapsed">{duration(record.elapsed_seconds ?? 0)} elapsed</p>
           <ol className="job-stages">
-            {stages.map((stage, idx) => {
-              const currentIdx = stages.indexOf(record.stage ?? "");
-              const isPast = currentIdx > idx;
-              const isCurrent = record.stage === stage;
-              return (
-                <li
-                  key={stage}
-                  className={`job-stage-item ${isCurrent ? "stage-current" : isPast ? "stage-passed" : "stage-pending"}`}
-                  aria-current={isCurrent ? "step" : undefined}
-                >
-                  <span className="stage-index">{idx + 1}</span>
-                  <span className="stage-name">{stage}</span>
-                  {isCurrent && <span className="stage-tag">ACTIVE STAGE</span>}
-                </li>
-              );
-            })}
+            {stages.map(stage => (
+              <li key={stage} aria-current={record.stage === stage ? "step" : undefined}>
+                {stage}
+                {record.stage === stage && <strong> · current stage</strong>}
+              </li>
+            ))}
           </ol>
-          <div className="work-status-row" role="status">
-            <span className="work-count">
-              <strong>{record.completed_work ?? 0}</strong>
-              {record.total_work ? ` / ${record.total_work}` : ""}{" "}
-              {record.work_unit || "completed items in this stage"}
-            </span>
-          </div>
+          <p role="status">
+            {record.completed_work ?? 0}
+            {record.total_work ? ` / ${record.total_work}` : ""}{" "}
+            {record.work_unit || "completed work items in this stage"}
+          </p>
           <p className="note">
-            These counts report actual work telemetry. Runtime depends on your CPU and dataset; no completion estimate is assumed.
+            These counts report actual work. Runtime depends on your computer and data; no completion estimate is
+            assumed.
           </p>
           {record.error && (
             <p className="state error" role="alert">

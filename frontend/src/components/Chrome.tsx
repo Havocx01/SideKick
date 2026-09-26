@@ -48,52 +48,23 @@ export function Callout({ tone, title, children }: { tone?: "fault" | "ok" | "wa
   );
 }
 
-export function Spinner({ size = "md", label }: { size?: "sm" | "md" | "lg"; label?: string }) {
-  return (
-    <div className={`cyber-spinner cyber-spinner-${size}`} role="status" aria-label={label || "Loading"}>
-      <div className="spinner-core">
-        <div className="spinner-ring outer" />
-        <div className="spinner-ring inner" />
-        <div className="spinner-dot" />
-      </div>
-      {label && <span className="spinner-label">{label}</span>}
-    </div>
-  );
-}
-
-export function StateBlock({
-  loading,
-  error,
-  empty,
-  loadingText = "Analyzing telemetry…",
-  children
-}: {
+export function StateBlock({ loading, error, empty, children }: {
   loading?: boolean;
   error?: Error | null;
   empty?: boolean;
-  loadingText?: string;
   children?: ReactNode;
 }) {
-  if (loading) {
-    return (
-      <div className="state loading-state">
-        <Spinner size="md" label={loadingText} />
-      </div>
-    );
-  }
+  if (loading) return <div className="state">Loading…</div>;
   if (error) {
     const detail = error instanceof ApiError ? error.detail : undefined;
     return (
       <div className="state error">
-        <div className="error-icon">!</div>
-        <div className="error-body">
-          <div className="error-title">{error.message}</div>
-          {detail ? <code>{detail}</code> : null}
-        </div>
+        {error.message}
+        {detail ? <code>{detail}</code> : null}
       </div>
     );
   }
-  if (empty) return <div className="state empty-state">Nothing recorded for this selection.</div>;
+  if (empty) return <div className="state">Nothing recorded for this selection.</div>;
   return <>{children}</>;
 }
 
