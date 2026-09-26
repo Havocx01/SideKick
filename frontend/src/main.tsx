@@ -7,6 +7,7 @@ import { DataSetup } from "./views/DataSetup";
 import { ModelComparison } from "./views/ModelComparison";
 import { WarningReplay } from "./views/WarningReplay";
 import { Start, NewExperiment, ExperimentHistory, ExperimentProgress } from "./views/Experiments";
+import { ThemeProvider } from "./hooks/useTheme";
 import "./styles.css";
 
 const router = createBrowserRouter([
@@ -33,6 +34,8 @@ if (!root) throw new Error("no #root element");
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
   </React.StrictMode>
 );
