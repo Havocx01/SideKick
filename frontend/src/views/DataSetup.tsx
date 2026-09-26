@@ -1,38 +1,30 @@
-import { api } from "../api/client";
+import { useEvidence } from "../hooks/useEvidence";
 import type { ProfileFinding, Severity } from "../api/types";
 import { Badge, Callout, Panel, StateBlock, Stat, type Tone } from "../components/Chrome";
 import { integer, number, percent } from "../format";
 import { useApi } from "../hooks/useApi";
 
-const SEVERITY_TONE: Record<Severity, Tone> = {
-  info: "info",
-  warning: "warn",
-  blocker: "bad",
-};
+const SEVERITY_TONE: Record<Severity, Tone> = { info: "info", warning: "warn", blocker: "bad" };
 
-/**
- * What the data is, what is wrong with it, and what the evaluation will treat as a
- * warning. Everything a reviewer needs to judge whether the later numbers mean
- * anything, before seeing any of them.
- */
 export function DataSetup() {
-  const profile = useApi(() => api.profile(), []);
-  const splits = useApi(() => api.splits(), []);
-  const config = useApi(() => api.config(), []);
-  const candidates = useApi(() => api.candidates(), []);
-  const limitations = useApi(() => api.limitations(), []);
+  const api = useEvidence();
+  const profile = useApi(() => api.profile(), [api]);
+  const splits = useApi(() => api.splits(), [api]);
+  const config = useApi(() => api.config(), [api]);
+  const candidates = useApi(() => api.candidates(), [api]);
+  const limitations = useApi(() => api.limitations(), [api]);
 
   const settings = (config.data?.config ?? {}) as Record<string, number>;
-  const blockers = (profile.data?.findings ?? []).filter((f) => f.severity === "blocker");
+  const blockers = (profile.data?.findings ?? []).filter(f => f.severity === "blocker");
 
   return (
     <>
       <header className="page-head">
         <h1>Data setup</h1>
         <p>
-          The evaluation contract: which histories are being used, what the profiler found wrong
-          with them, and what counts as a useful warning. These settings are fixed before any model
-          is trained, and the fingerprint below changes if any of them do.
+          The evaluation contract: which histories are being used, what the profiler found wrong with them, and what
+          counts as a useful warning. These settings are fixed before any model is trained, and the fingerprint below
+          changes if any of them do.
         </p>
       </header>
 
@@ -42,9 +34,7 @@ export function DataSetup() {
             {blockers.length > 0 ? (
               <Callout tone="fault" title="This data cannot be evaluated as configured">
                 <ul>
-                  {blockers.map((finding) => (
-                    <li key={finding.code}>{finding.message}</li>
-                  ))}
+                  {blockers.map(finding => (<li key={finding.code}>{finding.message}</li>))}
                 </ul>
               </Callout>
             ) : null}
@@ -63,7 +53,7 @@ export function DataSetup() {
               <Stat
                 label="Channels"
                 value={integer(profile.data.sensors.length)}
-                note={`${profile.data.sensors.filter((s) => s.varies).length} vary and are fault-tested`}
+                note={`${profile.data.sensors.filter(s => s.varies).length} vary and are fault-tested`}
               />
               <Stat
                 label="Inside the horizon"
@@ -128,7 +118,7 @@ export function DataSetup() {
                     </tr>
                   </thead>
                   <tbody>
-                    {profile.data.sensors.map((sensor) => (
+                    {profile.data.sensors.map(sensor => (
                       <tr key={sensor.name} className={sensor.varies ? undefined : "dimmed"}>
                         <td className="mono">{sensor.name}</td>
                         <td className="num">{number(sensor.mean, 2)}</td>
@@ -137,13 +127,7 @@ export function DataSetup() {
                           {number(sensor.minimum, 1)} – {number(sensor.maximum, 1)}
                         </td>
                         <td className="num">{percent(sensor.missing_fraction, 1)}</td>
-                        <td>
-                          {sensor.varies ? (
-                            <Badge tone="ok">yes</Badge>
-                          ) : (
-                            <Badge tone="neutral">constant</Badge>
-                          )}
-                        </td>
+                        <td>{sensor.varies ? <Badge tone="ok">yes</Badge> : <Badge tone="neutral">constant</Badge>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -183,7 +167,7 @@ export function DataSetup() {
               <Stat
                 label="Held back"
                 value={integer(splits.data.holdout.length)}
-                note="scored once, after the configuration is frozen"
+                note={config.data?.holdout_status ?? "No automatic holdout scoring"}
               />
               <Stat
                 label="Development"
@@ -192,13 +176,16 @@ export function DataSetup() {
               />
               <Stat
                 label="Split seed"
-                value={<span className="mono" style={{ fontSize: 15 }}>{splits.data.seed}</span>}
+                value={
+                  <span className="mono" style={{ fontSize: 15 }}>
+                    {splits.data.seed}
+                  </span>
+                }
                 note="derived from the data hash, so it is reproducible"
               />
             </div>
             <p className="note">
-              Held back:{" "}
-              <span className="mono">{splits.data.holdout.join(", ")}</span>
+              Held back: <span className="mono">{splits.data.holdout.join(", ")}</span>
             </p>
           </Panel>
         ) : null}
@@ -222,17 +209,13 @@ export function DataSetup() {
                   </tr>
                 </thead>
                 <tbody>
-                  {candidates.data.map((candidate) => (
+                  {candidates.data.map(candidate => (
                     <tr key={`${candidate.candidate}/${candidate.config_id}`}>
                       <td>{candidate.candidate.replace(/_/g, " ")}</td>
                       <td className="mono">{candidate.config_id}</td>
                       <td>{candidate.description}</td>
                       <td>
-                        {candidate.uses_sensors ? (
-                          <Badge tone="info">yes</Badge>
-                        ) : (
-                          <Badge tone="neutral">no</Badge>
-                        )}
+                        {candidate.uses_sensors ? <Badge tone="info">yes</Badge> : <Badge tone="neutral">no</Badge>}
                       </td>
                     </tr>
                   ))}
@@ -249,9 +232,7 @@ export function DataSetup() {
           description="Stated here rather than only in a report, so it travels with the numbers."
         >
           <ul className="limitations">
-            {limitations.data.limitations.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
+            {limitations.data.limitations.map(item => (<li key={item}>{item}</li>))}
           </ul>
         </Panel>
       ) : null}
@@ -266,7 +247,17 @@ export function DataSetup() {
               · commit <span className="mono">{config.data.git_commit}</span>
             </>
           ) : null}
-          {config.data.matches_current_code ? null : " · the running code has a different configuration from the one that produced these results"}
+          {config.data.source_digest ? (
+            <>
+              {" "}
+              · source digest <span className="mono">{config.data.source_digest}</span>
+            </>
+          ) : (
+            " · historical bundle: no source digest was recorded"
+          )}
+          {config.data.matches_current_code
+            ? null
+            : " · this recorded configuration differs from the current default settings"}
         </p>
       ) : null}
     </>

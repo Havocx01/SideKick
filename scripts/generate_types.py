@@ -1,15 +1,4 @@
-"""Generate the frontend's TypeScript types from the pydantic contract.
-
-The backend models in ``app/schemas.py`` are the single definition of every shape
-that crosses the API boundary. Deriving the TypeScript from them means a field
-rename breaks the build rather than surfacing as an undefined value in the browser.
-
-Run after changing ``app/schemas.py``:
-
-    python scripts/generate_types.py
-
-The generated file is committed, so a clone can build the frontend without Python.
-"""
+"""Generate the frontend's TypeScript types from the pydantic contract."""
 
 from __future__ import annotations
 
@@ -33,6 +22,11 @@ HEADER = """\
 
 #: Emitted in dependency-free order; the generator resolves nested models itself.
 ROOTS: list[type[BaseModel]] = [
+    schemas.DatasetRegistration,
+    schemas.DatasetConfirmation,
+    schemas.ExperimentCreate,
+    schemas.ExperimentRecord,
+    schemas.DecisionReport,
     schemas.DatasetProfile,
     schemas.SplitAssignment,
     schemas.CandidateConfig,
@@ -48,17 +42,10 @@ ROOTS: list[type[BaseModel]] = [
     schemas.CopilotRequest,
 ]
 
-SCALARS = {
-    "string": "string",
-    "integer": "number",
-    "number": "number",
-    "boolean": "boolean",
-    "null": "null",
-}
+SCALARS = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean", "null": "null"}
 
 
 def ts_type(node: dict, defs: dict) -> str:
-    """Convert one JSON-schema node into a TypeScript type expression."""
     if "$ref" in node:
         return node["$ref"].rsplit("/", 1)[-1]
 
@@ -78,27 +65,25 @@ def ts_type(node: dict, defs: dict) -> str:
     if "enum" in node:
         return " | ".join(f'"{value}"' for value in node["enum"])
 
-    node_type = node.get("type")
-    if node_type == "array":
+    nodeType = node.get("type")
+    if nodeType == "array":
         items = node.get("items")
         return f"{ts_type(items, defs)}[]" if items else "unknown[]"
-    if node_type == "object":
+    if nodeType == "object":
         additional = node.get("additionalProperties")
         if isinstance(additional, dict):
             return f"Record<string, {ts_type(additional, defs)}>"
         if node.get("properties"):
-            fields = ", ".join(
-                f"{name}: {ts_type(prop, defs)}" for name, prop in node["properties"].items()
-            )
+            fields = ", ".join(f"{name}: {ts_type(prop, defs)}" for name, prop in node["properties"].items())
             return f"{{ {fields} }}"
         return "Record<string, unknown>"
-    if isinstance(node_type, list):
-        return " | ".join(SCALARS.get(t, "unknown") for t in node_type)
-    if node_type in SCALARS:
+    if isinstance(nodeType, list):
+        return " | ".join(SCALARS.get(t, "unknown") for t in nodeType)
+    if nodeType in SCALARS:
         # Dates serialise as ISO strings over the wire.
-        if node_type == "string" and node.get("format") in {"date-time", "date"}:
+        if nodeType == "string" and node.get("format") in {"date-time", "date"}:
             return "string"
-        return SCALARS[node_type]
+        return SCALARS[nodeType]
     return "unknown"
 
 
@@ -121,7 +106,6 @@ def emit_definition(name: str, node: dict, defs: dict) -> str:
 
 
 def collect() -> tuple[dict[str, dict], list[str]]:
-    """Gather every reachable definition across the root models."""
     defs: dict[str, dict] = {}
     order: list[str] = []
     for model in ROOTS:

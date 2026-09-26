@@ -1,0 +1,24 @@
+# Only the serving image inputs belong in the Docker build context.
+**
+!Dockerfile
+!frontend/
+!frontend/**
+!backend/
+!backend/requirements.txt
+!backend/requirements-train.txt
+!backend/app/
+!backend/app/**
+!evidence/
+!evidence/**
+!docker/
+!docker/*.Dockerfile
+!scripts/
+!scripts/*.py
+!pyproject.toml
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+**/*.log

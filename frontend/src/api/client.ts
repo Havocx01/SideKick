@@ -2,7 +2,6 @@ import type {
   AlertExplanation,
   CalibrationReport,
   CandidateConfig,
-  CopilotAnswer,
   DatasetProfile,
   ReplaySeries,
   ReproducibilityCheck,
@@ -10,27 +9,29 @@ import type {
   ScenarioResult,
   SelectionResult,
   SplitAssignment,
+  DatasetRegistration,
+  DatasetConfirmation,
+  ExperimentRecord,
+  ExperimentCreate,
+  DecisionReport
 } from "./types";
 
-/** Empty in development, where Vite proxies /api to the local backend. */
+// Vite proxies /api when no base URL is configured.
 const BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly detail?: string,
+    readonly detail?: string
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, { headers: { "Content-Type": "application/json" }, ...init });
 
   if (!response.ok) {
     let detail: string | undefined;
@@ -40,14 +41,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       detail = undefined;
     }
-    // 503 means the evidence bundle is missing, which is a setup problem with a
-    // known fix, so the message carries it through to the interface.
     throw new ApiError(
       response.status === 503
         ? "No evidence is available from this deployment."
         : `Request failed (${response.status})`,
       response.status,
-      detail,
+      detail
     );
   }
   return (await response.json()) as T;
@@ -66,6 +65,7 @@ export interface HealthReport {
   status: string;
   mode: "full" | "replay";
   can_train: boolean;
+  can_upload: boolean;
   copilot: string;
   note: string;
   bundle: {
@@ -84,6 +84,8 @@ export interface ConfigReport {
   git_commit: string | null;
   current_code_fingerprint: string;
   matches_current_code: boolean;
+  source_digest: string | null;
+  holdout_status: string;
 }
 
 export interface ReplayIndexEntry {
@@ -100,64 +102,61 @@ export interface ReplayIndexEntry {
   cycles: number;
 }
 
-export interface CopilotStatus {
-  language_model: string | null;
-  available: boolean;
-  max_tool_calls: number;
-  mode: string;
-  note: string;
+export function evidenceApi(experimentId?: string) {
+  function scoped<T>(path: string, init?: RequestInit) {
+    const separator = path.includes("?") ? "&" : "?";
+    const url = experimentId ? `${path}${separator}experiment_id=${encodeURIComponent(experimentId)}` : path;
+    return request<T>(url, init);
+  }
+  return {
+    health: () => request<HealthReport>("/api/health"),
+    config: () => scoped<ConfigReport>("/api/config"),
+    profile: () => scoped<DatasetProfile>("/api/profile"),
+    splits: () => scoped<SplitAssignment>("/api/splits"),
+    candidates: () => scoped<CandidateConfig[]>("/api/candidates"),
+    selection: () => scoped<SelectionResult>("/api/selection"),
+    decision: () => scoped<DecisionReport>("/api/decision"),
+    exportUrl: `${BASE}/api/export${query({ experiment_id: experimentId })}`,
+    finalEvaluation: () =>
+      scoped<{ available: boolean; note?: string; selection?: SelectionResult }>("/api/final-evaluation"),
+    scenarios: (options: { candidate?: string; requiredOnly?: boolean; includeClean?: boolean } = {}) =>
+      scoped<ScenarioResult[]>(
+        `/api/scenarios${query({
+          candidate: options.candidate,
+          required_only: options.requiredOnly,
+          include_clean: options.includeClean
+        })}`
+      ),
+    calibration: () => scoped<CalibrationReport[]>("/api/calibration"),
+    replayIndex: () =>
+      scoped<{ series: ReplayIndexEntry[]; equipment: string[]; scenarios: string[] }>("/api/replay/index"),
+    replay: (equipmentId?: string, scenarioId?: string) =>
+      scoped<ReplaySeries[]>(`/api/replay${query({ equipment_id: equipmentId, scenario_id: scenarioId })}`),
+    explanations: (equipmentId?: string) =>
+      scoped<AlertExplanation[]>(`/api/explanations${query({ equipment_id: equipmentId })}`),
+    limitations: () => scoped<{ limitations: string[] }>("/api/limitations"),
+    runs: (kind?: string) => scoped<RunRecord[]>(`/api/runs${query({ kind })}`),
+    run: (runId: string) => scoped<RunRecord>(`/api/runs/${runId}`),
+    reproducibility: () =>
+      scoped<{ available: boolean; note?: string; check?: ReproducibilityCheck }>("/api/reproducibility")
+  };
 }
 
-export interface ToolDescriptor {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  mutating: boolean;
-}
-
-export const api = {
-  health: () => request<HealthReport>("/api/health"),
-  config: () => request<ConfigReport>("/api/config"),
-  profile: () => request<DatasetProfile>("/api/profile"),
-  splits: () => request<SplitAssignment>("/api/splits"),
-  candidates: () => request<CandidateConfig[]>("/api/candidates"),
-  selection: () => request<SelectionResult>("/api/selection"),
-  finalEvaluation: () =>
-    request<{ available: boolean; note?: string; selection?: SelectionResult }>(
-      "/api/final-evaluation",
-    ),
-  scenarios: (options: { candidate?: string; requiredOnly?: boolean; includeClean?: boolean } = {}) =>
-    request<ScenarioResult[]>(
-      `/api/scenarios${query({
-        candidate: options.candidate,
-        required_only: options.requiredOnly,
-        include_clean: options.includeClean,
-      })}`,
-    ),
-  calibration: () => request<CalibrationReport[]>("/api/calibration"),
-  replayIndex: () =>
-    request<{ series: ReplayIndexEntry[]; equipment: string[]; scenarios: string[] }>(
-      "/api/replay/index",
-    ),
-  replay: (equipmentId?: string, scenarioId?: string) =>
-    request<ReplaySeries[]>(
-      `/api/replay${query({ equipment_id: equipmentId, scenario_id: scenarioId })}`,
-    ),
-  explanations: (equipmentId?: string) =>
-    request<AlertExplanation[]>(`/api/explanations${query({ equipment_id: equipmentId })}`),
-  limitations: () => request<{ limitations: string[] }>("/api/limitations"),
-  runs: (kind?: string) => request<RunRecord[]>(`/api/runs${query({ kind })}`),
-  run: (runId: string) => request<RunRecord>(`/api/runs/${runId}`),
-  reproducibility: () =>
-    request<{ available: boolean; note?: string; check?: ReproducibilityCheck }>(
-      "/api/reproducibility",
-    ),
-  copilotStatus: () => request<CopilotStatus>("/api/copilot/status"),
-  copilotTools: () => request<{ tools: ToolDescriptor[]; note: string }>("/api/copilot/tools"),
-  copilotSuggestions: () => request<{ suggestions: string[] }>("/api/copilot/suggestions"),
-  askCopilot: (question: string) =>
-    request<CopilotAnswer>("/api/copilot", {
+export const api = evidenceApi();
+const post = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+export const experiments = {
+  sample: () => post<DatasetRegistration>("/api/datasets/sample"),
+  upload: (file: File) =>
+    request<DatasetRegistration>("/api/datasets/upload", {
       method: "POST",
-      body: JSON.stringify({ question }),
+      body: file,
+      headers: { "Content-Type": "text/csv", "X-Filename": encodeURIComponent(file.name) }
     }),
+  dataset: (id: string) => request<DatasetRegistration>(`/api/datasets/${id}`),
+  confirm: (id: string, body: DatasetConfirmation) => post<DatasetRegistration>(`/api/datasets/${id}/confirm`, body),
+  create: (body: ExperimentCreate) => post<ExperimentRecord>("/api/experiments", body),
+  list: () => request<ExperimentRecord[]>("/api/experiments"),
+  get: (id: string) => request<ExperimentRecord>(`/api/experiments/${id}`),
+  cancel: (id: string) => post<ExperimentRecord>(`/api/experiments/${id}/cancel`)
 };

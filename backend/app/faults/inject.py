@@ -1,15 +1,4 @@
-"""Reproducible sensor-fault injection.
-
-Faults are applied to the raw reading series for a single sensor, before any
-feature is computed, so the corrupted signal flows through exactly the same
-frozen preprocessing as a clean one.
-
-Realism, stated plainly: these are persistent measurement faults. A sensor that
-fails stays failed until someone repairs it, so the default variants run from
-onset to the end of the history. Shorter transient variants exist as a secondary
-sensitivity check, not as the headline test. None of this estimates how often
-such faults occur in a plant.
-"""
+"""Reproducible sensor-fault injection."""
 
 from __future__ import annotations
 
@@ -23,8 +12,6 @@ from app.schemas import FaultDuration, FaultKind, FaultSpec
 
 @dataclass(frozen=True)
 class InjectionResult:
-    """The corrupted series plus enough detail to audit what was done."""
-
     values: np.ndarray
     applied: bool
     onset_index: int | None = None
@@ -33,29 +20,25 @@ class InjectionResult:
 
 
 def resolve_onset(rul: np.ndarray, spec: FaultSpec, config: ExperimentConfig) -> tuple[int | None, str | None]:
-    """Locate the row where the fault begins.
-
-    A fixed onset is expressed in cycles before failure, which is what makes a
-    scenario comparable across engines of different lifetimes. Onsets are chosen
-    from the cycle index only; the labels are never inputs to the models, and are
-    used here purely to place a test at a known point in the run-up to failure.
-    """
+    """Return None when the requested onset falls before the recorded history."""
     rul = np.asarray(rul, dtype=int)
     if rul.size == 0:
         return None, "history is empty"
 
     if spec.onset_before_failure is not None:
         target = int(spec.onset_before_failure)
-        # A history shorter than the onset never reaches that point, so placing the
-        # fault at its first cycle would silently test a different scenario.
+        # Moving an unreachable onset to the first cycle would change the scenario.
         if target > int(rul.max()):
             return None, f"history never reaches {target} cycles before failure"
         index = int(np.flatnonzero(rul <= target)[0])
     else:
-        # Random onset, drawn from the recorded seed. Restricted so the fault can
-        # still overlap the decision window rather than landing in dead space.
+        # Keep random onsets close enough to overlap the decision window.
         generator = np.random.default_rng(spec.seed or config.base_seed)
-        lowest = int(np.flatnonzero(rul <= config.transition_band_end)[0]) if (rul <= config.transition_band_end).any() else 0
+        lowest = (
+            int(np.flatnonzero(rul <= config.transition_band_end)[0])
+            if (rul <= config.transition_band_end).any()
+            else 0
+        )
         highest = max(lowest, rul.size - 1)
         index = int(generator.integers(lowest, highest + 1)) if highest > lowest else lowest
 
@@ -75,18 +58,9 @@ def _extent(values_length: int, onset: int, spec: FaultSpec, config: ExperimentC
 
 
 def apply_fault(
-    values: np.ndarray,
-    rul: np.ndarray,
-    spec: FaultSpec,
-    *,
-    sensor_std: float,
-    config: ExperimentConfig = EXPERIMENT,
+    values: np.ndarray, rul: np.ndarray, spec: FaultSpec, *, sensor_std: float, config: ExperimentConfig = EXPERIMENT
 ) -> InjectionResult:
-    """Return a corrupted copy of one sensor's readings.
-
-    ``sensor_std`` is the training standard deviation for that sensor, so drift
-    severity means the same thing in every scenario.
-    """
+    """Drift is scaled by the training standard deviation, not the corrupted history."""
     values = np.asarray(values, dtype=np.float64)
     onset, reason = resolve_onset(rul, spec, config)
     if onset is None:
@@ -99,8 +73,7 @@ def apply_fault(
     corrupted = values.copy()
 
     if spec.kind == FaultKind.dropout:
-        # The sensor stops reporting. Downstream, imputation replaces this with a
-        # training median and the missingness feature records the gap.
+        # Downstream imputation uses the training median and retains a missingness feature.
         corrupted[span] = np.nan
 
     elif spec.kind == FaultKind.stuck:
@@ -108,9 +81,7 @@ def apply_fault(
         if not np.isfinite(held):
             finite = np.flatnonzero(np.isfinite(corrupted[: span.start]))
             if finite.size == 0:
-                return InjectionResult(
-                    values=corrupted, applied=False, reason="no finite reading to hold"
-                )
+                return InjectionResult(values=corrupted, applied=False, reason="no finite reading to hold")
             held = corrupted[finite[-1]]
         corrupted[span] = held
 
@@ -119,21 +90,16 @@ def apply_fault(
         sign = int(spec.sign if spec.sign is not None else 1)
         magnitude = sign * severity * float(sensor_std)
         if sensor_std <= 0.0:
-            return InjectionResult(
-                values=corrupted, applied=False, reason="sensor has no training variation"
-            )
-        ramp_length = int(spec.ramp_cycles or config.drift_ramp_cycles)
+            return InjectionResult(values=corrupted, applied=False, reason="sensor has no training variation")
+        rampLength = int(spec.ramp_cycles or config.drift_ramp_cycles)
         affected = np.arange(span.start, span.stop)
         # Ramp linearly to full magnitude, then hold it. Drift does not heal.
-        progress = np.clip((affected - span.start + 1) / max(ramp_length, 1), 0.0, 1.0)
+        progress = np.clip((affected - span.start + 1) / max(rampLength, 1), 0.0, 1.0)
         corrupted[span] = corrupted[span] + magnitude * progress
 
     else:  # pragma: no cover - the enum is closed
         raise ValueError(f"unsupported fault kind {spec.kind!r}")
 
     return InjectionResult(
-        values=corrupted,
-        applied=True,
-        onset_index=onset,
-        affected_cycles=int(span.stop - span.start),
+        values=corrupted, applied=True, onset_index=onset, affected_cycles=int(span.stop - span.start)
     )

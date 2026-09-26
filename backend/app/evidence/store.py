@@ -1,18 +1,8 @@
-"""The evidence store.
-
-Every number the application shows resolves to a run record here. A record holds
-the configuration fingerprint, the data hash, the seed, the parameters, the
-metrics and the paths to any artifacts, so a claim in a report can be traced to
-the run that produced it and that run can be repeated.
-
-Plain JSON files are the source of truth rather than MLflow. Two reasons: the
-hosted replay service has no room for a tracking server, and a committed JSON
-record stays readable by a reviewer with no tooling. MLflow mirrors these records
-for the local experiment UI (see :mod:`app.evidence.tracking`) and is optional.
-"""
+"""The evidence store."""
 
 from __future__ import annotations
 
+import math
 import subprocess
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -30,14 +20,9 @@ INDEX_NAME = "index.json"
 
 @lru_cache(maxsize=1)
 def git_commit() -> str | None:
-    """Current commit, recorded so a result can be tied to the code that made it."""
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5, check=False
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -46,13 +31,9 @@ def git_commit() -> str | None:
 
 
 class EvidenceStore:
-    """Append-only store of run records on the local filesystem."""
-
     def __init__(self, root: Path | None = None) -> None:
         self.root = Path(root) if root else get_settings().runs_dir
         self.root.mkdir(parents=True, exist_ok=True)
-
-    # -- writing -----------------------------------------------------------
 
     def start_run(
         self,
@@ -65,16 +46,9 @@ class EvidenceStore:
         parent_run_id: str | None = None,
         notes: list[str] | None = None,
     ) -> RunRecord:
-        """Create a run record. Metrics and artifacts are attached afterwards."""
         created = datetime.now(UTC)
         suffix = hash_obj(
-            {
-                "kind": kind,
-                "created": created.isoformat(),
-                "params": params or {},
-                "data": data_hash,
-            },
-            length=6,
+            {"kind": kind, "created": created.isoformat(), "params": params or {}, "data": data_hash}, length=6
         )
         record = RunRecord(
             run_id=f"{created.strftime('%Y%m%dT%H%M%S')}-{kind}-{suffix}",
@@ -112,8 +86,6 @@ class EvidenceStore:
         write_json(target, payload)
         return self.log_artifact(record, name, target)
 
-    # -- reading -----------------------------------------------------------
-
     def get(self, run_id: str) -> RunRecord:
         path = self.root / f"{run_id}.json"
         if not path.exists():
@@ -127,7 +99,7 @@ class EvidenceStore:
                 continue
             try:
                 record = RunRecord.model_validate(read_json(path))
-            except Exception as exc:  # pragma: no cover - a corrupt file is not fatal
+            except (OSError, ValueError) as exc:
                 logger.warning("skipping unreadable run record %s: %s", path.name, exc)
                 continue
             if kind and record.kind != kind:
@@ -137,12 +109,7 @@ class EvidenceStore:
                 break
         return records
 
-    def latest(self, kind: str | None = None) -> RunRecord | None:
-        records = self.list_runs(kind=kind, limit=1)
-        return records[0] if records else None
-
     def _touch_index(self, record: RunRecord) -> None:
-        """Maintain a small index so listing does not require reading every file."""
         path = self.root / INDEX_NAME
         index = read_json(path) if path.exists() else {"runs": []}
         entries = {entry["run_id"]: entry for entry in index.get("runs", [])}
@@ -154,20 +121,10 @@ class EvidenceStore:
             "data_hash": record.data_hash,
             "metric_count": len(record.metrics),
         }
-        write_json(
-            path,
-            {"runs": sorted(entries.values(), key=lambda e: e["created_at"], reverse=True)},
-        )
+        write_json(path, {"runs": sorted(entries.values(), key=lambda e: e["created_at"], reverse=True)})
 
 
-def compare_runs(
-    first: RunRecord, second: RunRecord, *, tolerance: float = 1e-9
-) -> ReproducibilityCheck:
-    """Check that a repeated run reproduced the original's metrics.
-
-    Compares only metrics present in both. A run that produced fewer metrics is
-    not silently treated as reproducing the ones it skipped.
-    """
+def compare_runs(first: RunRecord, second: RunRecord, *, tolerance: float = 1e-9) -> ReproducibilityCheck:
     shared = sorted(set(first.metrics) & set(second.metrics))
     largest = 0.0
     for key in shared:
@@ -180,5 +137,12 @@ def compare_runs(
         tolerance=tolerance,
         max_absolute_difference=largest,
         metrics_compared=len(shared),
-        reproduced=bool(shared) and largest <= tolerance,
+        reproduced=(
+            bool(shared)
+            and set(first.metrics) == set(second.metrics)
+            and first.data_hash == second.data_hash
+            and first.config_fingerprint == second.config_fingerprint
+            and all(math.isfinite(float(run.metrics[key])) for run in (first, second) for key in shared)
+            and largest <= tolerance
+        ),
     )

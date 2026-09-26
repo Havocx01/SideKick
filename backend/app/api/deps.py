@@ -1,15 +1,10 @@
-"""Shared API dependencies.
-
-The bundle is loaded once and cached. On the hosted service it is a committed file
-that never changes during a process's life, so a cache is both safe and the reason
-the service fits in 512 MB: no model, no dataset, no training library.
-"""
+"""Shared API dependencies."""
 
 from __future__ import annotations
 
 from functools import lru_cache
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException, Request
 
 from app.config import Settings, get_settings
 from app.copilot.tools import ToolRegistry
@@ -39,16 +34,24 @@ def reload_bundle() -> None:
     _cached_registry.cache_clear()
 
 
-def bundle() -> EvidenceBundle:
+def bundle(request: Request, experiment_id: str | None = None) -> EvidenceBundle:
+    if experiment_id:
+        if get_settings().mode != "full":
+            raise HTTPException(403, "Local experiments are unavailable in replay mode.")
+        try:
+            workspace = request.app.state.jobs.workspace
+            record = workspace.get("experiments", experiment_id)
+            if record["status"] != "completed":
+                raise HTTPException(409, "This experiment has no completed results yet.")
+            return load_bundle(workspace.directory("experiments", experiment_id) / "bundle.json")
+        except (KeyError, ValueError):
+            raise HTTPException(404, "Experiment not found") from None
     try:
         return _cached_bundle()
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "No evidence bundle is available. Generate one locally with "
-                "'python scripts/run_pipeline.py'."
-            ),
+            detail=("No evidence bundle is available. Generate one locally with 'python scripts/run_pipeline.py'."),
         ) from exc
 
 
@@ -57,9 +60,8 @@ def _cached_registry() -> ToolRegistry:
     return ToolRegistry(_cached_bundle(), allow_training=get_settings().mode == "full")
 
 
-def registry() -> ToolRegistry:
-    bundle()  # surface a missing bundle as 503 before building the registry
-    return _cached_registry()
+def registry(loaded: EvidenceBundle = Depends(bundle)) -> ToolRegistry:
+    return ToolRegistry(loaded, allow_training=False)
 
 
 def settings() -> Settings:

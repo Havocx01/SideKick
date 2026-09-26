@@ -1,15 +1,4 @@
-"""Run the evaluation twice and compare every metric, then record the result.
-
-A claim of reproducibility is cheap to make and easy to get wrong: a single
-unseeded shuffle, a dictionary iteration order leaking into a split, or a model
-that seeds itself from the clock will all produce numbers that move between runs
-while every individual run looks fine.
-
-So this runs the pipeline twice in one process, from the same configuration and
-the same data, and compares the metrics it recorded. The comparison is written into
-the evidence bundle, which means the claim on the comparison view is backed by a
-check anybody can re-run rather than by an assertion in a report.
-"""
+"""Run the evaluation twice and compare every metric, then record the result."""
 
 from __future__ import annotations
 
@@ -50,19 +39,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "configuration fingerprint, so the check will not be attached.",
     )
     parser.add_argument("--tolerance", type=float, default=1e-9)
-    parser.add_argument(
-        "--no-attach", action="store_true", help="report only; leave the bundle untouched"
-    )
+    parser.add_argument("--no-attach", action="store_true", help="report only; leave the bundle untouched")
     return parser.parse_args(argv)
 
 
 def metrics_of(result: EvaluationResult) -> dict[str, float]:
-    """Flatten an evaluation into a comparable set of named numbers.
-
-    Scenario detections are included, not just the headline figures, because a
-    non-determinism that only moves one fault case is exactly the kind that a
-    summary-level comparison would miss.
-    """
     flat: dict[str, float] = {}
 
     for name, metrics in result.clean.items():
@@ -108,11 +89,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for attempt in (1, 2):
         with timed(logger, f"evaluation {attempt} of 2"):
-            result = evaluate(
-                dataset,
-                config=config,
-                include_full_matrix=not (args.required_only or args.fast),
-            )
+            result = evaluate(dataset, config=config, include_full_matrix=not (args.required_only or args.fast))
         record = store.start_run(
             "export",
             config=config,
@@ -126,11 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     check = compare_runs(records[0], records[1], tolerance=args.tolerance)
 
     if check.reproduced:
-        logger.info(
-            "reproduced: %d metrics identical to within %.0e",
-            check.metrics_compared,
-            check.tolerance,
-        )
+        logger.info("reproduced: %d metrics identical to within %.0e", check.metrics_compared, check.tolerance)
     else:
         logger.error(
             "NOT reproduced: %d metrics compared, largest difference %.3e",
@@ -140,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_attach and settings.bundle_path.is_file():
         bundle = load_bundle(settings.bundle_path)
-        if bundle.config_fingerprint != config.fingerprint():
+        if bundle.config_fingerprint != config.fingerprint() or bundle.profile.data_hash != dataset.data_hash:
             logger.warning(
                 "the bundle was produced under configuration %s but this check ran "
                 "under %s, so the check was not attached",
@@ -149,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             bundle.reproducibility = check
-            bundle.runs = store.list_runs(limit=80)
+            bundle.runs.extend(records)
             write_bundle(bundle, settings.bundle_path)
             logger.info("attached the check to %s", settings.bundle_path)
 

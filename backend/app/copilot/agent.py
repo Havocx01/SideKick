@@ -1,25 +1,9 @@
-"""The bounded copilot loop.
-
-Three constraints shape this:
-
-**Bounded.** A fixed tool-call budget, after which the loop stops and says so.
-An agent that can loop indefinitely against a 512 MB service is a liability.
-
-**Verified.** The draft answer's figures are checked against the tool results. On
-a mismatch the model gets one chance to restate using only recorded values; if
-figures are still unmatched they are flagged in the response rather than shown as
-fact.
-
-**Degradable.** With no API key, or if the provider fails, a deterministic
-answer is produced directly from the evidence. The hosted demo therefore works
-without a key, and the recorded video does not depend on a live API call.
-"""
+"""The bounded copilot loop."""
 
 from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
 
 from app.config import Settings, get_settings
 from app.copilot.fallback import answer_without_llm
@@ -57,19 +41,7 @@ behaviour on any specific plant equipment.
 """
 
 
-@dataclass
-class CopilotContext:
-    registry: ToolRegistry
-    settings: Settings
-
-
-def ask(
-    question: str,
-    registry: ToolRegistry,
-    *,
-    settings: Settings | None = None,
-) -> CopilotAnswer:
-    """Answer one question, using tools, with figures verified."""
+def ask(question: str, registry: ToolRegistry, *, settings: Settings | None = None) -> CopilotAnswer:
     settings = settings or get_settings()
 
     if not settings.llm_available:
@@ -89,20 +61,14 @@ def _ask_with_llm(question: str, registry: ToolRegistry, settings: Settings) -> 
 
     client = OpenAI(api_key=settings.llm_api_key, timeout=settings.llm_timeout_s)
 
-    messages: list[dict] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": question},
-    ]
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}]
     invocations: list[ToolInvocation] = []
-    tool_payloads: list[object] = []
+    toolPayloads: list[object] = []
     truncated = False
 
     for _ in range(settings.llm_max_tool_calls):
         response = client.chat.completions.create(
-            model=settings.llm_model,
-            messages=messages,
-            tools=registry.schemas(),
-            tool_choice="auto",
+            model=settings.llm_model, messages=messages, tools=registry.schemas(), tool_choice="auto"
         )
         message = response.choices[0].message
         messages.append(message.model_dump(exclude_none=True))
@@ -111,19 +77,20 @@ def _ask_with_llm(question: str, registry: ToolRegistry, settings: Settings) -> 
             break
 
         for call in message.tool_calls:
-            payload, invocation = _execute(registry, call.function.name, call.function.arguments)
-            invocations.append(invocation)
-            if invocation.ok:
-                tool_payloads.append(payload)
+            if len(invocations) >= settings.llm_max_tool_calls:
+                payload = {"error": "Tool-call budget exhausted; this tool was not executed."}
+            else:
+                payload, invocation = _execute(registry, call.function.name, call.function.arguments)
+                invocations.append(invocation)
+                if invocation.ok:
+                    toolPayloads.append(payload)
             messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "content": json.dumps(payload, default=str)[:20_000],
-                }
+                {"role": "tool", "tool_call_id": call.id, "content": json.dumps(payload, default=str)[:20_000]}
             )
-    else:
-        truncated = True
+        if len(invocations) >= settings.llm_max_tool_calls:
+            truncated = True
+            break
+    if truncated:
         messages.append(
             {
                 "role": "user",
@@ -133,13 +100,12 @@ def _ask_with_llm(question: str, registry: ToolRegistry, settings: Settings) -> 
                 ),
             }
         )
-        response = client.chat.completions.create(
-            model=settings.llm_model, messages=messages
-        )
+        response = client.chat.completions.create(model=settings.llm_model, messages=messages)
         message = response.choices[0].message
+        messages.append(message.model_dump(exclude_none=True))
 
     text = (message.content or "").strip()
-    claims = verify_answer(text, tool_payloads)
+    claims = verify_answer(text, toolPayloads)
 
     if unverified(claims):
         # One chance to restate using only recorded values.
@@ -147,14 +113,14 @@ def _ask_with_llm(question: str, registry: ToolRegistry, settings: Settings) -> 
         retry = client.chat.completions.create(model=settings.llm_model, messages=messages)
         retried = (retry.choices[0].message.content or "").strip()
         if retried:
-            retry_claims = verify_answer(retried, tool_payloads)
-            if len(unverified(retry_claims)) < len(unverified(claims)):
-                text, claims = retried, retry_claims
+            retryClaims = verify_answer(retried, toolPayloads)
+            if len(unverified(retryClaims)) < len(unverified(claims)):
+                text, claims = retried, retryClaims
 
     return CopilotAnswer(
         text=annotate(text, claims) if text else "No answer was produced.",
         tool_calls=invocations,
-        citations=sorted({run_id for inv in invocations for run_id in inv.run_ids}),
+        citations=sorted({runId for inv in invocations for runId in inv.run_ids}),
         claims=claims,
         unverified_claims=len(unverified(claims)),
         truncated=truncated,
@@ -167,18 +133,16 @@ def _execute(registry: ToolRegistry, name: str, raw_arguments: str) -> tuple[obj
     try:
         arguments = json.loads(raw_arguments or "{}")
     except json.JSONDecodeError as exc:
-        return (
-            {"error": f"arguments were not valid JSON: {exc}"},
-            ToolInvocation(name=name, ok=False, error=str(exc)),
-        )
+        return ({"error": f"arguments were not valid JSON: {exc}"}, ToolInvocation(name=name, ok=False, error=str(exc)))
+
+    if not isinstance(arguments, dict):
+        error = "tool arguments must be an object"
+        return {"error": error}, ToolInvocation(name=name, ok=False, error=error)
 
     try:
         payload = registry.call(name, arguments)
     except ToolError as exc:
-        return (
-            {"error": str(exc)},
-            ToolInvocation(name=name, arguments=arguments, ok=False, error=str(exc)),
-        )
+        return ({"error": str(exc)}, ToolInvocation(name=name, arguments=arguments, ok=False, error=str(exc)))
     except Exception as exc:  # pragma: no cover
         logger.exception("tool %s failed", name)
         return (
@@ -186,18 +150,13 @@ def _execute(registry: ToolRegistry, name: str, raw_arguments: str) -> tuple[obj
             ToolInvocation(name=name, arguments=arguments, ok=False, error=str(exc)),
         )
 
-    run_ids = _run_ids(payload)
+    runIds = _run_ids(payload)
     return payload, ToolInvocation(
-        name=name,
-        arguments=arguments,
-        ok=True,
-        duration_ms=(time.perf_counter() - started) * 1000.0,
-        run_ids=run_ids,
+        name=name, arguments=arguments, ok=True, duration_ms=(time.perf_counter() - started) * 1000.0, run_ids=runIds
     )
 
 
 def _run_ids(payload: object, depth: int = 0) -> list[str]:
-    """Collect run identifiers so an answer can cite its sources."""
     if depth > 6:
         return []
     found: list[str] = []

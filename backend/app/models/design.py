@@ -14,12 +14,6 @@ from app.models.base import DesignMatrix
 
 @dataclass
 class EngineBlock:
-    """One engine's rows, split into the scorable part and its bookkeeping.
-
-    Held per engine because every downstream step is per engine: alert episodes,
-    fault injection and the replay view all work on a single history at a time.
-    """
-
     equipment_id: str
     features: np.ndarray
     labels: np.ndarray
@@ -34,23 +28,19 @@ class EngineBlock:
 
 
 def engine_blocks(
-    dataset: Dataset,
-    builder: FeatureBuilder,
-    *,
-    equipment_ids: list[str] | None = None,
+    dataset: Dataset, builder: FeatureBuilder, *, equipment_ids: list[str] | None = None
 ) -> dict[str, EngineBlock]:
-    """Build per-engine feature blocks, cached for reuse across scenarios."""
     labels = dataset.label_vector()
     scorable = dataset.scorable_mask()
     targets = equipment_ids if equipment_ids is not None else dataset.equipment_ids
 
     blocks: dict[str, EngineBlock] = {}
-    for equipment_id in targets:
-        start, stop = dataset.rows_for(equipment_id)
+    for equipmentId in targets:
+        start, stop = dataset.rows_for(equipmentId)
         frame = dataset.frame.iloc[start:stop]
-        blocks[equipment_id] = EngineBlock(
-            equipment_id=equipment_id,
-            features=builder.build_engine(dataset.sensor_matrix(equipment_id)),
+        blocks[equipmentId] = EngineBlock(
+            equipment_id=equipmentId,
+            features=builder.build_engine(dataset.sensor_matrix(equipmentId)),
             labels=labels[start:stop],
             cycles=frame[CANONICAL_CYCLE].to_numpy(dtype=int),
             rul=frame[CANONICAL_RUL].to_numpy(dtype=int),
@@ -67,26 +57,18 @@ def design_from_blocks(
     equipment_ids: list[str] | None = None,
     scorable_only: bool = True,
 ) -> DesignMatrix:
-    """Stack engine blocks into one design matrix."""
     targets = equipment_ids if equipment_ids is not None else list(blocks)
     selected = [blocks[e] for e in targets]
     if not selected:
         raise ValueError("no engines selected for the design matrix")
 
     def stack(getter, dtype):
-        parts = [
-            (getter(b)[b.scorable] if scorable_only else getter(b)) for b in selected
-        ]
+        parts = [(getter(b)[b.scorable] if scorable_only else getter(b)) for b in selected]
         return np.concatenate(parts).astype(dtype, copy=False)
 
-    features = np.vstack(
-        [(b.features[b.scorable] if scorable_only else b.features) for b in selected]
-    )
+    features = np.vstack([(b.features[b.scorable] if scorable_only else b.features) for b in selected])
     equipment = np.concatenate(
-        [
-            np.full(b.n_scorable if scorable_only else len(b.rul), b.equipment_id, dtype=object)
-            for b in selected
-        ]
+        [np.full(b.n_scorable if scorable_only else len(b.rul), b.equipment_id, dtype=object) for b in selected]
     )
 
     return DesignMatrix(
@@ -100,23 +82,12 @@ def design_from_blocks(
     )
 
 
-def build_design(
-    dataset: Dataset,
-    builder: FeatureBuilder,
-    *,
-    equipment_ids: list[str] | None = None,
-) -> DesignMatrix:
-    """Convenience path when the per-engine blocks are not needed afterwards."""
+def build_design(dataset: Dataset, builder: FeatureBuilder, *, equipment_ids: list[str] | None = None) -> DesignMatrix:
     blocks = engine_blocks(dataset, builder, equipment_ids=equipment_ids)
     return design_from_blocks(blocks, builder.feature_names(), equipment_ids=equipment_ids)
 
 
 def assert_engine_disjoint(train: DesignMatrix, validation: DesignMatrix) -> None:
-    """Assert no engine appears on both sides of a split.
-
-    Called on every fold. "Grouped by engine" is a leakage claim the submission
-    makes, so it is checked at runtime rather than trusted.
-    """
     overlap = set(np.unique(train.equipment_id)) & set(np.unique(validation.equipment_id))
     if overlap:
         raise AssertionError(f"engines appear in both training and validation: {sorted(overlap)}")

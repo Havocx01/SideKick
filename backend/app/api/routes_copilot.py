@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from fastapi import APIRouter, Depends
 
 from app.api.deps import registry, settings
@@ -15,11 +17,7 @@ router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
 @router.get("/tools")
 def tools(tool_registry: ToolRegistry = Depends(registry)) -> dict:
-    """The tools the copilot may call, with their schemas.
-
-    Exposed so a reviewer can see the whole surface: there is no hidden path from
-    the language model to the data.
-    """
+    """The tools the copilot may call, with their schemas."""
     return {
         "tools": [
             {
@@ -40,27 +38,19 @@ def tools(tool_registry: ToolRegistry = Depends(registry)) -> dict:
 @router.get("/status")
 def status(config: Settings = Depends(settings)) -> dict:
     return {
-        "language_model": config.llm_model if config.llm_available else None,
-        "available": config.llm_available,
+        "language_model": None,
+        "available": False,
         "max_tool_calls": config.llm_max_tool_calls,
-        "mode": "language model" if config.llm_available else "recorded evidence only",
-        "note": (
-            "Answers are drafted by a language model and every figure is checked "
-            "against a recorded metric before display."
-            if config.llm_available
-            else "No API key is configured, so answers are assembled directly from "
-            "recorded evidence."
-        ),
+        "mode": "recorded evidence only",
+        "note": "Answers are assembled from recorded evidence. This prototype makes no external model calls.",
     }
 
 
 @router.post("", response_model=CopilotAnswer)
 def query(
-    request: CopilotRequest,
-    tool_registry: ToolRegistry = Depends(registry),
-    config: Settings = Depends(settings),
+    request: CopilotRequest, tool_registry: ToolRegistry = Depends(registry), config: Settings = Depends(settings)
 ) -> CopilotAnswer:
-    return ask(request.question, tool_registry, settings=config)
+    return ask(request.question, tool_registry, settings=replace(config, llm_api_key=None))
 
 
 @router.get("/suggestions")

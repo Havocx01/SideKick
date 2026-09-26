@@ -2,13 +2,7 @@ import type { ReactNode } from "react";
 
 import { ApiError } from "../api/client";
 
-export function Panel({
-  title,
-  description,
-  aside,
-  tight,
-  children,
-}: {
+export function Panel({ title, description, aside, tight, children }: {
   title: string;
   description?: ReactNode;
   aside?: ReactNode;
@@ -29,15 +23,7 @@ export function Panel({
   );
 }
 
-export function Stat({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: ReactNode;
-  note?: ReactNode;
-}) {
+export function Stat({ label, value, note }: { label: string; value: ReactNode; note?: ReactNode }) {
   return (
     <div className="stat">
       <div className="stat-label">{label}</div>
@@ -53,15 +39,7 @@ export function Badge({ tone = "neutral", children }: { tone?: Tone; children: R
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 
-export function Callout({
-  tone,
-  title,
-  children,
-}: {
-  tone?: "fault" | "ok" | "warn";
-  title?: string;
-  children: ReactNode;
-}) {
+export function Callout({ tone, title, children }: { tone?: "fault" | "ok" | "warn"; title?: string; children: ReactNode; }) {
   return (
     <div className={tone ? `callout ${tone}` : "callout"}>
       {title ? <h3>{title}</h3> : null}
@@ -70,13 +48,7 @@ export function Callout({
   );
 }
 
-/** Loading, error and empty states, so no view renders a blank page silently. */
-export function StateBlock({
-  loading,
-  error,
-  empty,
-  children,
-}: {
+export function StateBlock({ loading, error, empty, children }: {
   loading?: boolean;
   error?: Error | null;
   empty?: boolean;
@@ -96,17 +68,11 @@ export function StateBlock({
   return <>{children}</>;
 }
 
-export function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="field">
-      <label>{label}</label>
+    <label className="field">
+      <span className="field-label">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }

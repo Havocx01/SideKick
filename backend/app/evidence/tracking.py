@@ -1,13 +1,4 @@
-"""Optional MLflow mirror.
-
-MLflow gives a browsable local experiment UI, which is useful while iterating and
-worth a screenshot in the submission. It is not the source of truth: the JSON run
-records are, because the hosted service cannot run a tracking server and a
-reviewer should not need one to read the evidence.
-
-Every function here is a no-op when MLflow is not installed or is disabled, so the
-pipeline behaves identically either way.
-"""
+"""Optional MLflow mirror."""
 
 from __future__ import annotations
 
@@ -26,7 +17,6 @@ _warned = False
 
 
 def _mlflow() -> Any | None:
-    """Import MLflow lazily, warning once if it is unavailable."""
     global _warned
     settings = get_settings()
     if not settings.mlflow_enabled:
@@ -47,7 +37,6 @@ def _mlflow() -> Any | None:
 
 
 def mirror_run(record: RunRecord, *, artifacts: dict[str, Path] | None = None) -> str | None:
-    """Copy one run record into MLflow. Returns the MLflow run id, if any."""
     mlflow = _mlflow()
     if mlflow is None:
         return None
@@ -77,7 +66,6 @@ def mirror_run(record: RunRecord, *, artifacts: dict[str, Path] | None = None) -
 
 
 def _flatten(params: dict, prefix: str = "", limit: int = 100) -> dict[str, str]:
-    """Flatten nested parameters; MLflow accepts only scalar values."""
     flat: dict[str, str] = {}
     for key, value in params.items():
         name = f"{prefix}{key}"
@@ -90,7 +78,3 @@ def _flatten(params: dict, prefix: str = "", limit: int = 100) -> dict[str, str]
         if len(flat) >= limit:
             break
     return flat
-
-
-def available() -> bool:
-    return _mlflow() is not None

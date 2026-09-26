@@ -1,17 +1,4 @@
-"""The four candidates.
-
-* **Logistic regression** on scaled sensor features. Interpretable, and a useful
-  floor: if a linear model on trailing statistics does as well as a boosted tree,
-  that is worth knowing before anyone deploys the tree.
-* **XGBoost** on the same features.
-* **Fault-augmented XGBoost**, trained on the original histories plus corrupted
-  copies. This is the proposed remedy, and it is kept only if the measured
-  trade-off satisfies the engineer's criteria.
-* **Age baseline**, which alerts once running time passes a tuned threshold. It
-  uses no sensor at all, so it is immune to every sensor fault by construction.
-  It is the comparator that makes the robustness question meaningful: a sensor
-  model that loses to it under fault is not worth deploying.
-"""
+"""The four candidates."""
 
 from __future__ import annotations
 
@@ -62,20 +49,14 @@ class LogisticRegressionCandidate(Candidate):
         if not self._fitted:
             return None
         coefficients = self._pipeline.named_steps["model"].coef_[0]
-        return {
-            name: float(abs(value))
-            for name, value in zip(self._feature_names, coefficients, strict=True)
-        }
+        return {name: float(abs(value)) for name, value in zip(self._feature_names, coefficients, strict=True)}
 
 
 class XGBoostCandidate(Candidate):
     kind = CandidateKind.xgboost
 
     def describe(self) -> str:
-        return (
-            f"XGBoost, depth={self.params.get('max_depth', 4)}, "
-            f"trees={self.params.get('n_estimators', 300)}"
-        )
+        return f"XGBoost, depth={self.params.get('max_depth', 4)}, trees={self.params.get('n_estimators', 300)}"
 
     def _make_model(self, seed: int):
         from xgboost import XGBClassifier
@@ -112,10 +93,7 @@ class XGBoostCandidate(Candidate):
         if not self._fitted:
             return None
         scores = self._model.feature_importances_
-        return {
-            name: float(value)
-            for name, value in zip(self._feature_names, scores, strict=True)
-        }
+        return {name: float(value) for name, value in zip(self._feature_names, scores, strict=True)}
 
     @property
     def booster(self):
@@ -123,13 +101,7 @@ class XGBoostCandidate(Candidate):
 
 
 class AugmentedXGBoostCandidate(XGBoostCandidate):
-    """XGBoost trained on clean histories plus corrupted copies.
-
-    Labels are unchanged by augmentation: a stuck sensor does not change when the
-    machine fails, only what the model can see. This is also what makes the
-    missingness features informative, since without augmentation they are constant
-    zero throughout training and the model learns nothing from them.
-    """
+    """Sensor faults change the inputs, never the failure labels."""
 
     kind = CandidateKind.xgboost_augmented
     requires_augmentation = True
@@ -139,11 +111,8 @@ class AugmentedXGBoostCandidate(XGBoostCandidate):
 
     def fit(self, train: DesignMatrix, *, augmented: DesignMatrix | None = None) -> None:
         if augmented is None or len(augmented) == 0:
-            # Fitting this variant without corrupted copies would silently make it
-            # a duplicate of plain XGBoost and quietly invalidate the comparison.
-            raise ValueError(
-                f"{self.name} requires augmented training rows; none were supplied"
-            )
+            # Without corrupted copies, this would duplicate the unaugmented candidate.
+            raise ValueError(f"{self.name} requires augmented training rows; none were supplied")
         combined = DesignMatrix(
             X=np.vstack([train.X, augmented.X]),
             y=np.concatenate([train.y, augmented.y]),
@@ -158,8 +127,6 @@ class AugmentedXGBoostCandidate(XGBoostCandidate):
 
 
 class AgeBaselineCandidate(Candidate):
-    """Alerts once running time passes a threshold. Uses no sensor reading."""
-
     kind = CandidateKind.age_baseline
     uses_sensors = False
 
@@ -167,8 +134,7 @@ class AgeBaselineCandidate(Candidate):
         return "Alerts on running time alone; immune to sensor faults by construction"
 
     def fit(self, train: DesignMatrix, *, augmented: DesignMatrix | None = None) -> None:
-        # Nothing to learn: the score is running time, and the alert threshold is
-        # tuned by the same out-of-fold procedure used for every other candidate.
+        # The common threshold-selection step calibrates this running-time baseline.
         self._fitted = True
 
     def score(self, data: DesignMatrix) -> np.ndarray:
@@ -176,33 +142,27 @@ class AgeBaselineCandidate(Candidate):
 
 
 def candidate_grid(config: ExperimentConfig = EXPERIMENT) -> list[Candidate]:
-    """Every candidate configuration, bounded by ``configs_per_candidate``."""
     limit = config.configs_per_candidate
 
-    logistic_params = [
-        {"C": 0.05},
-        {"C": 0.5},
-        {"C": 5.0},
-    ][:limit]
-    tree_params = [
+    logisticParams = [{"C": 0.05}, {"C": 0.5}, {"C": 5.0}][:limit]
+    treeParams = [
         {"max_depth": 3, "n_estimators": 250, "learning_rate": 0.05},
         {"max_depth": 5, "n_estimators": 400, "learning_rate": 0.05},
         {"max_depth": 7, "n_estimators": 250, "learning_rate": 0.1},
     ][:limit]
 
     candidates: list[Candidate] = []
-    for index, params in enumerate(logistic_params, start=1):
+    for index, params in enumerate(logisticParams, start=1):
         candidates.append(LogisticRegressionCandidate(f"lr{index}", params))
-    for index, params in enumerate(tree_params, start=1):
+    for index, params in enumerate(treeParams, start=1):
         candidates.append(XGBoostCandidate(f"xgb{index}", params))
-    for index, params in enumerate(tree_params, start=1):
+    for index, params in enumerate(treeParams, start=1):
         candidates.append(AugmentedXGBoostCandidate(f"aug{index}", params))
     candidates.append(AgeBaselineCandidate("age1"))
     return candidates
 
 
 def rebuild_candidate(kind: CandidateKind, config_id: str, params: dict) -> Candidate:
-    """Recreate a candidate from its recorded specification."""
     registry = {
         CandidateKind.logistic_regression: LogisticRegressionCandidate,
         CandidateKind.xgboost: XGBoostCandidate,

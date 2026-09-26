@@ -1,10 +1,4 @@
-"""Frozen experiment definition and runtime settings.
-
-``ExperimentConfig`` is the experiment. Every number the prototype reports is
-produced under one of these, and its ``fingerprint`` is written into every run
-record. Changing a field changes the fingerprint, which is how a reviewer can
-tell that a reported metric and a frozen configuration belong together.
-"""
+"""Frozen experiment definition and runtime settings."""
 
 from __future__ import annotations
 
@@ -22,24 +16,19 @@ RunMode = Literal["full", "replay"]
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    """The experiment definition from the idea-phase proposal.
+    """Failure-cycle readings are excluded from training and scoring."""
 
-    Cycle conventions: ``rul`` is the remaining useful life measured in cycles,
-    defined as ``failure_cycle - current_cycle``. The failure cycle itself
-    (``rul == 0``) is excluded from both training and scoring.
-    """
+    protocol_revision: int = 3
+    """Revision 3 fingerprints failure targets, confirmed mapping and actual criteria."""
 
-    # --- Prediction target -------------------------------------------------
     horizon_cycles: int = 30
     """Positive label when 1 <= rul <= horizon_cycles."""
 
     exclude_failure_cycle: bool = True
 
-    # --- Features ----------------------------------------------------------
     feature_window: int = 20
     """Current reading plus the preceding 19 cycles."""
 
-    # --- Partitions --------------------------------------------------------
     holdout_engines: int = 20
     """Reserved for a single frozen final evaluation."""
 
@@ -48,14 +37,12 @@ class ExperimentConfig:
 
     configs_per_candidate: int = 3
 
-    # --- Alert logic -------------------------------------------------------
     alert_on_consecutive: int = 2
     """Scores at or above threshold needed to open an episode."""
 
     alert_off_consecutive: int = 2
     """Scores below threshold needed to close an episode."""
 
-    # --- Operational measures ---------------------------------------------
     min_useful_lead: int = 10
     """An alert must be active no later than this many cycles before failure."""
 
@@ -65,7 +52,6 @@ class ExperimentConfig:
     transition_band_end: int = 45
     """Cycles 31..45 are excluded from the early alarm burden denominator."""
 
-    # --- Fault tests -------------------------------------------------------
     fault_onsets: tuple[int, ...] = (60, 30)
     """Cycles before failure at which a persistent fault begins."""
 
@@ -74,30 +60,26 @@ class ExperimentConfig:
     drift_severities: tuple[float, ...] = (1.0, 2.0)
     drift_signs: tuple[int, ...] = (-1, 1)
 
-    # --- Determinism -------------------------------------------------------
     base_seed: int = 20260918
 
-    # --- Acceptance criteria defaults -------------------------------------
-    # The engineer sets these before selection. These are the demo defaults and
-    # are recorded alongside results rather than treated as universal.
+    # Demonstration defaults; each experiment records the limits chosen before training.
     min_detection_fraction: float = 0.70
     max_early_alarm_burden: float = 0.10
 
     @property
     def max_useful_lead(self) -> int:
-        """Upper edge of the useful warning window, tied to the horizon."""
         return self.horizon_cycles
 
     def as_dict(self) -> dict:
         return asdict(self)
 
     def fingerprint(self) -> str:
-        """Stable hash of the experiment definition."""
         payload = json.dumps(self.as_dict(), sort_keys=True, default=list)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def validate(self) -> None:
-        """Fail fast on internally inconsistent settings."""
+        if not 0 <= self.min_detection_fraction <= 1 or not 0 <= self.max_early_alarm_burden <= 1:
+            raise ValueError("Acceptance criteria must be finite fractions between 0 and 1")
         if not 0 < self.min_useful_lead < self.horizon_cycles:
             raise ValueError("min_useful_lead must sit inside the horizon")
         if self.late_window_end >= self.min_useful_lead:
@@ -126,19 +108,11 @@ def _env_bool(name: str, default: bool) -> bool:
 
 @dataclass
 class Settings:
-    """Runtime settings. These do not affect reported numbers."""
-
-    mode: RunMode = field(
-        default_factory=lambda: "replay" if os.environ.get("SIDEKICK_MODE") == "replay" else "full"
-    )
+    mode: RunMode = field(default_factory=lambda: "replay" if os.environ.get("SIDEKICK_MODE") == "replay" else "full")
     data_dir: Path = field(default_factory=lambda: _env_path("SIDEKICK_DATA_DIR", REPO_ROOT / "data"))
-    artifacts_dir: Path = field(
-        default_factory=lambda: _env_path("SIDEKICK_ARTIFACTS_DIR", REPO_ROOT / "artifacts")
-    )
+    artifacts_dir: Path = field(default_factory=lambda: _env_path("SIDEKICK_ARTIFACTS_DIR", REPO_ROOT / "artifacts"))
     bundle_path: Path = field(
-        default_factory=lambda: _env_path(
-            "SIDEKICK_BUNDLE_PATH", REPO_ROOT / "evidence" / "bundle.json"
-        )
+        default_factory=lambda: _env_path("SIDEKICK_BUNDLE_PATH", REPO_ROOT / "evidence" / "bundle.json")
     )
     mlflow_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_MLFLOW", True))
     mlflow_uri: str = field(
@@ -147,19 +121,13 @@ class Settings:
 
     llm_model: str = field(default_factory=lambda: os.environ.get("SIDEKICK_LLM_MODEL", "gpt-5.4-mini"))
     llm_api_key: str | None = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY"))
-    llm_max_tool_calls: int = field(
-        default_factory=lambda: int(os.environ.get("SIDEKICK_MAX_TOOL_CALLS", "8"))
-    )
-    llm_timeout_s: float = field(
-        default_factory=lambda: float(os.environ.get("SIDEKICK_LLM_TIMEOUT", "60"))
-    )
+    llm_max_tool_calls: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_MAX_TOOL_CALLS", "8")))
+    llm_timeout_s: float = field(default_factory=lambda: float(os.environ.get("SIDEKICK_LLM_TIMEOUT", "60")))
 
     cors_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             o.strip()
-            for o in os.environ.get(
-                "SIDEKICK_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
-            ).split(",")
+            for o in os.environ.get("SIDEKICK_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
             if o.strip()
         )
     )
@@ -178,12 +146,6 @@ class Settings:
 
     @property
     def static_dir(self) -> Path:
-        """The built frontend, when one service serves both it and the API.
-
-        The hosted deployment has one free web service, so the API serves the
-        bundle it was built against. That also removes cross-origin requests from
-        the demo path entirely.
-        """
         return _env_path("SIDEKICK_STATIC_DIR", REPO_ROOT / "frontend" / "dist")
 
     @property
@@ -202,7 +164,6 @@ _settings: Settings | None = None
 
 
 def get_settings() -> Settings:
-    """Process-wide settings, read from the environment once."""
     global _settings
     if _settings is None:
         _settings = Settings()
@@ -210,6 +171,5 @@ def get_settings() -> Settings:
 
 
 def reset_settings() -> None:
-    """Drop cached settings. Used by tests that patch the environment."""
     global _settings
     _settings = None

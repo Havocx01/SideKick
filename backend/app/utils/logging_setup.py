@@ -35,7 +35,6 @@ def get_logger(name: str) -> logging.Logger:
 
 @contextmanager
 def timed(logger: logging.Logger, label: str):
-    """Log how long a stage took. Runtime is a named risk, so stages report it."""
     start = time.perf_counter()
     logger.info("%s ...", label)
     try:

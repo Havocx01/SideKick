@@ -1,10 +1,4 @@
-"""Per-engine replay series for the warning replay view.
-
-The view exists to answer one question concretely: what did the model see, and
-when did it warn? So each series carries the score at every cycle, the alert
-episodes derived from it, and both the original and the altered reading for the
-sensor under test, on the same time axis.
-"""
+"""Per-engine replay series for the warning replay view."""
 
 from __future__ import annotations
 
@@ -14,12 +8,7 @@ from app.config import EXPERIMENT, ExperimentConfig
 from app.faults.inject import apply_fault
 from app.models.design import EngineBlock, design_from_blocks
 from app.models.train import TrainingResult
-from app.schemas import (
-    CLEAN_SCENARIO_ID,
-    FaultSpec,
-    ReplayPoint,
-    ReplaySeries,
-)
+from app.schemas import CLEAN_SCENARIO_ID, FaultSpec, ReplayPoint, ReplaySeries
 from app.scoring.metrics import score_engine
 
 
@@ -32,7 +21,6 @@ def build_series(
     spec: FaultSpec | None = None,
     config: ExperimentConfig = EXPERIMENT,
 ) -> ReplaySeries | None:
-    """Build one engine's replay series, clean or under one fault."""
     fold = training.fold_for(equipment_id)
     candidate = fold.candidates[candidate_name]
     block = fold.blocks[equipment_id]
@@ -43,31 +31,25 @@ def build_series(
         return None
 
     readings = training.dataset.sensor_matrix(equipment_id)
-    sensor_clean: np.ndarray | None = None
-    sensor_faulted: np.ndarray | None = None
-    onset_rul: int | None = None
-    affected_cycles = 0
+    sensorClean: np.ndarray | None = None
+    sensorFaulted: np.ndarray | None = None
+    onsetRul: int | None = None
+    affectedCycles = 0
 
     if spec is None:
-        design = design_from_blocks(
-            {equipment_id: block}, builder.feature_names(), equipment_ids=[equipment_id]
-        )
+        design = design_from_blocks({equipment_id: block}, builder.feature_names(), equipment_ids=[equipment_id])
     else:
         if spec.sensor not in builder.preprocessor.sensors:
             return None
         index = builder.preprocessor.index_of(spec.sensor)
         injected = apply_fault(
-            readings[:, index],
-            block.rul,
-            spec,
-            sensor_std=builder.preprocessor.std_of(spec.sensor),
-            config=config,
+            readings[:, index], block.rul, spec, sensor_std=builder.preprocessor.std_of(spec.sensor), config=config
         )
         if not injected.applied:
             return None
         features = block.features.copy()
         builder.rebuild_sensor(features, injected.values, spec.sensor)
-        faulted_block = EngineBlock(
+        faultedBlock = EngineBlock(
             equipment_id=equipment_id,
             features=features,
             labels=block.labels,
@@ -76,19 +58,15 @@ def build_series(
             rows=block.rows,
             scorable=scorable,
         )
-        design = design_from_blocks(
-            {equipment_id: faulted_block}, builder.feature_names(), equipment_ids=[equipment_id]
-        )
-        sensor_clean = readings[scorable, index]
-        sensor_faulted = injected.values[scorable]
-        affected_cycles = injected.affected_cycles
+        design = design_from_blocks({equipment_id: faultedBlock}, builder.feature_names(), equipment_ids=[equipment_id])
+        sensorClean = readings[scorable, index]
+        sensorFaulted = injected.values[scorable]
+        affectedCycles = injected.affected_cycles
         if injected.onset_index is not None:
-            onset_rul = int(block.rul[injected.onset_index])
+            onsetRul = int(block.rul[injected.onset_index])
 
     scores = candidate.score(design)
-    scoring = score_engine(
-        equipment_id, scores, design.cycle, design.rul, threshold, config=config
-    )
+    scoring = score_engine(equipment_id, scores, design.cycle, design.rul, threshold, config=config)
 
     points = [
         ReplayPoint(
@@ -97,13 +75,11 @@ def build_series(
             score=float(scores[position]),
             alert=bool(scoring.active[position]),
             sensor_clean=(
-                float(sensor_clean[position])
-                if sensor_clean is not None and np.isfinite(sensor_clean[position])
-                else None
+                float(sensorClean[position]) if sensorClean is not None and np.isfinite(sensorClean[position]) else None
             ),
             sensor_faulted=(
-                float(sensor_faulted[position])
-                if sensor_faulted is not None and np.isfinite(sensor_faulted[position])
+                float(sensorFaulted[position])
+                if sensorFaulted is not None and np.isfinite(sensorFaulted[position])
                 else None
             ),
         )
@@ -117,8 +93,8 @@ def build_series(
         scenario_id=spec.scenario_id if spec else CLEAN_SCENARIO_ID,
         threshold=threshold,
         fault=spec,
-        fault_onset_rul=onset_rul,
-        fault_affected_cycles=affected_cycles,
+        fault_onset_rul=onsetRul,
+        fault_affected_cycles=affectedCycles,
         points=points,
         episodes=scoring.episodes,
         outcome=scoring.outcome,
@@ -134,26 +110,19 @@ def choose_replay_engines(
     limit: int = 6,
     config: ExperimentConfig = EXPERIMENT,
 ) -> list[str]:
-    """Pick engines worth showing: a mix of detections, late warnings and misses.
-
-    A demo that only shows successes is not evidence. Including the failures the
-    evaluation actually found is the point of the view.
-    """
-    per_engine = training.out_of_fold[candidate_name]
+    perEngine = training.out_of_fold[candidate_name]
     detected: list[str] = []
     late: list[str] = []
     missed: list[str] = []
 
-    for equipment_id, engine in sorted(per_engine.items()):
-        scoring = score_engine(
-            equipment_id, engine.scores, engine.cycles, engine.rul, threshold, config=config
-        )
+    for equipmentId, engine in sorted(perEngine.items()):
+        scoring = score_engine(equipmentId, engine.scores, engine.cycles, engine.rul, threshold, config=config)
         if scoring.outcome.missed:
-            missed.append(equipment_id)
+            missed.append(equipmentId)
         elif scoring.outcome.late:
-            late.append(equipment_id)
+            late.append(equipmentId)
         else:
-            detected.append(equipment_id)
+            detected.append(equipmentId)
 
     chosen: list[str] = []
     # Round-robin across the three outcomes so the selection is not all successes.

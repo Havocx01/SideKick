@@ -1,15 +1,4 @@
-"""Alert threshold selection.
-
-The threshold is chosen on out-of-fold predictions from clean data, before any
-fault result is seen, and then frozen. Choosing it against the fault results
-would tune the model to the test it is about to be judged by.
-
-The rule: among candidate thresholds whose early alarm burden stays inside the
-engineer's budget, take the one with the highest useful detection; break ties
-towards fewer alarms. If no threshold fits the budget, take the one with the
-lowest burden and record that the budget could not be met, rather than quietly
-relaxing it.
-"""
+"""Alert threshold selection."""
 
 from __future__ import annotations
 
@@ -20,9 +9,7 @@ import numpy as np
 
 from app.schemas import AcceptanceCriteria, AlertMetrics
 
-#: Number of quantile-spaced thresholds to evaluate. Quantiles rather than a
-#: fixed 0..1 grid, so the same code works for the age baseline, whose score is a
-#: raw cycle count rather than a probability.
+# Quantiles also work for the age baseline, whose scores are cycle counts.
 DEFAULT_GRID = 40
 
 
@@ -36,7 +23,6 @@ class ThresholdChoice:
 
 
 def candidate_thresholds(scores: np.ndarray, grid: int = DEFAULT_GRID) -> np.ndarray:
-    """Quantile-spaced unique thresholds spanning the observed score range."""
     finite = np.asarray(scores, dtype=np.float64)
     finite = finite[np.isfinite(finite)]
     if finite.size == 0:
@@ -54,21 +40,13 @@ def choose_threshold(
     *,
     grid: int = DEFAULT_GRID,
 ) -> ThresholdChoice:
-    """Pick a threshold using ``evaluate`` to measure each candidate."""
     thresholds = candidate_thresholds(scores, grid)
     results = [(float(t), evaluate(float(t))) for t in thresholds]
 
     within = [(t, m) for t, m in results if m.early_alarm_burden <= criteria.max_early_alarm_burden]
     if within:
-        threshold, metrics = max(
-            within, key=lambda pair: (pair[1].detection_fraction, -pair[1].early_alarm_burden)
-        )
-        return ThresholdChoice(
-            threshold=threshold,
-            metrics=metrics,
-            within_budget=True,
-            considered=len(results),
-        )
+        threshold, metrics = max(within, key=lambda pair: (pair[1].detection_fraction, -pair[1].early_alarm_burden))
+        return ThresholdChoice(threshold=threshold, metrics=metrics, within_budget=True, considered=len(results))
 
     threshold, metrics = min(results, key=lambda pair: pair[1].early_alarm_burden)
     return ThresholdChoice(

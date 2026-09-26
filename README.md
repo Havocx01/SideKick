@@ -1,146 +1,100 @@
 # Sidekick
 
-**Selects failure-prediction models by how their alerts survive sensor faults.**
+Sidekick trains equipment failure-warning models, tests them against missing,
+frozen and drifting sensor readings, and compares how well their warnings hold
+up. Each experiment produces a recommendation with supporting evidence.
 
-ABB Accelerator 2026, Theme 1 — Agentic Predictive Maintenance Studio.
-Adam Qablawi and Kareem Massoud.
+ABB Accelerator 2026, Theme 1. Built by Adam Qablawi and Kareem Massoud.
 
----
+## Run locally
 
-## The problem
+Install Python 3.11 or newer and Node.js 20 or newer, then open a terminal in this
+folder.
 
-A predictive-maintenance model is chosen on clean historical data and then deployed
-onto sensors that drop out, freeze, and drift. Nothing in the usual selection
-process asks what happens then, so the question is answered in production, by the
-alert that never arrived.
+Windows PowerShell:
 
-## What this does
+```powershell
+.\tasks.ps1 setup
+.\tasks.ps1 build
+$env:SIDEKICK_MODE = 'full'
+.\tasks.ps1 api
+```
 
-Sidekick trains a set of candidate models, then re-scores every one of them under a
-matrix of injected sensor faults, and recommends the model whose **warnings hold
-up** rather than the one with the best clean-data score. The full result on NASA
-C-MAPSS FD001 is committed to this repository and served by the hosted demo.
-
-### The result this produces
-
-Six of the ten candidates reach **100% detection on clean data**. On clean data they
-are indistinguishable, and any of them would look like a defensible choice.
-
-Under the required fault set, they separate by up to 49 percentage points:
-
-| Candidate | Clean | Worst required fault | Qualifies |
-|---|---:|---:|---|
-| `xgboost_augmented/aug3` *(recommended)* | 100% | **99%** | yes |
-| `xgboost/xgb1` | 100% | 99% | yes |
-| `xgboost_augmented/aug1` | 100% | 93% | yes |
-| `xgboost/xgb2` | 100% | 81% | yes |
-| `age_baseline/age1` *(reads no sensor)* | 70% | 70% | yes |
-| `logistic_regression/lr3` | 100% | 68% | **no** |
-| `logistic_regression/lr1` | 100% | 68% | **no** |
-| `logistic_regression/lr2` | 100% | **51%** | **no** |
-
-Three candidates with perfect clean-data detection are disqualified. `lr2` loses
-half its detections when one sensor stops reporting 60 cycles before failure.
-
-The recommended model was then scored **once** on 20 engines that no model,
-threshold, or selection decision had ever seen: 100% detection clean, 100% under
-its worst required fault, 95% interval 0.84–1.00. The interval is wide because 20
-engines is 20 engines, and the interface says so rather than reporting the point
-estimate alone.
-
-## What it does not establish
-
-Stated here, in the interface, and in the evidence bundle, because a limitation
-that only appears in a report does not travel with the number:
-
-- One dataset, one failure mode, simulated. C-MAPSS is a simulation, not a fleet.
-- Faults are injected synthetically. Real sensor failures are messier and correlate
-  with the conditions that cause the failure being predicted.
-- 100 engines total. Intervals are wide and small differences between candidates
-  are not established by the data — the ranking flags the pairs it cannot separate.
-- Feature attributions describe model behaviour, not physical cause.
-
----
-
-## Quick start
+macOS or Linux, with Make installed:
 
 ```bash
-git clone <this repo> && cd Project-ABB
-
-# Windows                         # macOS / Linux
-.\tasks.ps1 setup                 make setup
-.\tasks.ps1 data                  make data        # downloads C-MAPSS FD001
-.\tasks.ps1 pipeline              make pipeline    # ~3 min, writes evidence/bundle.json
-.\tasks.ps1 build                 make build
-.\tasks.ps1 api                   make api         # http://127.0.0.1:8000
+make setup
+make build
+SIDEKICK_MODE=full make api
 ```
 
-The evaluation is already committed at `evidence/bundle.json`, so `api` alone is
-enough to browse the recorded result. Run `make help` or `.\tasks.ps1 help` for
-every task.
+Open http://127.0.0.1:8000. After the first setup and build, only the last two
+PowerShell commands, or the last Bash command, are needed. Press Ctrl+C in the
+server terminal to stop the app. Rebuild after changing frontend code.
 
-With Docker:
+Installation needs internet access. Exploring the included benchmark and running
+the sample experiment require no API key or dataset download. Optional settings
+are listed in `.env.example`; set them in your shell or container environment.
+
+## Features
+
+- Explore the recorded NASA C-MAPSS evaluation.
+- Generate 60 synthetic equipment histories and run a new local experiment.
+- Upload a CSV up to 10 MB, preview it and confirm its column mapping.
+- Set minimum detection and maximum early-alarm burden before training.
+- Compare ordinary and fault-augmented models under a fixed set of sensor faults.
+- Replay warnings for individual machines and inspect the evidence in the sidebar.
+- Reopen saved experiments and export an HTML report, JSON evidence and CSV metrics.
+
+Choose **Run sample experiment** on the home screen to try the complete workflow.
+Check the data and equipment split, confirm the acceptance limits, then start
+training. Results open when the experiment finishes.
+
+For uploads, provide equipment IDs, integer cycle indices and numeric sensor
+columns. Histories must reach failure. Supply a failure-cycle column or explicitly
+confirm that the final reading marks failure. Incomplete histories are not
+supported. The data check explains invalid mappings and insufficient equipment
+before training starts. Failure targets must not also be selected as sensors.
+
+One experiment can run at a time. The app shows its current stage and elapsed
+time, supports cancellation and stops runs after 15 minutes. Refreshing the page
+preserves progress; a server restart marks unfinished jobs as interrupted.
+
+## Data and evidence
+
+`artifacts/workspace/` holds uploaded data, experiment metadata, logs and results.
+Each experiment has its own files. Browser experiments never overwrite the
+recorded benchmark in `evidence/bundle.json`.
+
+Keep `evidence/archive/` alongside the current bundle. Its historical JSON files
+record which holdout engines were previously examined, and the evaluation script
+uses them to prevent reuse as an independent validation set.
+
+The initial 70% detection and 10% early-alarm burden limits are demonstration
+settings. NASA data and injected faults are simulated. These results do not
+establish performance on ABB equipment or authorize deployment. The browser
+does not score the holdout.
+
+The Evidence guide answers supported questions from the selected experiment's
+metrics using fixed templates. It makes no external model calls. Evidence exports
+include configuration, limitations and source identifiers; raw uploaded data and
+raw sensor replay values are excluded.
+
+## Replay and development
+
+Set `SIDEKICK_MODE=replay` to serve recorded evidence with upload and training
+disabled. The production Docker image uses this mode:
 
 ```bash
-docker compose up          # API on :8000, frontend with hot reload on :5173
-docker build -t sidekick . && docker run -p 8000:8000 sidekick   # the deployed image
+docker build -t sidekick .
+docker run --rm -p 8000:8000 sidekick
 ```
 
-## The three views
+For frontend development, run `.\tasks.ps1 api` and `.\tasks.ps1 web` in separate
+terminals. The frontend opens on http://127.0.0.1:5173 and proxies requests to the
+API on port 8000. `docker compose up --build` provides the same two services.
 
-1. **Data setup** — what the data is, what the profiler found wrong with it, how it
-   is partitioned, and what counts as a useful warning. All fixed before any model
-   is trained.
-2. **Model comparison** — candidates ranked by worst-case detection under fault,
-   with confidence intervals, a per-sensor fault heatmap, and calibration.
-3. **Warning replay** — one machine's history cycle by cycle, clean and faulted on
-   one axis, with the alert episodes and what moved the score.
-
-A copilot panel answers questions about the recorded evaluation. It reaches the
-results through a fixed set of tools, and every figure in an answer is checked
-against the tool output that should contain it; unverified figures are labelled as
-such. Without an API key it still answers, deterministically, from the evidence.
-
-## How the result stays trustworthy
-
-| Risk | What the code does |
-|---|---|
-| Leakage between train and test | Partitioned by equipment, never by row. Preprocessing statistics are fit on training engines only. Enforced by `assert_engine_disjoint` and tested. |
-| Features that see the future | Windows are strictly trailing. `assert_no_lookahead` verifies that changing a future reading cannot change a past feature. |
-| Thresholds tuned to the test | Thresholds are chosen on clean out-of-fold scores, before the fault matrix runs. |
-| Selecting on the holdout | The holdout is scored once, on the candidate development already chose. `score_holdout.py` refuses to run if no candidate was recommended. |
-| A tool that always finds a winner | "No candidate qualifies" is a valid outcome the selection rule can return. |
-| Numbers that move between runs | `check_reproducibility.py` runs the evaluation twice and compares every metric: 1359 metrics, maximum difference 0. |
-| A copilot inventing figures | Numeric claims are matched against recorded tool output before the answer is shown. |
-
-## Documentation
-
-- [Architecture](docs/architecture.md) — how the pieces fit, and why the hosted demo is read-only.
-- [Metrics](docs/metrics.md) — exactly what detection, burden, and lead time mean here.
-- [Decisions](docs/decisions.md) — the choices that shaped the result, and what was rejected.
-- [Development](docs/development.md) — setup, tasks, testing, and deployment.
-
-## Layout
-
-```
-backend/app/
-  config.py      Frozen experiment definition; changing it changes the fingerprint
-  schemas.py     One contract, shared by the pipeline, the API, and the frontend
-  data/          Loading, the upload contract, profiling, synthetic fallback
-  features/      Causal windowed features with a single-sensor rebuild path
-  models/        Splits, candidates, cross-validated training, thresholds
-  faults/        Fault specification, injection, and the scenario matrix
-  scoring/       Alert episodes, operational measures, the selection rule
-  evidence/      Run records, optional MLflow mirror, the replay bundle
-  copilot/       Tool registry, numeric-claim verification, bounded agent loop
-  api/           FastAPI surface
-frontend/src/    React views, charts, and the copilot panel
-scripts/         fetch_data, run_pipeline, score_holdout, check_reproducibility,
-                 export_bundle, generate_types
-evidence/        bundle.json — the committed evaluation the demo serves
-```
-
-## Idea-phase proposal
-
-[PDF](Idea%20Phase/documents/Sidekick%20ABB%20Accelerator%202026%20Final%20Submission.pdf) ·
-[Word](Idea%20Phase/documents/Sidekick%20ABB%20Accelerator%202026%20Final%20Submission.docx)
+Run `.\tasks.ps1 help` or `make help` for the remaining commands. Supporting
+scripts download NASA data, run the broader fault matrix, regenerate the
+benchmark bundle, check reproducibility and perform a guarded holdout evaluation.
+The pipeline and bundle commands replace the recorded benchmark when run.
