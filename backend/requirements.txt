@@ -1,8 +1,4 @@
-# Serving dependencies only.
-# The hosted replay service runs on 512 MB RAM, so training libraries are
-# deliberately excluded here. See requirements-train.txt for the full pipeline.
+# Serving only; training dependencies are in requirements-train.txt.
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.32,<1.0
 pydantic>=2.9,<3.0
-openai>=1.54,<3.0
-python-multipart>=0.0.12

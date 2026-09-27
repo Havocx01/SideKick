@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
-from app.config import EXPERIMENT
+from app.config import EXPERIMENT, get_settings
 from app.experiments.provenance import source_digest
 from app.experiments.store import ACTIVE, Workspace
 from app.schemas import ExperimentCreate, ExperimentRecord
@@ -58,6 +58,7 @@ class Jobs:
                 protocol_revision=3,
                 min_detection_fraction=request.min_detection_fraction,
                 max_early_alarm_burden=request.max_early_alarm_burden,
+                configs_per_candidate=1 if get_settings().mode == "demo" else EXPERIMENT.configs_per_candidate,
             )
             record = ExperimentRecord(
                 experiment_id=str(uuid4()),
@@ -72,10 +73,14 @@ class Jobs:
                 source_digest=source_digest(),
             )
             directory = self.workspace.directory("experiments", record.experiment_id)
-            directory.mkdir(parents=True)
             self.workspace.reserve(record.model_dump(mode="json"))
-            self.thread = threading.Thread(target=self._run, args=(record.experiment_id,), daemon=True)
-            self.thread.start()
+            try:
+                directory.mkdir(parents=True)
+                self.thread = threading.Thread(target=self._run, args=(record.experiment_id,), daemon=True)
+                self.thread.start()
+            except (OSError, RuntimeError) as exc:
+                self.workspace.update(record.experiment_id, status="failed", error=str(exc), finished_at=time.time())
+                raise
             return record
 
     def cancel(self, id: str):
@@ -97,6 +102,8 @@ class Jobs:
             env = dict(os.environ)
             env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
             env["SIDEKICK_MLFLOW"] = "0"
+            if env.get("SIDEKICK_MODE") == "demo":
+                env["SIDEKICK_TRAIN_THREADS"] = "1"
             # The worker never needs external services or their credentials.
             env.pop("OPENAI_API_KEY", None)
             for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):

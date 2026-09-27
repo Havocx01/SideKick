@@ -41,16 +41,6 @@ def score_clean(
     return results
 
 
-def clean_scorings(
-    training: TrainingResult, candidate_name: str, threshold: float, *, config: ExperimentConfig = EXPERIMENT
-) -> list[EngineScoring]:
-    perEngine = training.out_of_fold[candidate_name]
-    return [
-        score_engine(equipmentId, engine.scores, engine.cycles, engine.rul, threshold, config=config)
-        for equipmentId, engine in sorted(perEngine.items())
-    ]
-
-
 def run_matrix(
     training: TrainingResult,
     scenarios: list[FaultSpec],

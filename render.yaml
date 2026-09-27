@@ -1,4 +1,4 @@
-# Serve committed evidence; local uploads cannot persist on this service.
+# Hosted synthetic experiments are temporary; uploaded data stays local.
 
 services:
   - type: web
@@ -10,7 +10,7 @@ services:
     autoDeploy: true
     envVars:
       - key: SIDEKICK_MODE
-        value: replay
+        value: demo
       - key: SIDEKICK_LOG_LEVEL
         value: INFO
       - key: SIDEKICK_CORS_ORIGINS

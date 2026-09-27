@@ -29,7 +29,7 @@
 :root[data-theme="dark"] {
   --ink: #f1f5f9;
   --ink-soft: #94a3b8;
-  --ink-faint: #64748b;
+  --ink-faint: #8798ad;
   --line: #1e293b;
   --line-strong: #334155;
   --surface: #0f172a;
@@ -55,7 +55,7 @@
   :root:not([data-theme="light"]) {
     --ink: #f1f5f9;
     --ink-soft: #94a3b8;
-    --ink-faint: #64748b;
+    --ink-faint: #8798ad;
     --line: #1e293b;
     --line-strong: #334155;
     --surface: #0f172a;

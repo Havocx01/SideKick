@@ -31,14 +31,18 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, { headers: { "Content-Type": "application/json" }, ...init });
+  const response = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", "X-Sidekick-Request": "1", ...init?.headers }
+  });
 
   if (!response.ok) {
     let detail: string | undefined;
     try {
       const body = await response.json();
       detail = typeof body?.detail === "string" ? body.detail : JSON.stringify(body?.detail);
-    } catch {
+    } catch (error) {
+      console.warn("Could not read the server error response.", error);
       detail = undefined;
     }
     throw new ApiError(
@@ -63,9 +67,11 @@ function query(params: Record<string, string | boolean | undefined>): string {
 
 export interface HealthReport {
   status: string;
-  mode: "full" | "replay";
+  mode: "full" | "replay" | "demo";
   can_train: boolean;
   can_upload: boolean;
+  sample_equipment: number;
+  sample_configurations: number;
   copilot: string;
   note: string;
   bundle: {

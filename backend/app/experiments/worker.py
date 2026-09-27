@@ -133,6 +133,11 @@ def run(root: Path, id: str):
             "Small differences and overlapping confidence intervals do not establish a reliable ranking or a causal benefit from augmentation.",
             "Attributions describe changes in model scores, not the physical cause of a failure.",
         ]
+        if record["name"] == "Hosted sample: 30 histories, 3 sensors":
+            bundle.limitations.insert(
+                0,
+                "The hosted sample uses 30 short synthetic histories, three sensors and one configuration per model family to fit free hosting. Only ten histories are evaluated across five folds; twenty remain unscored. It demonstrates the workflow and is not comparable to the broader local sample or NASA benchmark.",
+            )
         if source_digest() != record["source_digest"]:
             raise ValueError(
                 "Source files changed during training. This run cannot claim a single source version; rerun after edits finish."

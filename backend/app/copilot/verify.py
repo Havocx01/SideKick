@@ -102,16 +102,6 @@ def unverified(claims: list[NumericClaim]) -> list[NumericClaim]:
     return [claim for claim in claims if not claim.verified]
 
 
-def correction_prompt(claims: list[NumericClaim]) -> str:
-    figures = ", ".join(sorted({claim.text for claim in unverified(claims)}))
-    return (
-        "These figures in your answer do not match any value returned by the tools: "
-        f"{figures}. Restate the answer using only numbers that appear in the tool "
-        "results. If you need a number you do not have, call the relevant tool, or "
-        "say plainly that it was not measured."
-    )
-
-
 def annotate(text: str, claims: list[NumericClaim]) -> str:
     outstanding = unverified(claims)
     if not outstanding:

@@ -13,9 +13,6 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=False, populate_by_name=True)
 
 
-# Enumerations
-
-
 class ColumnRole(str, Enum):
     equipment_id = "equipment_id"
     cycle_index = "cycle_index"
@@ -56,9 +53,6 @@ class Partition(str, Enum):
 class SelectionOutcome(str, Enum):
     qualified = "qualified"
     none_qualified = "none_qualified"
-
-
-# Data contract and profiling
 
 
 class ColumnMapping(Strict):
@@ -111,9 +105,6 @@ class DatasetProfile(Strict):
         return [s.name for s in self.sensors if s.varies]
 
 
-# Partitions and candidates
-
-
 class SplitAssignment(Strict):
     holdout: list[str]
     development: list[str]
@@ -128,9 +119,6 @@ class CandidateConfig(Strict):
     params: dict[str, Any] = Field(default_factory=dict)
     uses_sensors: bool = True
     description: str = ""
-
-
-# Faults
 
 
 class FaultSpec(Strict):
@@ -181,8 +169,6 @@ class FaultSpec(Strict):
 
 
 CLEAN_SCENARIO_ID = "clean"
-
-# Alerts and measures
 
 
 class WilsonInterval(Strict):
@@ -245,9 +231,6 @@ class ScenarioResult(Strict):
     run_id: str | None = None
 
 
-# Calibration and explanation
-
-
 class ReliabilityBin(Strict):
     lower: float
     upper: float
@@ -282,9 +265,6 @@ class AlertExplanation(Strict):
     contributions: list[ShapContribution] = Field(default_factory=list)
     available: bool = True
     note: str = "Attributions describe model behaviour, not physical fault causes."
-
-
-# Selection
 
 
 class AcceptanceCriteria(Strict):
@@ -336,9 +316,6 @@ class SelectionResult(Strict):
     )
 
 
-# Replay
-
-
 class ReplayPoint(Strict):
     cycle: int
     rul: int
@@ -365,9 +342,6 @@ class ReplaySeries(Strict):
     episodes: list[AlertEpisode]
     outcome: EngineOutcome
     failure_cycle: int
-
-
-# Evidence
 
 
 class RunRecord(Strict):
@@ -493,9 +467,6 @@ class DecisionReport(Strict):
     augmented: CandidateVerdict | None = None
     limitations: list[str]
     guide: list[GuideAnswer]
-
-
-# Copilot
 
 
 class ToolInvocation(Strict):

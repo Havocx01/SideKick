@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import subprocess
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -20,6 +21,9 @@ INDEX_NAME = "index.json"
 
 @lru_cache(maxsize=1)
 def git_commit() -> str | None:
+    deployedCommit = os.environ.get("RENDER_GIT_COMMIT")
+    if deployedCommit:
+        return deployedCommit
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5, check=False

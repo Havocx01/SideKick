@@ -1,4 +1,4 @@
-"""Full-mode data preparation. Imported only by local endpoints and the worker."""
+"""CSV preparation for local uploads and synthetic experiments."""
 
 from __future__ import annotations
 
@@ -97,20 +97,22 @@ def confirm(workspace, id: str, request: DatasetConfirmation) -> DatasetRegistra
     return record
 
 
-def sample(workspace) -> DatasetRegistration:
+def sample(workspace, *, hosted: bool = False) -> DatasetRegistration:
     id = str(uuid4())
     directory = workspace.directory("datasets", id)
     directory.mkdir(parents=True)
-    dataset = make_synthetic_dataset()
+    dataset = make_synthetic_dataset(n_equipment=30, min_life=100, max_life=160) if hosted else make_synthetic_dataset()
+    sensors = dataset.sensors[:3] if hosted else dataset.sensors
     path = directory / "data.csv"
-    dataset.frame.drop(columns=["rul"]).to_csv(path, index=False)
-    register(workspace, path, id, "Synthetic equipment sample", "synthetic")
+    dataset.frame[["equipment_id", "cycle", *sensors, "failure_cycle"]].to_csv(path, index=False)
+    name = "Hosted sample: 30 histories, 3 sensors" if hosted else "Synthetic equipment sample"
+    register(workspace, path, id, name, "synthetic")
     return confirm(
         workspace,
         id,
         DatasetConfirmation(
             mapping=ColumnMapping(
-                equipment_id="equipment_id", cycle_index="cycle", sensors=dataset.sensors, failure_cycle="failure_cycle"
+                equipment_id="equipment_id", cycle_index="cycle", sensors=sensors, failure_cycle="failure_cycle"
             ),
             complete_histories=True,
         ),

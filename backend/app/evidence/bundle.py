@@ -17,9 +17,7 @@ logger = get_logger(__name__)
 if TYPE_CHECKING:
     from app.scoring.pipeline import EvaluationResult
 
-#: Stated on every report and in the bundle itself. Taken from the proposal's
-#: limitations, kept here so they travel with the data rather than living only in
-#: a slide deck.
+# Limitations travel with exported evidence.
 LIMITATIONS = [
     "FD001 is simulated aerospace data under one operating condition and one fault "
     "mode. It does not validate behaviour on ABB motors or pumps.",

@@ -43,8 +43,10 @@ def health(config: Settings = Depends(settings)) -> dict:
     return {
         "status": "ok",
         "mode": config.mode,
-        "can_train": config.mode == "full",
+        "can_train": config.mode in ("full", "demo"),
         "can_upload": config.mode == "full",
+        "sample_equipment": 30 if config.mode == "demo" else 60,
+        "sample_configurations": 4 if config.mode == "demo" else 10,
         "evidence_guide": True,
         "copilot": "recorded evidence only",
         "bundle": bundleState,
@@ -52,6 +54,8 @@ def health(config: Settings = Depends(settings)) -> dict:
             "This deployment serves recorded evidence. Training, fault injection and "
             "attribution run locally; see the repository for how to reproduce them."
             if config.mode == "replay"
+            else "Hosted synthetic experiments. Results expire after 24 hours and may be lost on a server restart, idle shutdown or redeploy. Export evidence to keep it."
+            if config.mode == "demo"
             else "Full local deployment."
         ),
     }
