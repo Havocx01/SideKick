@@ -26,9 +26,8 @@
 
 <div align="center">
 
-[![Watch 24-Second Sidekick Demo](media/poster.jpg)](media/demo.mp4)
+[![Watch 24-Second Sidekick Demo](media/poster.jpg)](https://github.com/user-attachments/assets/05654cc4-471e-45aa-9fc5-204009166601)
 
-**▶️ [Click to Watch the 24-Second Product Walkthrough (MP4)](media/demo.mp4)**
 
 </div>
 
