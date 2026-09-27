@@ -15,7 +15,7 @@
   --clean-strong: #164e78;
   --ok: #1a7a57;
   --ok-soft: #e8f5ef;
-  --warn: #a96a06;
+  --warn: #925b05;
   --warn-soft: #fdf3e2;
   --bad: #b32718;
 
@@ -36,7 +36,7 @@
   --canvas: #090e17;
   --raised: #162032;
 
-  --fault: #f43f5e;
+  --fault: #fb7185;
   --fault-soft: rgba(244, 63, 94, 0.16);
   --clean: #38bdf8;
   --clean-soft: rgba(56, 189, 248, 0.15);
@@ -62,7 +62,7 @@
     --canvas: #090e17;
     --raised: #162032;
 
-    --fault: #f43f5e;
+    --fault: #fb7185;
     --fault-soft: rgba(244, 63, 94, 0.16);
     --clean: #38bdf8;
     --clean-soft: rgba(56, 189, 248, 0.15);

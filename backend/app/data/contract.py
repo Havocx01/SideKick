@@ -123,7 +123,9 @@ def infer_mapping(frame: pd.DataFrame) -> ColumnMapping:
 
 def validate_mapping(frame: pd.DataFrame, mapping: ColumnMapping) -> None:
     missing = [
-        name for name in [mapping.equipment_id, mapping.cycle_index, *mapping.sensors] if name not in frame.columns
+        name
+        for name in [mapping.equipment_id, mapping.cycle_index, *mapping.sensors, *mapping.ignored]
+        if name not in frame.columns
     ]
     if mapping.failure_cycle and mapping.failure_cycle not in frame.columns:
         missing.append(mapping.failure_cycle)
@@ -137,7 +139,7 @@ def validate_mapping(frame: pd.DataFrame, mapping: ColumnMapping) -> None:
     if nonNumeric:
         raise ContractError(f"sensor columns are not numeric: {nonNumeric}")
 
-    roles = [mapping.equipment_id, mapping.cycle_index, *mapping.sensors]
+    roles = [mapping.equipment_id, mapping.cycle_index, *mapping.sensors, *mapping.ignored]
     if mapping.failure_cycle:
         roles.append(mapping.failure_cycle)
     if len(set(roles)) != len(roles):

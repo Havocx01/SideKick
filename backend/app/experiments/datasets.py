@@ -21,8 +21,11 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def read_csv(path: Path, equipment_column: str | None = None) -> pd.DataFrame:
-    with path.open(encoding="utf-8-sig", newline="") as stream:
-        header = next(csv.reader(stream), [])
+    try:
+        with path.open(encoding="utf-8-sig", newline="") as stream:
+            header = next(csv.reader(stream), [])
+    except csv.Error as exc:
+        raise ValueError("The CSV header cannot be read. Use short column names separated by commas.") from exc
     if not header or len(set(header)) != len(header) or any(not c.strip() for c in header):
         raise ValueError("CSV column names must be present and unique. Rename duplicate or empty headers.")
     if len(header) > 128:

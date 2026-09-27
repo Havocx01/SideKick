@@ -207,7 +207,9 @@ function ExperimentSetup() {
     setBusy(true);
     setError("");
     try {
-      receive(await experiments.confirm(data.dataset_id, { mapping, complete_histories: complete }));
+      const assigned = [mapping.equipment_id, mapping.cycle_index, mapping.failure_cycle, ...mapping.sensors];
+      const confirmed = { ...mapping, ignored: data.columns.filter(column => !assigned.includes(column)) };
+      receive(await experiments.confirm(data.dataset_id, { mapping: confirmed, complete_histories: complete }));
     } catch (e) {
       setError(errorMessage(e));
     } finally {

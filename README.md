@@ -8,6 +8,10 @@ Built for ABB Accelerator 2026 by Adam Qablawi and Kareem Massoud.
 
 [Watch the demo](https://github.com/user-attachments/assets/05654cc4-471e-45aa-9fc5-204009166601)
 
+[Try the prototype](https://sidekick-e9lu.onrender.com/)
+
+[Earlier benchmark walkthrough](https://github.com/user-attachments/assets/05654cc4-471e-45aa-9fc5-204009166601)
+
 ## Features
 
 - Explore the recorded NASA C-MAPSS benchmark.

@@ -25,12 +25,17 @@ include configuration, data fingerprints, source identifiers and limitations.
 - Parent submission: select the existing Sidekick idea-phase entry.
 - Theme: select Theme 1 used for the parent submission.
 - Repository: https://github.com/Havocx01/SideKick
-- Demo link: use the existing Render service URL after the live checks below pass.
+- Demo link: https://sidekick-e9lu.onrender.com/
 - Video: review `media/demo.mp4` before uploading. It predates the compact hosted
   workflow; do not describe recorded benchmark footage as a newly executed run.
 - Presentation: upload the final deck after checking it describes the same scope.
 - Source code: use the fresh ZIP in `artifacts/submission/`, not an older export.
 - Snapshots: use the three PNG files in `media/submission/`.
+
+The document in `idea phase/documents/` describes the original plan, not the
+finished prototype. The final deck must describe the recorded Evidence guide,
+fixed warning windows, and evidence ZIP exports. An external LLM copilot,
+exported prediction endpoint, and adjustable prediction horizon are not shipped.
 
 ## Instructions to run
 
@@ -93,6 +98,24 @@ metrics matched the selected experiments and reserved histories remained unscore
 
 The initial compact-sample measurement was about 432 MiB combined resident memory
 on Windows, compared with about 503 MiB for the larger sample. These measurements
-are not a guarantee of Linux memory use or hosted latency. Docker's Linux engine
-was unavailable during verification, so the container and live service still
-need the checks above before claiming the deployment is verified.
+are not a guarantee of Linux memory use or hosted latency.
+
+On 27 September 2026, the public Render demo completed a real sample run in
+27.8 seconds. Its comparison, Evidence guide, export and page refresh worked.
+A separate browser received 404 for that experiment and its export. All 52 CSV
+metric rows matched the JSON evidence; the reserved histories remained unscored.
+The tested deployment reported commit `68fa6fe0240c5852d9be0fd838a6385172336303`.
+This verifies one hosted run, not a load test or an uptime guarantee.
+
+A clean local environment installed the declared training dependencies and ran
+the sample without OpenAI, multipart, SHAP, matplotlib or an API key. Eleven job
+and access regression tests passed, along with upload validation, fingerprint,
+partition and export checks. Desktop and mobile layouts were checked in both
+themes. Docker's local Linux engine remained unavailable; the deployed Render
+service supplied the hosted verification above.
+
+The subsequent local fixes handle blocked browser storage, malformed CSV
+headers and conflicting ignored-column roles, improve two text contrast colors,
+and explicitly disclose that development results also select thresholds and
+configurations. Deploy these changes and repeat the short live checks before
+submitting. The final pitch deck and updated video still need confirmation.

@@ -4,6 +4,15 @@ export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "sidekick-theme";
 
+function storedTheme() {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch (error) {
+    if (!(error instanceof DOMException) || error.name !== "SecurityError") throw error;
+    return null;
+  }
+}
+
 function getSystemTheme(): Theme {
   if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -11,7 +20,7 @@ function getSystemTheme(): Theme {
 
 function getInitialTheme(): Theme {
   if (typeof window === "undefined") return "light";
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = storedTheme();
   if (stored === "light" || stored === "dark") return stored;
 
   const fromDom = document.documentElement.getAttribute("data-theme");
@@ -31,7 +40,7 @@ export function useTheme() {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const listener = (event: MediaQueryListEvent) => {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = storedTheme();
       if (!stored) {
         const next = event.matches ? "dark" : "light";
         setThemeState(next);
