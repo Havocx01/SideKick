@@ -3,6 +3,7 @@ import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useExperimentId } from "../hooks/useEvidence";
 import { EvidenceGuide } from "./EvidenceGuide";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Layout() {
   const health = useApi(() => api.health(), []);
@@ -21,12 +22,15 @@ export function Layout() {
   return (
     <div className={isEvidence ? "shell has-evidence-guide" : "shell"}>
       <nav className="sidebar" aria-label="Main navigation">
-        <Link to="/" className="brand">
-          <div className="brand-mark">
-            Side<span>kick</span>
-          </div>
-          <div className="brand-tag">Test failure warnings before trusting them.</div>
-        </Link>
+        <div className="sidebar-header">
+          <Link to="/" className="brand">
+            <div className="brand-mark">
+              Side<span>kick</span>
+            </div>
+            <div className="brand-tag">Test failure warnings before trusting them.</div>
+          </Link>
+          <ThemeToggle />
+        </div>
         <div className="nav">
           {views .filter(v => health.data?.can_train || v.to !== "/experiments")
             .map(v => (
