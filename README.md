@@ -5,6 +5,7 @@
 **The Fault-Tolerant AI Qualification Engine for Industrial Failure Warnings**
 
 [![ABB Accelerator 2026](https://img.shields.io/badge/ABB_Accelerator_2026-Theme_1:_Industrial_AI_%26_Reliability-FF000F?style=for-the-badge&logo=abb)](file:///c:/Users/kmass/OneDrive/Documents/GitHub/SideKick/README.md)
+[![24s Video Demo](https://img.shields.io/badge/Demo_Video-24s_Voiceover_Walkthrough-red?style=for-the-badge&logo=youtube&logoColor=white)](media/demo.mp4)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![React 18](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -14,6 +15,20 @@
 *Stress-testing equipment failure-warning models against missing, frozen, and drifting sensor readings before plant deployment.*
 
 **Built by Adam Qablawi & Kareem Massoud • ABB Accelerator 2026 (Theme 1)**
+
+</div>
+
+---
+
+## 🎬 24-Second Video Walkthrough
+
+> **Executive Product Demo**: A high-impact 24-second walkthrough showcasing Sidekick's automated pipeline execution, model qualification leaderboard, and 18-cycle advance alarm window.
+
+<div align="center">
+
+[![Watch 24-Second Sidekick Demo](media/poster.jpg)](media/demo.mp4)
+
+**▶️ [Click to Watch the 24-Second Product Walkthrough (MP4)](media/demo.mp4)**
 
 </div>
 
@@ -38,11 +53,11 @@
 
 ### 1. Model Qualification Leaderboard
 *Stress-testing models under 2,470+ sensor fault permutations to uncover silent alert collapse.*
-![Sidekick Qualification Leaderboard](snapshots/02-qualification-leaderboard.jpg)
+![Sidekick Qualification Leaderboard](media/snapshots/02-qualification-leaderboard.jpg)
 
 ### 2. Warning Replay & Telemetry Drift
 *Real-time sensor degradation curve for Turbofan Unit #012 flagging an 18-cycle advance alarm window.*
-![Sidekick Warning Replay](snapshots/03-telemetry-warning-replay.jpg)
+![Sidekick Warning Replay](media/snapshots/03-telemetry-warning-replay.jpg)
 
 </div>
 
