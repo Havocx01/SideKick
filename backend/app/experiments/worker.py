@@ -128,6 +128,7 @@ def run(root: Path, id: str):
             if record["source"] == "synthetic"
             else "These uploaded histories have not been independently validated as representative of field equipment.",
             "Development results support comparison, not automatic deployment approval. Reserved equipment was not scored.",
+            "Thresholds and model configurations are selected using these same development results. Reported performance may be optimistic; it is not an independent test of the selected model.",
             "Required injected sensor faults are simulated; their severities are not calibrated to ABB field measurements.",
             "The comparison uses complete run-to-failure histories only. It does not establish performance on censored histories or live equipment.",
             "Small differences and overlapping confidence intervals do not establish a reliable ranking or a causal benefit from augmentation.",
