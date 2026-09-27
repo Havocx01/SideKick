@@ -198,8 +198,6 @@ SideKick/
 │   └── styles.css            # Dark/light theme design system tokens
 ├── data/                     # Ingestion scripts and C-MAPSS dataset staging
 ├── evidence/                 # Immutable signed evidence bundles & holdout archives
-├── presentation/             # Native 16:9 pitch deck and presentation assets
-├── snapshots/                # High-resolution application screenshots for review
 ├── tasks.ps1                 # Windows PowerShell automation suite
 ├── Makefile                  # Unix/macOS build automation
 ├── Dockerfile                # Production multi-stage OCI container
