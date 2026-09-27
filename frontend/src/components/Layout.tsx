@@ -11,7 +11,7 @@ export function Layout() {
   const location = useLocation();
   const record = useApi(() => (id ? experiments.get(id) : Promise.resolve(null)), [id, location.pathname]);
   const prefix = id ? `/experiments/${id}` : "";
-  const isEvidence = ["comparison", "replay", "data", "benchmark"].some(p => location.pathname.endsWith(`/${p}`));
+  const isEvidence = ["comparison", "replay", "data", "benchmark"].some((page) => location.pathname.endsWith(`/${page}`));
   const views = [
     { to: "/", label: "Start here" },
     { to: "/experiments", label: "Your experiments" },
@@ -32,10 +32,10 @@ export function Layout() {
           <ThemeToggle />
         </div>
         <div className="nav">
-          {views .filter(v => health.data?.can_train || v.to !== "/experiments")
-            .map(v => (
-              <NavLink key={v.to} to={v.to} end>
-                {v.label}
+          {views .filter((view) => health.data?.can_train || view.to !== "/experiments")
+            .map((view) => (
+              <NavLink key={view.to} to={view.to} end>
+                {view.label}
               </NavLink>
             ))}
         </div>
@@ -43,14 +43,20 @@ export function Layout() {
         <div className="sidebar-foot">
           {health.data ? (
             <>
-              <strong>{health.data.mode === "replay" ? "Recorded demo" : "Local workspace"}</strong>
+              <strong>
+                {health.data.mode === "replay"
+                  ? "Recorded demo"
+                  : health.data.mode === "demo" ? "Hosted sample workspace" : "Local workspace"}
+              </strong>
               <p>
                 {health.data.mode === "replay"
                   ? "Explore saved results. Training and upload are disabled."
-                  : "Training runs on your computer. No API key needed."}
+                  : health.data.mode === "demo"
+                    ? "Train on a compact synthetic sample. Export results within 24 hours; restarts and idle shutdowns may clear them sooner."
+                    : "Training runs on your computer. No API key needed."}
               </p>
             </>
-          ) : health.error ? ("Backend unreachable. Check that the local server is running.") : ("Connecting…")}
+          ) : health.error ? ("Cannot reach the server. Refresh to try again.") : ("Connecting…")}
         </div>
       </nav>
       <main className="main">
@@ -62,7 +68,7 @@ export function Layout() {
                   <strong>
                     {record.data?.source === "synthetic"
                       ? "Synthetic experiment"
-                      : record.data?.source === "upload" ? "Uploaded-data experiment" : "Local experiment"}
+                      : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment"}
                   </strong>
                   <span>
                     {record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source…"} ·{" "}

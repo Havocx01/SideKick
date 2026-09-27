@@ -13,15 +13,24 @@ function errorMessage(error: unknown) {
 }
 const duration = (seconds: number) => `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
 
-function LocalOnly({ children }: { children: ReactNode }) {
+function TrainingOnly({ children, upload = false }: { children: ReactNode; upload?: boolean }) {
   const health = useApi(() => api.health(), []);
   return (
     <StateBlock loading={health.loading} error={health.error}>
-      {health.data?.can_train ? (
+      {(upload ? health.data?.can_upload : health.data?.can_train) ? (
         children
       ) : (
         <Panel title="Training runs on your computer">
-          <p>This public demo displays recorded results. Upload and training are disabled here.</p>
+          <p>
+            {health.data?.mode === "demo"
+              ? "CSV uploads are local only. Try a synthetic sample here or run the app on your computer."
+              : "This deployment displays recorded results. Upload and training are disabled here."}
+          </p>
+          {health.data?.can_train && (
+            <p>
+              <Link to="/new?source=sample">Run a sample experiment</Link>
+            </p>
+          )}
           <Link to="/comparison">Explore the recorded benchmark</Link>
         </Panel>
       )}
@@ -77,7 +86,10 @@ export function Start() {
             <div>
               <Badge tone="warn">Synthetic data</Badge>
               <h2>Run a sample experiment</h2>
-              <p>Generate 60 simulated equipment histories and run real local training. No dataset download needed.</p>
+              <p>
+                Generate {health.data?.sample_equipment ?? 60} simulated equipment histories and run real training. No
+                dataset download needed.
+              </p>
             </div>
             {health.data?.can_train ? (
               <Link className="button primary" to="/new?source=sample">
@@ -106,6 +118,14 @@ export function Start() {
           </section>
         </div>
       </StateBlock>
+      {health.data?.mode === "demo" && (
+        <p className="scope-note">
+          Hosted samples use real server training. Two runs per browser per hour, with one active run across the server.
+          The hosted sample uses 30 short histories, three sensors and four model configurations to fit free hosting.
+          Results belong to this browser and expire after 24 hours; server restarts or idle shutdowns may clear them
+          sooner. Export evidence to keep it. Shared daily limits also apply. The recorded benchmark stays available.
+        </p>
+      )}
       <p className="scope-note">
         A passing result supports further evaluation. Sidekick does not approve deployment, monitor live equipment, or
         establish field performance on ABB assets.
@@ -115,14 +135,16 @@ export function Start() {
 }
 
 export function NewExperiment() {
+  const [params] = useSearchParams();
   return (
-    <LocalOnly>
+    <TrainingOnly upload={params.get("source") !== "sample"}>
       <ExperimentSetup />
-    </LocalOnly>
+    </TrainingOnly>
   );
 }
 
 function ExperimentSetup() {
+  const health = useApi(() => api.health(), []);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [data, setData] = useState<DatasetRegistration | null>(null);
@@ -214,10 +236,12 @@ function ExperimentSetup() {
       <select
         disabled={busy}
         value={mapping?.[key] ?? ""}
-        onChange={e => setMapping(m => m && { ...m, [key]: e.target.value || (key === "failure_cycle" ? null : "") })}
+        onChange={(e) =>
+          setMapping((m) => m && { ...m, [key]: e.target.value || (key === "failure_cycle" ? null : "") })
+        }
       >
         <option value="">{key === "failure_cycle" ? "No failure-cycle column" : "Choose a column"}</option>
-        {data?.columns.map(c => (
+        {data?.columns.map((c) => (
           <option key={c} value={c}>
             {c}
           </option>
@@ -229,21 +253,25 @@ function ExperimentSetup() {
     <>
       <header className="page-head">
         <h1>{isSample ? "Run a sample experiment" : "Use your equipment histories"}</h1>
-        <p>Check the data, choose your acceptance limits, then train and challenge the models locally.</p>
+        <p>Check the data, choose your acceptance limits, then train and challenge the models.</p>
       </header>
       {error && (
         <div className="state error" role="alert">
-          {error} <Link to="/experiments">View experiments</Link>
+          {error} <Link to="/experiments">View your experiments</Link>
+          {" · "}
+          <Link to="/comparison">Explore recorded benchmark</Link>
         </div>
       )}
-      {busy && <p role="status">Working locally. Please wait…</p>}
+      {busy && <p role="status">Preparing your request. Please wait…</p>}
       {!data && (
         <Panel title={isSample ? "Generate a practice dataset" : "Choose a CSV"}>
           {isSample ? (
             <>
               <p>
-                The sample contains 60 simulated equipment histories. Its results demonstrate the workflow and do not
-                validate performance on real machinery.
+                The sample contains {health.data?.sample_equipment ?? 60} simulated equipment histories. Its results
+                demonstrate the workflow and do not validate performance on real machinery.{" "}
+                {health.data?.mode === "demo" &&
+                  "This compact hosted sample evaluates ten histories over five folds, using three sensors and one configuration per model family. Twenty histories remain unscored."}
               </p>
               <button className="primary" disabled={busy} onClick={() => prepare()}>
                 Generate sample data
@@ -260,7 +288,7 @@ function ExperimentSetup() {
                   type="file"
                   accept=".csv,text/csv"
                   disabled={busy}
-                  onChange={e => {
+                  onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) void prepare(file);
                   }}
@@ -291,13 +319,13 @@ function ExperimentSetup() {
               <table>
                 <thead>
                   <tr>
-                    {data.columns.map(c => (<th key={c}>{c}</th>))}
+                    {data.columns.map((c) => (<th key={c}>{c}</th>))}
                   </tr>
                 </thead>
                 <tbody>
                   {data.preview.map((row, i) => (
                     <tr key={i}>
-                      {data.columns.map(c => (<td key={c}>{row[c] === null ? "missing" : String(row[c])}</td>))}
+                      {data.columns.map((c) => (<td key={c}>{row[c] === null ? "missing" : String(row[c])}</td>))}
                     </tr>
                   ))}
                 </tbody>
@@ -317,15 +345,15 @@ function ExperimentSetup() {
               <fieldset disabled={busy}>
                 <legend>Sensor columns</legend>
                 <div className="sensor-options">
-                  {data.columns.map(c => (
+                  {data.columns.map((c) => (
                     <label key={c}>
                       <input
                         type="checkbox"
                         checked={mapping.sensors.includes(c)}
-                        onChange={e =>
+                        onChange={(e) =>
                           setMapping({
                             ...mapping,
-                            sensors: e.target.checked ? [...mapping.sensors, c] : mapping.sensors.filter(s => s !== c)
+                            sensors: e.target.checked ? [...mapping.sensors, c] : mapping.sensors.filter((s) => s !== c)
                           })
                         }
                       />
@@ -340,7 +368,7 @@ function ExperimentSetup() {
                     type="checkbox"
                     checked={complete}
                     disabled={busy}
-                    onChange={e => setComplete(e.target.checked)}
+                    onChange={(e) => setComplete(e.target.checked)}
                   />
                   I confirm every equipment history ends at an observed failure. The final cycle is the failure cycle.
                 </label>
@@ -386,12 +414,14 @@ function ExperimentSetup() {
                     {data.mapping?.sensors.join(", ")}.
                   </p>
                   <ul>
-                    {data.profile.findings?.map(f => (<li key={f.code}>{f.message}</li>))}
+                    {data.profile.findings?.map((f) => (<li key={f.code}>{f.message}</li>))}
                   </ul>
                 </details>
                 <p className="note">
-                  Dataset fingerprint: <code>{data.profile.data_hash}</code>. This confirmed copy is fixed; upload
-                  another copy to change its mapping.
+                  Dataset fingerprint: <code>{data.profile.data_hash}</code>.{" "}
+                  {health.data?.mode === "demo"
+                    ? "The hosted sample has a fixed mapping. Use the local app for your own data."
+                    : "This confirmed copy is fixed; upload another copy to change its mapping."}
                 </p>
               </Panel>
               <Panel
@@ -406,7 +436,7 @@ function ExperimentSetup() {
                       max="100"
                       step="1"
                       value={detection}
-                      onChange={e => setDetection(e.target.valueAsNumber)}
+                      onChange={(e) => setDetection(e.target.valueAsNumber)}
                     />
                   </Field>
                   <Field label="Maximum early-alarm burden (%)">
@@ -416,7 +446,7 @@ function ExperimentSetup() {
                       max="100"
                       step="1"
                       value={burden}
-                      onChange={e => setBurden(e.target.valueAsNumber)}
+                      onChange={(e) => setBurden(e.target.valueAsNumber)}
                     />
                   </Field>
                 </div>
@@ -425,8 +455,9 @@ function ExperimentSetup() {
                   eligible healthy operating time is spent in an alert, more than 45 cycles before failure.
                 </p>
                 <p className="note">
-                  Fixed for this version: five equipment folds, ten candidate configurations, a 20-cycle feature window,
-                  and the required dropout, stuck-sensor and drift tests. No holdout scoring or automatic deployment.
+                  Fixed for this version: five equipment folds, {health.data?.sample_configurations ?? 10} candidate
+                  configurations, a 20-cycle feature window, and the required dropout, stuck-sensor and drift tests. No
+                  holdout scoring or automatic deployment.
                 </p>
                 <button
                   className="primary"
@@ -454,12 +485,13 @@ function ExperimentSetup() {
 
 export function ExperimentHistory() {
   return (
-    <LocalOnly>
+    <TrainingOnly>
       <History />
-    </LocalOnly>
+    </TrainingOnly>
   );
 }
 function History() {
+  const health = useApi(() => api.health(), []);
   const [records, setRecords] = useState<ExperimentRecord[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   useEffect(() => {
@@ -491,14 +523,16 @@ function History() {
         <Link className="button primary" to="/new?source=sample">
           Run sample
         </Link>
-        <Link className="button" to="/new?source=upload">
-          Upload data
-        </Link>
+        {health.data?.can_upload && (
+          <Link className="button" to="/new?source=upload">
+            Upload data
+          </Link>
+        )}
       </div>
       <StateBlock loading={!records && !error} error={error}>
         {records?.length ? (
           <div className="experiment-list">
-            {records.map(r => (
+            {records.map((r) => (
               <Link
                 key={r.experiment_id}
                 to={`/experiments/${r.experiment_id}${r.status === "completed" ? "/comparison" : ""}`}
@@ -518,7 +552,7 @@ function History() {
             ))}
           </div>
         ) : (
-          <Panel title="No local experiments yet">
+          <Panel title="No experiments in this browser yet">
             <p>Start with the synthetic sample to try the entire workflow without a download.</p>
           </Panel>
         )}
@@ -529,9 +563,9 @@ function History() {
 
 export function ExperimentProgress() {
   return (
-    <LocalOnly>
+    <TrainingOnly>
       <Progress />
-    </LocalOnly>
+    </TrainingOnly>
   );
 }
 function Progress() {
@@ -574,7 +608,10 @@ function Progress() {
     <>
       <header className="page-head">
         <h1>{record?.name ?? "Local experiment"}</h1>
-        <p>Training runs in a separate local worker. Refreshing this page will not stop it.</p>
+        <p>
+          Training runs in a separate worker. Refreshing this page will not stop it. Hosted runs need the same browser
+          cookies to reopen.
+        </p>
       </header>
       {error && (
         <div role="alert" className="state error">
@@ -591,7 +628,7 @@ function Progress() {
         >
           <p className="elapsed">{duration(record.elapsed_seconds ?? 0)} elapsed</p>
           <ol className="job-stages">
-            {stages.map(stage => (
+            {stages.map((stage) => (
               <li key={stage} aria-current={record.stage === stage ? "step" : undefined}>
                 {stage}
                 {record.stage === stage && <strong> · current stage</strong>}
@@ -604,8 +641,7 @@ function Progress() {
             {record.work_unit || "completed work items in this stage"}
           </p>
           <p className="note">
-            These counts report actual work. Runtime depends on your computer and data; no completion estimate is
-            assumed.
+            These counts report actual work. Runtime depends on hardware and data; no completion estimate is assumed.
           </p>
           {record.error && (
             <p className="state error" role="alert">

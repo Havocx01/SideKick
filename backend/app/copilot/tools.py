@@ -20,12 +20,6 @@ class Tool:
     handler: ToolHandler
     mutating: bool = False
 
-    def openai_schema(self) -> dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {"name": self.name, "description": self.description, "parameters": self.parameters},
-        }
-
 
 class ToolError(RuntimeError):
     """The message is returned to the caller as a tool error."""
@@ -46,9 +40,6 @@ class ToolRegistry:
         if name not in self._tools:
             raise ToolError(f"unknown tool {name!r}")
         return self._tools[name]
-
-    def schemas(self) -> list[dict[str, Any]]:
-        return [tool.openai_schema() for tool in self._tools.values()]
 
     def names(self) -> list[str]:
         return list(self._tools)

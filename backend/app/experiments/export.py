@@ -10,9 +10,13 @@ from app.experiments.decision import decision
 from app.schemas import EvidenceBundle
 
 
+def csvText(value: str) -> str:
+    # Spreadsheet programs treat these prefixes as formulas.
+    return "'" + value if value.startswith(("=", "+", "-", "@")) else value
+
+
 def export_zip(bundle: EvidenceBundle) -> bytes:
-    # Score traces are evidence; original sensor readings are uploaded data.
-    # Keep the former, remove the latter even when a replay sampled them.
+    # Exports retain score traces without exposing uploaded sensor readings.
     bundle = bundle.model_copy(deep=True)
     for series in bundle.replay_series:
         for point in series.points:
@@ -28,13 +32,11 @@ def export_zip(bundle: EvidenceBundle) -> bytes:
     writer.writerow(["candidate", "config_id", "scenario_id", "partition", "required", *metrics])
     for row in bundle.scenario_results:
         values = row.metrics.model_dump(mode="json")
-        # Prefix formula-like text for safe spreadsheet opening.
-        safe = lambda s: "'" + s if s.startswith(("=", "+", "-", "@")) else s  # noqa: E731
         writer.writerow(
             [
                 row.candidate.value,
-                safe(row.config_id),
-                safe(row.scenario_id),
+                csvText(row.config_id),
+                csvText(row.scenario_id),
                 row.partition.value,
                 row.required,
                 *[values.get(key) for key in metrics],

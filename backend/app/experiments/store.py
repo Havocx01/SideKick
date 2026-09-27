@@ -73,7 +73,7 @@ class Workspace:
                 )
         except sqlite3.IntegrityError as exc:
             raise ValueError(
-                "Another experiment is active. Wait for it to finish or cancel it in Experiments."
+                "The server is already running an experiment. Try again when it finishes, or explore the recorded benchmark."
             ) from exc
 
     def update(self, id: str, *, active_only: bool = True, expected_status=None, **changes):

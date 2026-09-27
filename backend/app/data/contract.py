@@ -1,4 +1,4 @@
-"""The upload contract: what Sidekick requires of a sensor history, and how"""
+"""CSV mapping and validation for complete equipment histories."""
 
 from __future__ import annotations
 

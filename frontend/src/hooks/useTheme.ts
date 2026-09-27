@@ -30,10 +30,10 @@ export function useTheme() {
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const listener = (e: MediaQueryListEvent) => {
+    const listener = (event: MediaQueryListEvent) => {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (!stored) {
-        const next = e.matches ? "dark" : "light";
+        const next = event.matches ? "dark" : "light";
         setThemeState(next);
       }
     };
@@ -44,7 +44,9 @@ export function useTheme() {
   const setTheme = (next: Theme) => {
     try {
       localStorage.setItem(STORAGE_KEY, next);
-    } catch {}
+    } catch (error) {
+      console.warn("Could not save the theme preference.", error);
+    }
     setThemeState(next);
   };
 

@@ -63,10 +63,6 @@ class Dataset:
         except KeyError as exc:
             raise DatasetError(f"unknown equipment id {equipment_id!r}") from exc
 
-    def engine_frame(self, equipment_id: str) -> pd.DataFrame:
-        start, stop = self.rows_for(equipment_id)
-        return self.frame.iloc[start:stop].copy()
-
     def sensor_matrix(self, equipment_id: str) -> np.ndarray:
         start, stop = self.rows_for(equipment_id)
         return np.ascontiguousarray(self.frame.iloc[start:stop][self.sensors].to_numpy(dtype=float))

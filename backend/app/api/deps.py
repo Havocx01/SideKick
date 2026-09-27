@@ -28,23 +28,21 @@ def _cached_bundle() -> EvidenceBundle:
     return bundle
 
 
-def reload_bundle() -> None:
-    """Drop the cache, so a regenerated bundle is picked up without a restart."""
-    _cached_bundle.cache_clear()
-    _cached_registry.cache_clear()
-
-
 def bundle(request: Request, experiment_id: str | None = None) -> EvidenceBundle:
     if experiment_id:
-        if get_settings().mode != "full":
+        if get_settings().mode == "replay":
             raise HTTPException(403, "Local experiments are unavailable in replay mode.")
         try:
+            if get_settings().mode == "demo":
+                from app.experiments.demo import owner
+
+                request.app.state.demo.require("experiments", experiment_id, owner(request))
             workspace = request.app.state.jobs.workspace
             record = workspace.get("experiments", experiment_id)
             if record["status"] != "completed":
                 raise HTTPException(409, "This experiment has no completed results yet.")
             return load_bundle(workspace.directory("experiments", experiment_id) / "bundle.json")
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, FileNotFoundError):
             raise HTTPException(404, "Experiment not found") from None
     try:
         return _cached_bundle()

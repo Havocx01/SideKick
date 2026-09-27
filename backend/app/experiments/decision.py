@@ -10,7 +10,10 @@ def decision(bundle: EvidenceBundle) -> DecisionReport:
     prefix = f"/experiments/{bundle.experiment_id}" if bundle.experiment_id else ""
     comparison = f"{prefix}/comparison"
     replay = f"{prefix}/replay"
-    name = lambda v: f"{v.candidate.value}/{v.config_id}"  # noqa: E731
+
+    def name(verdict):
+        return f"{verdict.candidate.value}/{verdict.config_id}"
+
     rule = (
         f"at least {criteria.min_detection_fraction:.1%} useful detection and at most "
         f"{criteria.max_early_alarm_burden:.1%} early-alarm burden on clean data and every required fault case"

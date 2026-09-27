@@ -11,7 +11,7 @@ from typing import Literal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-RunMode = Literal["full", "replay"]
+RunMode = Literal["full", "replay", "demo"]
 
 
 @dataclass(frozen=True)
@@ -108,7 +108,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 @dataclass
 class Settings:
-    mode: RunMode = field(default_factory=lambda: "replay" if os.environ.get("SIDEKICK_MODE") == "replay" else "full")
+    mode: RunMode = field(default_factory=lambda: os.environ.get("SIDEKICK_MODE", "full"))
+
     data_dir: Path = field(default_factory=lambda: _env_path("SIDEKICK_DATA_DIR", REPO_ROOT / "data"))
     artifacts_dir: Path = field(default_factory=lambda: _env_path("SIDEKICK_ARTIFACTS_DIR", REPO_ROOT / "artifacts"))
     bundle_path: Path = field(
@@ -119,10 +120,7 @@ class Settings:
         default_factory=lambda: os.environ.get("MLFLOW_TRACKING_URI", f"file:{REPO_ROOT / 'mlruns'}")
     )
 
-    llm_model: str = field(default_factory=lambda: os.environ.get("SIDEKICK_LLM_MODEL", "gpt-5.4-mini"))
-    llm_api_key: str | None = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY"))
     llm_max_tool_calls: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_MAX_TOOL_CALLS", "8")))
-    llm_timeout_s: float = field(default_factory=lambda: float(os.environ.get("SIDEKICK_LLM_TIMEOUT", "60")))
 
     cors_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
@@ -131,6 +129,10 @@ class Settings:
             if o.strip()
         )
     )
+
+    def __post_init__(self):
+        if self.mode not in ("full", "replay", "demo"):
+            raise ValueError("SIDEKICK_MODE must be full, replay or demo")
 
     @property
     def runs_dir(self) -> Path:
@@ -147,10 +149,6 @@ class Settings:
     @property
     def static_dir(self) -> Path:
         return _env_path("SIDEKICK_STATIC_DIR", REPO_ROOT / "frontend" / "dist")
-
-    @property
-    def llm_available(self) -> bool:
-        return bool(self.llm_api_key)
 
     def ensure_dirs(self) -> None:
         for path in (self.data_dir, self.artifacts_dir, self.runs_dir, self.exports_dir):

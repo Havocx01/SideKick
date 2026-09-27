@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from fastapi import APIRouter, Depends
 
 from app.api.deps import registry, settings
 from app.config import Settings
-from app.copilot.agent import ask
+from app.copilot.fallback import answer_without_llm
 from app.copilot.tools import ToolRegistry
 from app.schemas import CopilotAnswer, CopilotRequest
 
@@ -47,10 +45,8 @@ def status(config: Settings = Depends(settings)) -> dict:
 
 
 @router.post("", response_model=CopilotAnswer)
-def query(
-    request: CopilotRequest, tool_registry: ToolRegistry = Depends(registry), config: Settings = Depends(settings)
-) -> CopilotAnswer:
-    return ask(request.question, tool_registry, settings=replace(config, llm_api_key=None))
+def query(request: CopilotRequest, tool_registry: ToolRegistry = Depends(registry)) -> CopilotAnswer:
+    return answer_without_llm(request.question, tool_registry, reason="no API key is configured")
 
 
 @router.get("/suggestions")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from app.config import EXPERIMENT, ExperimentConfig
@@ -72,7 +74,7 @@ class XGBoostCandidate(Candidate):
             objective="binary:logistic",
             eval_metric="logloss",
             tree_method="hist",
-            n_jobs=int(self.params.get("n_jobs", 4)),
+            n_jobs=min(int(self.params.get("n_jobs", 4)), max(1, int(os.environ.get("SIDEKICK_TRAIN_THREADS", "4")))),
             random_state=seed,
             verbosity=0,
         )

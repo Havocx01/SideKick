@@ -1,4 +1,4 @@
-"""Deterministic answers, used when no language model is available."""
+"""Answers assembled from recorded evidence."""
 
 from __future__ import annotations
 
@@ -40,7 +40,6 @@ def answer_without_llm(question: str, registry: ToolRegistry, *, reason: str) ->
 
 def _invoke(registry: ToolRegistry, name: str, arguments: dict | None = None):
     payload = registry.call(name, arguments or {})
-    # Keep source links for deterministic answers as well as model-written ones.
     runIds: set[str] = set()
     pending: list[object] = [payload]
     while pending:

@@ -19,7 +19,7 @@ setup: ## Create the virtualenv and install the app and training dependencies
 	$(BIN)/python -m pip install -U pip
 	$(BIN)/pip install -r backend/requirements-train.txt
 
-setup-full: setup ## Add SHAP, MLflow and matplotlib (optional, heavier)
+setup-full: setup ## Add optional MLflow run tracking
 	$(BIN)/pip install -r backend/requirements-full.txt
 
 data: ## Download the NASA C-MAPSS dataset into data/cmapss
@@ -46,5 +46,5 @@ build: types ## Build the frontend into frontend/dist
 types: ## Regenerate frontend types from the Pydantic schemas
 	$(BIN)/python scripts/generate_types.py
 
-docker: ## Build the deployed replay image locally
+docker: ## Build the hosted demo image locally
 	docker build -t sidekick:local .

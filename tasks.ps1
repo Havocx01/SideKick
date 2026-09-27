@@ -34,7 +34,7 @@ switch ($Task) {
         @'
 Tasks:
   setup       Create .venv and install the app and training dependencies
-  setup-full  Add SHAP, MLflow and matplotlib (optional, heavier)
+  setup-full  Add optional MLflow run tracking
   data        Download the NASA C-MAPSS dataset into data\cmapss
   pipeline    Full evaluation, then write the evidence bundle (-Fast for a quick run)
   bundle      Rebuild evidence\bundle.json from the recorded runs
@@ -42,7 +42,7 @@ Tasks:
   web         Serve the frontend on http://127.0.0.1:5173
   build       Regenerate types and build the frontend into frontend\dist
   types       Regenerate frontend types from the Pydantic schemas
-  docker      Build the deployed replay image locally
+  docker      Build the hosted demo image locally
 '@ | Write-Host
     }
 
@@ -56,7 +56,7 @@ Tasks:
 
     'setup-full' {
         Use-Venv
-        Invoke-Step 'installing SHAP, MLflow and matplotlib' {
+        Invoke-Step 'installing MLflow' {
             & $py -m pip install -r (Join-Path $root 'backend\requirements-full.txt')
         }
     }
@@ -106,6 +106,6 @@ Tasks:
     }
 
     'docker' {
-        Invoke-Step 'building the replay image' { docker build -t sidekick:local $root }
+        Invoke-Step 'building the demo image' { docker build -t sidekick:local $root }
     }
 }

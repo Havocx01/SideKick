@@ -57,14 +57,8 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
       title={isDark ? "Switch to light theme" : "Switch to dark theme"}
     >
-      <span className="theme-toggle-icon">
-        {isDark ? <MoonIcon /> : <SunIcon />}
-      </span>
-      {!compact && (
-        <span className="theme-toggle-label">
-          {isDark ? "Dark theme" : "Light theme"}
-        </span>
-      )}
+      <span className="theme-toggle-icon">{isDark ? <MoonIcon /> : <SunIcon />}</span>
+      {!compact && <span className="theme-toggle-label">{isDark ? "Dark theme" : "Light theme"}</span>}
       <span className="theme-toggle-switch" aria-hidden="true">
         <span className="theme-toggle-thumb" />
       </span>

@@ -1,5 +1,4 @@
-# Core local pipeline: data prep, splits, features, faults, scoring, training.
-# Kept deliberately lean so a fresh clone is runnable in a couple of minutes.
+# Core training and evaluation pipeline.
 -r requirements.txt
 
 numpy>=1.26,<3.0

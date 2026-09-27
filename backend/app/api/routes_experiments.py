@@ -11,6 +11,8 @@ from app.config import get_settings
 from app.experiments.decision import decision
 from app.experiments.export import export_zip
 from app.experiments.jobs import Jobs
+from app.experiments.demo import owner, public_origin
+from app.experiments.store import ACTIVE
 from app.schemas import (
     DatasetConfirmation,
     DatasetRegistration,
@@ -24,16 +26,12 @@ router = APIRouter(prefix="/api", tags=["experiments"])
 
 
 def local_jobs(request: Request) -> Jobs:
-    if get_settings().mode != "full":
+    if get_settings().mode == "replay":
         raise HTTPException(
             403, "This deployment explores recorded evidence only. Run Sidekick locally to upload data or train models."
         )
     origin = request.headers.get("origin")
-    if (
-        request.method == "POST"
-        and origin
-        and origin not in (*get_settings().cors_origins, str(request.base_url).rstrip("/"))
-    ):
+    if request.method == "POST" and origin and origin not in (*get_settings().cors_origins, public_origin(request)):
         raise HTTPException(403, "Local experiment changes must come from the Sidekick interface.")
     jobs = getattr(request.app.state, "jobs", None)
     if jobs is None:
@@ -41,15 +39,28 @@ def local_jobs(request: Request) -> Jobs:
     return jobs
 
 
+def check_access(request: Request, kind: str, id: str):
+    if get_settings().mode == "demo":
+        request.app.state.demo.require(kind, id, owner(request))
+
+
+def upload_jobs(request: Request) -> Jobs:
+    if get_settings().mode != "full":
+        raise HTTPException(403, "CSV uploads are available locally. Use the synthetic sample in the hosted demo.")
+    return local_jobs(request)
+
+
 @router.post("/datasets/sample", response_model=DatasetRegistration)
-def sample_dataset(jobs: Jobs = Depends(local_jobs)):
+def sample_dataset(request: Request, jobs: Jobs = Depends(local_jobs)):
     from app.experiments.datasets import sample
 
+    if get_settings().mode == "demo":
+        return request.app.state.demo.sample(owner(request))
     return sample(jobs.workspace)
 
 
 @router.post("/datasets/upload", response_model=DatasetRegistration)
-async def upload(request: Request, jobs: Jobs = Depends(local_jobs)):
+async def upload(request: Request, jobs: Jobs = Depends(upload_jobs)):
     # Stream the raw CSV body, enforcing the limit before parsing or storing it.
     # This avoids unbounded multipart parsing before the replay-mode guard.
     from app.experiments.datasets import MAX_UPLOAD_BYTES, register
@@ -76,7 +87,8 @@ async def upload(request: Request, jobs: Jobs = Depends(local_jobs)):
 
 
 @router.get("/datasets/{dataset_id}", response_model=DatasetRegistration)
-def dataset(dataset_id: str, jobs: Jobs = Depends(local_jobs)):
+def dataset(dataset_id: str, request: Request, jobs: Jobs = Depends(local_jobs)):
+    check_access(request, "datasets", dataset_id)
     try:
         return jobs.workspace.get("datasets", dataset_id)
     except (KeyError, ValueError):
@@ -84,9 +96,14 @@ def dataset(dataset_id: str, jobs: Jobs = Depends(local_jobs)):
 
 
 @router.post("/datasets/{dataset_id}/confirm", response_model=DatasetRegistration)
-def confirm_dataset(dataset_id: str, payload: DatasetConfirmation, jobs: Jobs = Depends(local_jobs)):
+def confirm_dataset(dataset_id: str, payload: DatasetConfirmation, request: Request, jobs: Jobs = Depends(local_jobs)):
     from app.experiments.datasets import confirm
 
+    check_access(request, "datasets", dataset_id)
+    if get_settings().mode == "demo":
+        raise HTTPException(
+            403, "The hosted sample has a fixed, confirmed mapping. Run locally to use a different dataset."
+        )
     try:
         return confirm(jobs.workspace, dataset_id, payload)
     except KeyError:
@@ -96,8 +113,21 @@ def confirm_dataset(dataset_id: str, payload: DatasetConfirmation, jobs: Jobs = 
 
 
 @router.post("/experiments", response_model=ExperimentRecord, status_code=201)
-def create_experiment(payload: ExperimentCreate, jobs: Jobs = Depends(local_jobs)):
+def create_experiment(payload: ExperimentCreate, request: Request, jobs: Jobs = Depends(local_jobs)):
+    check_access(request, "datasets", payload.dataset_id)
     try:
+        if get_settings().mode == "demo":
+            demo = request.app.state.demo
+            with demo.lock:
+                if any(record["status"] in ACTIVE for record in jobs.workspace.list()):
+                    raise HTTPException(
+                        409,
+                        "The shared server is running another experiment. Try again shortly, or explore the recorded benchmark.",
+                    )
+                demo.admit("experiment", owner(request))
+                record = jobs.create(payload)
+                demo.claim("experiments", record.experiment_id, owner(request))
+                return record
         return jobs.create(payload)
     except KeyError:
         raise HTTPException(404, "Dataset not found") from None
@@ -106,12 +136,17 @@ def create_experiment(payload: ExperimentCreate, jobs: Jobs = Depends(local_jobs
 
 
 @router.get("/experiments", response_model=list[ExperimentRecord])
-def experiments(jobs: Jobs = Depends(local_jobs)):
-    return jobs.workspace.list()
+def experiments(request: Request, jobs: Jobs = Depends(local_jobs)):
+    records = jobs.workspace.list()
+    if get_settings().mode == "demo":
+        ids = request.app.state.demo.ids("experiments", owner(request))
+        records = [record for record in records if record["experiment_id"] in ids]
+    return records
 
 
 @router.get("/experiments/{experiment_id}", response_model=ExperimentRecord)
-def experiment(experiment_id: str, jobs: Jobs = Depends(local_jobs)):
+def experiment(experiment_id: str, request: Request, jobs: Jobs = Depends(local_jobs)):
+    check_access(request, "experiments", experiment_id)
     for record in jobs.workspace.list():
         if record["experiment_id"] == experiment_id:
             return record
@@ -119,10 +154,11 @@ def experiment(experiment_id: str, jobs: Jobs = Depends(local_jobs)):
 
 
 @router.post("/experiments/{experiment_id}/cancel", response_model=ExperimentRecord)
-def cancel(experiment_id: str, jobs: Jobs = Depends(local_jobs)):
+def cancel(experiment_id: str, request: Request, jobs: Jobs = Depends(local_jobs)):
+    check_access(request, "experiments", experiment_id)
     try:
         jobs.cancel(experiment_id)
-        return experiment(experiment_id, jobs)
+        return experiment(experiment_id, request, jobs)
     except (KeyError, ValueError):
         raise HTTPException(404, "Experiment not found") from None
 
