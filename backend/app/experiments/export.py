@@ -25,7 +25,6 @@ def export_zip(bundle: EvidenceBundle) -> bytes:
     for explanation in bundle.explanations:
         for contribution in explanation.contributions:
             contribution.value = None
-    report = decision(bundle)
     csvStream = io.StringIO(newline="")
     metrics = ("engines", "detection_fraction", "early_alarm_burden", "median_lead_time")
     writer = csv.writer(csvStream)
@@ -42,6 +41,18 @@ def export_zip(bundle: EvidenceBundle) -> bytes:
                 *[values.get(key) for key in metrics],
             ]
         )
+    html, provenance = render_report(bundle)
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("decision-report.html", html)
+        archive.writestr("evidence.json", bundle.model_dump_json(indent=2))
+        archive.writestr("metrics.csv", csvStream.getvalue())
+        archive.writestr("provenance.json", json.dumps(provenance, indent=2))
+    return stream.getvalue()
+
+
+def render_report(bundle: EvidenceBundle):
+    report = decision(bundle)
     provenance = {
         "experiment_id": bundle.experiment_id,
         "dataset_id": bundle.dataset_id or bundle.profile.dataset_id,
@@ -81,10 +92,4 @@ Early-alarm burden is the fraction of eligible healthy cycles spent in an alert,
 Warning time is measured in operating cycles, not hours.</p><h2>Limitations</h2><ul>{limitations}</ul>
 <h2>Source and configuration</h2><pre>{escape(json.dumps(provenance, indent=2))}</pre>
 <p>This export excludes the raw uploaded CSV. JSON evidence contains derived metrics and selected model-score replay traces.</p></html>"""
-    stream = io.BytesIO()
-    with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("decision-report.html", html)
-        archive.writestr("evidence.json", bundle.model_dump_json(indent=2))
-        archive.writestr("metrics.csv", csvStream.getvalue())
-        archive.writestr("provenance.json", json.dumps(provenance, indent=2))
-    return stream.getvalue()
+    return html, provenance

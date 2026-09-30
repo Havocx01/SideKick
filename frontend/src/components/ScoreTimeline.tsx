@@ -232,7 +232,7 @@ export function SensorTrace({ series, height = 150 }: { series: ReplaySeries; he
         </span>
         <span className="legend-item">
           <span className="legend-swatch" style={{ background: "var(--fault)" }} />
-          altered reading{series.fault ? ` — ${series.fault.sensor}` : ""}
+          altered reading{series.fault ? `: ${series.fault.sensor}` : ""}
         </span>
         <span className="legend-item">gaps are cycles where the sensor reported nothing</span>
       </div>

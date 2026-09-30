@@ -1,20 +1,55 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { SelectionResult } from "../api/types";
+import { downloadEvidence } from "../api/client";
 import { candidateLabel, integer, percent } from "../format";
 import { useApi } from "../hooks/useApi";
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
-import { Panel, StateBlock } from "./Chrome";
+import { Button, Panel, StateBlock } from "./Chrome";
+
+function EvidenceExport() {
+  const api = useEvidence();
+  const id = useExperimentId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [downloaded, setDownloaded] = useState(false);
+  useEffect(() => { setError(""); setDownloaded(false); }, [id]);
+  async function download() {
+    setBusy(true);
+    setError("");
+    setDownloaded(false);
+    try {
+      await downloadEvidence(api.exportUrl, `sidekick-${id ?? "benchmark"}-evidence.zip`);
+      setDownloaded(true);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Export failed. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="evidence-export">
+      <div className="export-actions">
+        <a href={api.reportUrl} target="_blank" rel="noopener noreferrer">Open report</a>
+        <Button loading={busy} onClick={download}>Download evidence ZIP</Button>
+      </div>
+      <p className="note" role={downloaded ? "status" : undefined}>
+        {downloaded ? "Download started. " : ""}Extract the ZIP, then open decision-report.html or metrics.csv.
+        {downloaded && " If your browser removes the extension, add .zip to the filename."}
+      </p>
+      {error && <p className="state error" role="alert">{error}</p>}
+    </div>
+  );
+}
 
 export function DecisionSummary({ selection }: { selection: SelectionResult }) {
-  const api = useEvidence();
   const id = useExperimentId();
   const chosen = selection.recommended;
   const criteria = selection.criteria;
   return (
     <Panel
       title={chosen ? `${candidateLabel(chosen.candidate, chosen.config_id)} meets the criteria` : "No model qualified"}
-      aside={<a className="button primary" href={api.exportUrl}>Export evidence</a>}
+      aside={<EvidenceExport key={id ?? "benchmark"} />}
     >
       {chosen ? (
         <dl className="decision-metrics">

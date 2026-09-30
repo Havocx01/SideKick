@@ -56,6 +56,27 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function downloadEvidence(url: string, filename: string) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(typeof body?.detail === "string" ? body.detail : `Export failed (${response.status}). Try again.`);
+  }
+  const blob = await response.blob();
+  const signature = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  if (!response.headers.get("Content-Type")?.includes("application/zip") || signature.join(",") !== "80,75,3,4") {
+    throw new Error("The server did not return a ZIP archive. Refresh this page and try again.");
+  }
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
 function query(params: Record<string, string | boolean | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -123,6 +144,7 @@ export function evidenceApi(experimentId?: string) {
     selection: () => scoped<SelectionResult>("/api/selection"),
     decision: () => scoped<DecisionReport>("/api/decision"),
     exportUrl: `${BASE}/api/export${query({ experiment_id: experimentId })}`,
+    reportUrl: `${BASE}/api/export/report${query({ experiment_id: experimentId })}`,
     finalEvaluation: () =>
       scoped<{ available: boolean; note?: string; selection?: SelectionResult }>("/api/final-evaluation"),
     scenarios: (options: { candidate?: string; requiredOnly?: boolean; includeClean?: boolean } = {}) =>

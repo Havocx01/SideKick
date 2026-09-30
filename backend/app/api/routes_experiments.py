@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from app.api.deps import bundle
 from app.config import get_settings
 from app.experiments.decision import decision
-from app.experiments.export import export_zip
+from app.experiments.export import export_zip, render_report
 from app.experiments.jobs import Jobs
 from app.experiments.demo import owner, public_origin
 from app.experiments.store import ACTIVE
@@ -177,3 +177,9 @@ def download(loaded: EvidenceBundle = Depends(bundle)):
             "Content-Disposition": f'attachment; filename="sidekick-{loaded.experiment_id or "benchmark"}-evidence.zip"'
         },
     )
+
+
+@router.get("/export/report")
+def report(loaded: EvidenceBundle = Depends(bundle)):
+    html, _ = render_report(loaded)
+    return Response(html, media_type="text/html", headers={"X-Content-Type-Options": "nosniff"})
