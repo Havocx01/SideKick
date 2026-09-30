@@ -39,7 +39,7 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
     if (value < minDetection) {
       // Below the engineer's minimum: red, deepening as it gets worse.
       const depth = Math.min(1, (minDetection - value) / Math.max(0.01, minDetection));
-      return `rgba(216, 30, 46, ${0.22 + depth * 0.68})`;
+      return `rgba(216, 30, 46, ${0.14 + depth * 0.44})`;
     }
     const headroom = Math.min(1, (value - minDetection) / Math.max(0.01, 1 - minDetection));
     return `rgba(26, 122, 87, ${0.14 + headroom * 0.5})`;
@@ -71,7 +71,7 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
                         className="heat-cell"
                         style={{ background: colour(value) }}
                         title={`${sensor}, ${kind}: worst detection ${percent(value, 1)}`}
-                      />
+                      >{percent(value, 1)}</div>
                     </td>
                   );
                 })}

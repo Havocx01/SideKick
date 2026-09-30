@@ -14,7 +14,7 @@ export function EvidenceGuide() {
       <div className="guide-head">
         <h2 id="guide-heading">Evidence guide</h2>
       </div>
-      <p className="note">Answers come directly from this result’s recorded metrics. No external model is used.</p>
+      <p className="note">These answers explain the experiment’s recommendation, even when you inspect another candidate. They use recorded metrics, with no external model.</p>
       <StateBlock loading={result.loading} error={result.error}>
         <div className="guide-questions">
           {result.data?.guide.map((item, i) => (

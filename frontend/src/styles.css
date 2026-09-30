@@ -504,8 +504,12 @@ th.num {
   border: none;
 }
 .heat-cell {
-  width: 30px;
-  height: 22px;
+  width: 72px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
   border: 1px solid var(--surface);
   cursor: default;
   position: relative;
@@ -643,7 +647,7 @@ button:disabled {
   color: var(--ink-soft);
 }
 .callout {
-  border-left: 3px solid var(--line-strong);
+  border-left: 1px solid var(--line-strong);
   padding: 10px 14px;
   background: var(--raised);
   border-radius: 0 var(--radius) var(--radius) 0;
@@ -1214,4 +1218,40 @@ details > p {
   .badge {
     white-space: normal;
   }
+}
+
+.decision-metrics, .replay-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  margin: 0 0 14px;
+}
+.decision-metrics div, .replay-outcomes div { flex: 1 1 160px; }
+.decision-metrics dt, .replay-outcomes dt { font-size: 12px; color: var(--ink-soft); }
+.decision-metrics dd, .replay-outcomes dd {
+  margin: 5px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.decision-metrics dd span { font-size: 13px; color: var(--ink-soft); font-weight: 400; }
+.decision-rule { margin: 0 0 10px; }
+.decision-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.decision-footer p { flex: 1 1 360px; margin: 0; }
+.decision-footer a { font-size: 13px; }
+.metric-cell .interval { width: 94px; margin: 4px 0 0 auto; }
+.candidate-table td, .candidate-table th { padding-left: 8px; padding-right: 8px; }
+.leaderboard-note { margin: 10px 16px 14px; }
+.matrix-options { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 12px; font-size: 13px; }
+.matrix-options input { margin-top: 0; }
+.fault-outcome { margin: 14px 0; }
+.evidence-section { scroll-margin-top: 20px; }
+.replay-outcomes dd { font-size: 14px; }
+.replay-outcomes { padding: 0 0 12px; border-bottom: 1px solid var(--line); }
+@media (max-width: 600px) {
+  .decision-metrics { gap: 14px; }
+  .decision-metrics div { flex-basis: 130px; }
+  .decision-footer a { padding: 8px 0; }
+  .heat-scale { flex-wrap: wrap; }
+  .heat-scale .note { margin-left: 0 !important; flex-basis: 100%; }
 }

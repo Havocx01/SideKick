@@ -6,7 +6,7 @@ import json
 import zipfile
 from html import escape
 
-from app.experiments.decision import decision
+from app.experiments.decision import candidateLabel, decision
 from app.schemas import EvidenceBundle
 
 
@@ -62,7 +62,7 @@ def export_zip(bundle: EvidenceBundle) -> bytes:
     )
     limitations = "".join(f"<li>{escape(text)}</li>" for text in report.limitations)
     rows = "".join(
-        f"<tr><td>{escape(v.candidate.value + '/' + v.config_id)}</td>"
+        f"<tr><td>{escape(candidateLabel(v))}</td>"
         f"<td>{v.qualifies}</td><td>{v.clean.detection_fraction:.2%}</td>"
         f"<td>{v.mean_detection_required:.2%}</td><td>{v.worst_detection_required:.2%}</td>"
         f"<td>{v.clean.early_alarm_burden:.2%}</td></tr>"
@@ -76,7 +76,7 @@ pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f6;padding:20px
 <h1>Sidekick decision report</h1><p>{escape(bundle.profile.source)}</p><h2>{escape(report.title)}</h2>
 {paragraphs}<div class="scroll"><table><thead><tr><th>Configuration</th><th>Qualified</th><th>Clean detection</th>
 <th>Mean required detection</th><th>Worst required detection</th><th>Clean alarm burden</th></tr></thead><tbody>{rows}</tbody></table></div>
-<h2>How to read these results</h2><p>Detection counts equipment with a useful warning 10 to 30 cycles before failure.
+<h2>How to read these results</h2><p>Detection counts equipment with an alert active in the useful window, 10 to 30 cycles before failure.
 Early-alarm burden is the fraction of eligible healthy cycles spent in an alert, beyond 45 cycles before failure.
 Warning time is measured in operating cycles, not hours.</p><h2>Limitations</h2><ul>{limitations}</ul>
 <h2>Source and configuration</h2><pre>{escape(json.dumps(provenance, indent=2))}</pre>

@@ -104,7 +104,7 @@ export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, 
           </text>
 
           {comparison ? (
-            <path d={path(comparison.points)} fill="none" stroke="var(--clean)" strokeWidth={1.5} opacity={0.55} />
+            <path d={path(comparison.points)} fill="none" stroke="var(--clean)" strokeWidth={2} strokeDasharray="6 3" />
           ) : null}
           <path
             d={path(points)}
@@ -112,6 +112,13 @@ export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, 
             stroke={series.fault ? "var(--fault)" : "var(--clean)"}
             strokeWidth={1.9}
           />
+
+          {series.fault && series.fault_onset_rul != null && series.fault_onset_rul <= maxRul && (
+            <g>
+              <line x1={x(series.fault_onset_rul)} x2={x(series.fault_onset_rul)} y1={MARGIN.top} y2={MARGIN.top + plotHeight} stroke="var(--warn)" strokeDasharray="3 3" />
+              <text x={x(series.fault_onset_rul) - 4} y={MARGIN.top + 12} textAnchor="end" fill="var(--warn)">Fault begins</text>
+            </g>
+          )}
 
           <g className="axis">
             <line
@@ -138,7 +145,7 @@ export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, 
         </span>
         {comparison ? (
           <span className="legend-item">
-            <span className="legend-swatch" style={{ background: "var(--clean)", opacity: 0.55 }} />
+            <span className="legend-swatch dashed" style={{ color: "var(--clean)" }} />
             score on the original readings
           </span>
         ) : null}
@@ -151,6 +158,7 @@ export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, 
           alert active
         </span>
         <span className="legend-item">horizontal axis: cycles remaining before failure</span>
+        {series.fault && <span className="legend-item" style={{ color: "var(--warn)" }}><span className="legend-swatch dashed" />fault begins</span>}
       </div>
     </div>
   );
