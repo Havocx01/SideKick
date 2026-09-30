@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 
 import { ApiError } from "../api/client";
+import { Badge as ArcBadge } from "@/registry/components/badge/badge";
+import { Skeleton } from "@/registry/components/skeleton/skeleton";
+import { AlertCircle, Inbox } from "lucide-react";
+
+export { Button } from "@/registry/components/button/button";
+export { Select } from "@/registry/components/select/select";
 
 export function Panel({ title, description, aside, tight, children }: {
   title: string;
@@ -36,7 +42,8 @@ export function Stat({ label, value, note }: { label: string; value: ReactNode; 
 export type Tone = "ok" | "bad" | "warn" | "info" | "neutral";
 
 export function Badge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
-  return <span className={`badge ${tone}`}>{children}</span>;
+  const tones = { ok: "success", bad: "danger", warn: "warning", info: "info", neutral: "neutral" } as const;
+  return <ArcBadge tone={tones[tone]} size="sm">{children}</ArcBadge>;
 }
 
 export function Callout({ tone, title, children }: { tone?: "fault" | "ok" | "warn"; title?: string; children: ReactNode; }) {
@@ -54,17 +61,19 @@ export function StateBlock({ loading, error, empty, children }: {
   empty?: boolean;
   children?: ReactNode;
 }) {
-  if (loading) return <div className="state">Loading…</div>;
+  if (loading) return <div className="loading-state"><Skeleton lines={3} label="Loading evidence" /></div>;
   if (error) {
     const detail = error instanceof ApiError ? error.detail : undefined;
     return (
-      <div className="state error">
-        {error.message}
+      <div className="state error" role="alert">
+        <AlertCircle size={20} aria-hidden="true" />
+        <p>{error.message}</p>
         {detail ? <code>{detail}</code> : null}
+        <a href="">Retry this page</a>
       </div>
     );
   }
-  if (empty) return <div className="state">Nothing recorded for this selection.</div>;
+  if (empty) return <div className="state"><Inbox size={24} aria-hidden="true" /><p>Nothing recorded for this selection.</p></div>;
   return <>{children}</>;
 }
 

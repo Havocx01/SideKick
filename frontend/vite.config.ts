@@ -1,8 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: { alias: { "@": fileURLToPath(new URL("./", import.meta.url)) } },
   server: {
     port: 5173,
     // Proxy the API to keep browser requests on one origin.

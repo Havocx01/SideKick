@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Activity, ArrowLeft, ArrowUpRight, Database, FlaskConical, House, Layers, Plus, ShieldCheck } from "lucide-react";
 import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useExperimentId } from "../hooks/useEvidence";
@@ -11,86 +12,56 @@ export function Layout() {
   const location = useLocation();
   const record = useApi(() => (id ? experiments.get(id) : Promise.resolve(null)), [id, location.pathname]);
   const prefix = id ? `/experiments/${id}` : "";
-  const isEvidence = ["comparison", "replay", "data", "benchmark"].some((page) => location.pathname.endsWith(`/${page}`));
+  const isEvidence = ["comparison", "replay", "data", "benchmark"].some(page => location.pathname.endsWith(`/${page}`));
   const views = [
-    { to: "/", label: "Start here" },
-    { to: "/experiments", label: "Your experiments" },
-    { to: id ? `${prefix}/data` : "/benchmark", label: "Data and protocol" },
-    { to: `${prefix}/comparison`, label: "Model comparison" },
-    { to: `${prefix}/replay`, label: "Warning replay" }
+    { to: "/", label: "Overview", icon: House },
+    { to: "/experiments", label: "Experiments", icon: FlaskConical },
+    { to: id ? `${prefix}/data` : "/benchmark", label: "Data and protocol", icon: Database },
+    { to: `${prefix}/comparison`, label: "Model comparison", icon: Layers },
+    { to: `${prefix}/replay`, label: "Warning replay", icon: Activity }
   ];
+  const workspace = health.data?.mode === "replay" ? "Recorded demo" : health.data?.mode === "demo" ? "Hosted sample workspace" : "Local workspace";
+  const currentView = views.find(view => view.to === location.pathname)?.label ?? (location.pathname === "/new" ? "New experiment" : "Experiment progress");
   return (
     <div className={isEvidence ? "shell has-evidence-guide" : "shell"}>
-      <nav className="sidebar" aria-label="Main navigation">
-        <div className="sidebar-header">
-          <Link to="/" className="brand">
-            <div className="brand-mark">
-              Side<span>kick</span>
-            </div>
-            <div className="brand-tag">Test failure warnings before trusting them.</div>
-          </Link>
-          <ThemeToggle />
-        </div>
-        <div className="nav">
-          {views .filter((view) => health.data?.can_train || view.to !== "/experiments")
-            .map((view) => (
-              <NavLink key={view.to} to={view.to} end>
-                {view.label}
-              </NavLink>
-            ))}
-        </div>
-        {id && <Link to="/comparison">Back to recorded benchmark</Link>}
+      <a className="skip-link" href="#main-content">Skip to content</a>
+      <aside className="sidebar">
+        <Link to="/" className="brand" aria-label="Sidekick overview">
+          <ShieldCheck size={28} strokeWidth={1.75} aria-hidden="true" />
+          <span>Sidekick</span>
+        </Link>
+        {health.data?.can_train && <Link className="button sidebar-create" to="/new?source=sample" aria-label="New experiment" title="New experiment"><Plus size={18} aria-hidden="true" /><span>New experiment</span></Link>}
+        <nav className="nav" aria-label="Main navigation">
+          {views.filter(view => health.data?.can_train || view.to !== "/experiments").map(view => (
+            <NavLink key={view.to} to={view.to} end title={view.label} aria-label={view.label}>
+              <view.icon size={20} strokeWidth={1.75} aria-hidden="true" /><span>{view.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+        {id && <Link className="benchmark-return" to="/comparison" aria-label="Recorded benchmark" title="Recorded benchmark"><ArrowLeft size={16} aria-hidden="true" /><span>Recorded benchmark</span></Link>}
         <div className="sidebar-foot">
-          {health.data ? (
-            <>
-              <strong>
-                {health.data.mode === "replay"
-                  ? "Recorded demo"
-                  : health.data.mode === "demo" ? "Hosted sample workspace" : "Local workspace"}
-              </strong>
-              <p>
-                {health.data.mode === "replay"
-                  ? "Explore saved results. Training and upload are disabled."
-                  : health.data.mode === "demo"
-                    ? "Train on a compact synthetic sample. Export results within 24 hours; restarts and idle shutdowns may clear them sooner."
-                    : "Training runs on your computer. No API key needed."}
-              </p>
-            </>
-          ) : health.error ? ("Cannot reach the server. Refresh to try again.") : ("Connecting…")}
+          <div className="workspace-status"><span className={health.data ? "status-dot connected" : "status-dot"} /><span>{health.data ? workspace : health.error ? "Server unavailable" : "Connecting"}</span></div>
+          <p>{health.data?.mode === "replay" ? "Saved results only. Training and upload are disabled." : health.data?.mode === "demo" ? "Synthetic training on free hosting. Export results to keep them." : "Training runs on your computer. No API key needed."}</p>
+          {health.error && <a href="">Retry connection</a>}
+          <a href="https://github.com/Havocx01/SideKick" target="_blank" rel="noreferrer" className="repo-link">Source code <ArrowUpRight size={14} aria-hidden="true" /></a>
         </div>
-      </nav>
-      <main className="main">
+      </aside>
+      <main className="main" id="main-content" tabIndex={-1}>
+        <header className="workspace-bar">
+          <div className="breadcrumbs"><span>Workspace</span><span aria-hidden="true">/</span><span>{currentView}</span></div>
+          <ThemeToggle />
+        </header>
         <div className="main-inner">
           {isEvidence && (
             <div className="evidence-source" role="note">
-              {id ? (
-                <>
-                  <strong>
-                    {record.data?.source === "synthetic"
-                      ? "Synthetic experiment"
-                      : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment"}
-                  </strong>
-                  <span>
-                    {record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source…"} ·{" "}
-                    {id.slice(0, 8)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <strong>Recorded NASA benchmark</strong>
-                  <span>
-                    Previously evaluated holdout engines are exposed. These results do not validate ABB field
-                    performance.
-                  </span>
-                </>
-              )}
+              <Database size={18} strokeWidth={1.75} aria-hidden="true" />
+              <div>
+                <strong>{id ? record.data?.source === "synthetic" ? "Synthetic experiment" : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment" : "Recorded NASA benchmark"}</strong>
+                <span>{id ? `${record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source"} · ${id.slice(0, 8)}` : "Development results. Previously examined holdout engines are exposed. ABB field performance is unverified."}</span>
+              </div>
             </div>
           )}
-          {isEvidence && (
-            <a className="guide-jump" href="#evidence-guide">
-              Jump to Evidence guide
-            </a>
-          )}
+          {isEvidence && <a className="guide-jump" href="#evidence-guide">Jump to Evidence guide</a>}
           <Outlet key={id ?? "benchmark"} />
         </div>
       </main>

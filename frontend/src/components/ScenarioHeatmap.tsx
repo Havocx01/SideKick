@@ -37,12 +37,11 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
   const colour = (value: number | null): string => {
     if (value === null) return "var(--canvas)";
     if (value < minDetection) {
-      // Below the engineer's minimum: red, deepening as it gets worse.
       const depth = Math.min(1, (minDetection - value) / Math.max(0.01, minDetection));
-      return `rgba(216, 30, 46, ${0.14 + depth * 0.44})`;
+      return `color-mix(in oklab, var(--danger) ${12 + depth * 22}%, var(--surface))`;
     }
     const headroom = Math.min(1, (value - minDetection) / Math.max(0.01, 1 - minDetection));
-    return `rgba(26, 122, 87, ${0.14 + headroom * 0.5})`;
+    return `color-mix(in oklab, var(--success) ${12 + headroom * 20}%, var(--surface))`;
   };
 
   return (

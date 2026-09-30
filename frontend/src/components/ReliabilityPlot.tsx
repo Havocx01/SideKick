@@ -77,7 +77,7 @@ export function ReliabilityPlot({ reports }: { reports: CalibrationReport[] }) {
         {reports.map((report, index) => (
           <span className="legend-item" key={`${report.candidate}/${report.config_id}`}>
             <span className="legend-swatch" style={{ background: palette[index % palette.length] }} />
-            {candidateLabel(report.candidate, report.config_id)} — Brier {number(report.brier, 4)}
+            {candidateLabel(report.candidate, report.config_id)} · Brier {number(report.brier, 4)}
           </span>
         ))}
         <span className="legend-item">point size shows how many cycles fell in the band</span>

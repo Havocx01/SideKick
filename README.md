@@ -69,6 +69,8 @@ The local sample has 60 histories and ten model configurations. The free hosted 
 
 CSV uploads are local only. Supply at least 25 complete equipment histories with IDs, integer cycle indices, numeric sensors and failure information. If no failure-cycle column exists, explicitly confirm that histories reach failure. This version does not support censored histories.
 
+If an embedded browser does not open the file picker, use **Paste CSV instead** or open the local app in Chrome or Edge. **Open report** displays the decision report directly. **Download evidence ZIP** saves the report and metrics together; extract the ZIP before opening its files. If your browser saves it without an extension, add `.zip` to the filename.
+
 ## Limits
 
 Useful detection means an alert is active between 10 and 30 operating cycles before failure. Early-alarm burden measures time spent in alarm more than 45 cycles before failure. These demonstration limits are not plant-safety standards, and cycles are not hours.

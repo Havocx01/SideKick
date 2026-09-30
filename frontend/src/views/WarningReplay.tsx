@@ -3,12 +3,13 @@ import { useSearchParams } from "react-router-dom";
 
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import type { ReplaySeries } from "../api/types";
-import { Badge, Field, Panel, StateBlock } from "../components/Chrome";
+import { Badge, Panel, StateBlock } from "../components/Chrome";
 import { ContributionBars } from "../components/ContributionBars";
 import { ScoreTimeline, SensorTrace } from "../components/ScoreTimeline";
 import { candidateLabel, integer, number, scenarioLabel } from "../format";
 import { useApi } from "../hooks/useApi";
 import { episodeLabel, outcomeLabel } from "../replay";
+import { Combobox } from "@/registry/components/combobox/combobox";
 
 export function WarningReplay() {
   const api = useEvidence();
@@ -77,24 +78,8 @@ export function WarningReplay() {
       <StateBlock loading={index.loading} error={index.error} empty={entries.length === 0}>
         <Panel title="Select a history">
           <div className="controls">
-            <Field label="Equipment">
-              <select value={equipment} onChange={event => setEquipment(event.target.value)}>
-                {(index.data?.equipment ?? []).map(id => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Scenario">
-              <select value={scenario} onChange={event => setScenario(event.target.value)}>
-                {scenariosFor.map(id => (
-                  <option key={id} value={id}>
-                    {scenarioLabel(id)}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <Combobox label="Equipment" value={equipment} onValueChange={value => { if (value) setEquipment(value); }} options={(index.data?.equipment ?? []).map(value => ({ value, label: `Equipment ${value}` }))} />
+            <Combobox label="Scenario" value={scenario} onValueChange={value => { if (value) setScenario(value); }} options={scenariosFor.map(value => ({ value, label: scenarioLabel(value) }))} />
             {selected ? (
               <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "flex-end" }}>
                 <Outcome series={selected} />

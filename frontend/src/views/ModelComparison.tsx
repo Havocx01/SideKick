@@ -4,7 +4,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { useEvidence } from "../hooks/useEvidence";
 import { DecisionDetails, DecisionSummary } from "../components/DecisionSummary";
 import type { CandidateVerdict, ScenarioResult } from "../api/types";
-import { Badge, Callout, Panel, StateBlock, Stat } from "../components/Chrome";
+import { Badge, Callout, Panel, Select, StateBlock, Stat } from "../components/Chrome";
 import { IntervalBar } from "../components/IntervalBar";
 import { ReliabilityPlot } from "../components/ReliabilityPlot";
 import { ScenarioHeatmap } from "../components/ScenarioHeatmap";
@@ -65,7 +65,7 @@ export function ModelComparison() {
             {invalidFocus && <p className="note" role="status">That candidate is unavailable in this experiment. Showing the leading candidate instead.</p>}
 
             <Panel
-              title="Leaderboard"
+              title="Candidate results"
               description={
                 <>
                   Worst case is the weakest result across the {integer(verdicts[0]?.required_scenarios ?? 0)} required
@@ -176,17 +176,7 @@ export function ModelComparison() {
                   title={`Sensor fault results: ${candidateLabel(focused.candidate, focused.config_id)}`}
                   description={includeSupplemental ? "All recorded cases, including supplemental tests not used for qualification. Each cell shows the lowest detection for that channel and fault type." : "Required cases used for qualification. Each cell shows the lowest detection for that channel and fault type."}
                   aside={
-                    <div className="pill-row">
-                      {verdicts.map(verdict => {
-                        const key = candidateKey(verdict.candidate, verdict.config_id);
-                        const active = key === candidateKey(focused.candidate, focused.config_id);
-                        return (
-                          <button key={key} onClick={() => setFocus(key)} className={active ? "active" : undefined}>
-                            {candidateLabel(verdict.candidate, verdict.config_id)}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <div className="candidate-selector"><Select label="Inspect candidate" value={candidateKey(focused.candidate, focused.config_id)} onValueChange={setFocus} options={verdicts.map(verdict => ({ value: candidateKey(verdict.candidate, verdict.config_id), label: candidateLabel(verdict.candidate, verdict.config_id) }))} /></div>
                   }
                 >
                   {allScenarios.some(row => !row.required) && (

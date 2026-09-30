@@ -3,10 +3,10 @@ import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { Layout } from "./components/Layout";
-import { DataSetup } from "./views/DataSetup";
-import { ModelComparison } from "./views/ModelComparison";
-import { WarningReplay } from "./views/WarningReplay";
 import { Start, NewExperiment, ExperimentHistory, ExperimentProgress } from "./views/Experiments";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/inter";
+import "@/registry/foundation.css";
 import "./styles.css";
 
 const router = createBrowserRouter([
@@ -15,15 +15,15 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <Start /> },
-      { path: "benchmark", element: <DataSetup /> },
+      { path: "benchmark", lazy: async () => ({ Component: (await import("./views/DataSetup")).DataSetup }) },
       { path: "new", element: <NewExperiment /> },
       { path: "experiments", element: <ExperimentHistory /> },
       { path: "experiments/:experimentId", element: <ExperimentProgress /> },
-      { path: "experiments/:experimentId/data", element: <DataSetup /> },
-      { path: "experiments/:experimentId/comparison", element: <ModelComparison /> },
-      { path: "experiments/:experimentId/replay", element: <WarningReplay /> },
-      { path: "comparison", element: <ModelComparison /> },
-      { path: "replay", element: <WarningReplay /> }
+      { path: "experiments/:experimentId/data", lazy: async () => ({ Component: (await import("./views/DataSetup")).DataSetup }) },
+      { path: "experiments/:experimentId/comparison", lazy: async () => ({ Component: (await import("./views/ModelComparison")).ModelComparison }) },
+      { path: "experiments/:experimentId/replay", lazy: async () => ({ Component: (await import("./views/WarningReplay")).WarningReplay }) },
+      { path: "comparison", lazy: async () => ({ Component: (await import("./views/ModelComparison")).ModelComparison }) },
+      { path: "replay", lazy: async () => ({ Component: (await import("./views/WarningReplay")).WarningReplay }) }
     ]
   }
 ]);
