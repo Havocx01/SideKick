@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Activity, ArrowLeft, ArrowUpRight, Database, FlaskConical, House, Layers, Plus, ShieldCheck } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUpRight, Database, FlaskConical, House, Layers, Plus } from "lucide-react";
 import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useExperimentId } from "../hooks/useEvidence";
@@ -27,8 +27,7 @@ export function Layout() {
       <a className="skip-link" href="#main-content">Skip to content</a>
       <aside className="sidebar">
         <Link to="/" className="brand" aria-label="Sidekick overview">
-          <ShieldCheck size={28} strokeWidth={1.75} aria-hidden="true" />
-          <span>Sidekick</span>
+          <div className="brand-mark">Side<span>kick</span></div>
         </Link>
         {health.data?.can_train && <Link className="button sidebar-create" to="/new?source=sample" aria-label="New experiment" title="New experiment"><Plus size={18} aria-hidden="true" /><span>New experiment</span></Link>}
         <nav className="nav" aria-label="Main navigation">
@@ -40,8 +39,8 @@ export function Layout() {
         </nav>
         {id && <Link className="benchmark-return" to="/comparison" aria-label="Recorded benchmark" title="Recorded benchmark"><ArrowLeft size={16} aria-hidden="true" /><span>Recorded benchmark</span></Link>}
         <div className="sidebar-foot">
-          <div className="workspace-status"><span className={health.data ? "status-dot connected" : "status-dot"} /><span>{health.data ? workspace : health.error ? "Server unavailable" : "Connecting"}</span></div>
-          <p>{health.data?.mode === "replay" ? "Saved results only. Training and upload are disabled." : health.data?.mode === "demo" ? "Synthetic training on free hosting. Export results to keep them." : "Training runs on your computer. No API key needed."}</p>
+          <div className="workspace-status"><span aria-hidden="true" className={health.data ? "status-dot connected" : "status-dot"} /><span>{health.data ? workspace : health.error ? "Server unavailable" : "Connecting"}</span></div>
+          {health.data?.mode !== "full" && <p>{health.data?.mode === "replay" ? "Recorded results only" : "Synthetic sample · results expire"}</p>}
           {health.error && <a href="">Retry connection</a>}
           <a href="https://github.com/Havocx01/SideKick" target="_blank" rel="noreferrer" className="repo-link">Source code <ArrowUpRight size={14} aria-hidden="true" /></a>
         </div>
@@ -57,7 +56,7 @@ export function Layout() {
               <Database size={18} strokeWidth={1.75} aria-hidden="true" />
               <div>
                 <strong>{id ? record.data?.source === "synthetic" ? "Synthetic experiment" : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment" : "Recorded NASA benchmark"}</strong>
-                <span>{id ? `${record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source"} · ${id.slice(0, 8)}` : "Development results. Previously examined holdout engines are exposed. ABB field performance is unverified."}</span>
+                <span>{id ? `${record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source"} · ${id.slice(0, 8)}` : "Development evaluation · Exposed holdout · ABB field performance unverified"}</span>
               </div>
             </div>
           )}

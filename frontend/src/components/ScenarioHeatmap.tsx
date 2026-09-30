@@ -21,7 +21,7 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
       cells.set(key, [...(cells.get(key) ?? []), result]);
     }
 
-    return { sensors: [...sensorSet].sort(), kinds: [...kindSet].sort(), grid: cells };
+    return { sensors: [...sensorSet].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), kinds: [...kindSet].sort(), grid: cells };
   }, [results]);
 
   if (sensors.length === 0) {
@@ -47,12 +47,13 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
   return (
     <div>
       <div className="table-scroll">
-        <table className="heatmap">
+        <table className="heatmap" aria-label="Worst detection by sensor and fault">
+          <colgroup><col className="heat-label-column" />{kinds.map(kind => <col key={kind} />)}</colgroup>
           <thead>
             <tr>
-              <th />
+              <th scope="col" className="heat-sensor-heading">Sensor</th>
               {kinds.map(kind => (
-                <th key={kind} className="heat-col-label">
+                <th key={kind} scope="col" className="heat-col-label">
                   {kind}
                 </th>
               ))}
@@ -61,7 +62,7 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
           <tbody>
             {sensors.map(sensor => (
               <tr key={sensor}>
-                <td className="heat-row-label">{sensor}</td>
+                <th scope="row" className="heat-row-label">{sensor}</th>
                 {kinds.map(kind => {
                   const value = worst(sensor, kind);
                   return (
@@ -87,10 +88,7 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
           ))}
         </span>
         <span>better</span>
-        <span className="note" style={{ marginLeft: 8 }}>
-          red is below the required {percent(minDetection)}; each cell shows the worst case for that sensor and fault
-          kind
-        </span>
+        <span className="heat-threshold">Red: below {percent(minDetection)} detection</span>
       </div>
     </div>
   );

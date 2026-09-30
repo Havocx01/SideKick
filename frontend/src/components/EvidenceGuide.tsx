@@ -2,41 +2,40 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../hooks/useApi";
 import { useEvidence } from "../hooks/useEvidence";
-import { StateBlock } from "./Chrome";
-import { ArrowRight, BookOpen } from "lucide-react";
+import { Button, StateBlock } from "./Chrome";
+import { ArrowUpRight, BookOpen, ChevronRight } from "lucide-react";
 
 export function EvidenceGuide() {
   const api = useEvidence();
   const result = useApi(() => api.decision(), [api]);
-  const [selected, setSelected] = useState<number | null>(null);
-  const answer = selected === null ? null : result.data?.guide[selected];
+  const [selected, setSelected] = useState(0);
+  const answer = result.data?.guide[selected];
   return (
     <aside id="evidence-guide" className="evidence-guide" aria-labelledby="guide-heading" tabIndex={-1}>
-      <div className="guide-head">
+      <header className="guide-head">
         <BookOpen size={18} strokeWidth={1.75} aria-hidden="true" />
         <h2 id="guide-heading">Evidence guide</h2>
+      </header>
+      <div className="guide-content">
+        <StateBlock loading={result.loading} error={result.error} empty={!result.loading && !result.data?.guide.length}>
+          <div className="guide-questions" role="group" aria-label="Evidence topics">
+            {result.data?.guide.map((item, i) => (
+              <Button variant="ghost" className="guide-question" aria-pressed={selected === i} aria-controls="guide-answer" key={item.question} onClick={() => setSelected(i)}>
+                <span className="guide-question-label">{item.question}</span><ChevronRight size={16} aria-hidden="true" />
+              </Button>
+            ))}
+          </div>
+          <section id="guide-answer" className="guide-answer" aria-live="polite" aria-atomic="true">
+            {answer && (
+              <>
+                <h3>{answer.question}</h3>
+                <p>{answer.answer}</p>
+                <Link className="guide-evidence-link" to={answer.link}>{answer.link_label}<ArrowUpRight size={16} aria-hidden="true" /></Link>
+              </>
+            )}
+          </section>
+        </StateBlock>
       </div>
-      <p className="guide-description">Understand this experiment’s recommendation. Answers stay tied to its recorded metrics, even when you inspect another candidate.</p>
-      <StateBlock loading={result.loading} error={result.error}>
-        <div className="guide-questions">
-          {result.data?.guide.map((item, i) => (
-            <button className="guide-question" aria-pressed={selected === i} aria-controls="guide-answer" key={item.question} onClick={() => setSelected(i)}>
-              <span>{item.question}</span><ArrowRight size={16} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-        <div id="guide-answer" className="guide-answer" aria-live="polite" aria-atomic="true">
-          {answer && (
-            <>
-              <h3>{answer.question}</h3>
-              <p>{answer.answer}</p>
-              <Link to={answer.link}>{answer.link_label} <ArrowRight size={16} aria-hidden="true" /></Link>
-            </>
-          )}
-        </div>
-        {!answer && <p className="guide-placeholder">Choose a question to see the supporting result and where to inspect it.</p>}
-      </StateBlock>
-      <p className="guide-foot">Metric-based answers. No external model calls or API key.</p>
     </aside>
   );
 }

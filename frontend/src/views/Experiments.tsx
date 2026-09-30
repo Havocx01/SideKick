@@ -50,7 +50,7 @@ export function Start() {
       <section className="welcome" aria-labelledby="welcome-heading">
         <div>
           <h1 id="welcome-heading">Test failure warnings before trusting them</h1>
-          <p>Train models on equipment histories, challenge them with missing, frozen and drifting sensors, and see which warnings still meet your requirements.</p>
+          <p>Train on equipment histories. Test missing, frozen and drifting sensors. See which warnings hold up.</p>
           <div className="hero-actions">
             {health.data?.can_train ? (
               <Link className="button primary" to="/new?source=sample">Run sample experiment <ArrowRight size={16} aria-hidden="true" /></Link>
@@ -58,7 +58,7 @@ export function Start() {
               <Link className="button primary" to="/comparison">Explore benchmark <ArrowRight size={16} aria-hidden="true" /></Link>
             )}
           </div>
-          <p className="hero-footnote">{health.data?.can_train ? "Real training. Clearly labelled synthetic data. No API key needed." : "Recorded NASA results. No training required."}</p>
+          <p className="hero-footnote">{health.data?.can_train ? "Synthetic data · Local training · No API key" : "Recorded NASA results. No training required."}</p>
         </div>
         <div className="benchmark-preview">
           <div className="preview-heading"><h2>A clean score is only the start</h2><Badge>Recorded NASA</Badge></div>
@@ -90,15 +90,15 @@ export function Start() {
         <StateBlock loading={health.loading} error={health.error}>
           <div className="start-actions">
             <section>
-              <div className="start-option"><Layers size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Explore the recorded benchmark</h3><p>Compare the NASA candidates, inspect their weakest faults and replay an equipment history.</p></div></div>
+              <div className="start-option"><Layers size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Explore the recorded benchmark</h3><p>Compare models and replay sensor faults on NASA data.</p></div></div>
               <Link className="button" to="/comparison">Explore benchmark <ArrowRight size={16} aria-hidden="true" /></Link>
             </section>
             <section>
-              <div className="start-option"><FlaskConical size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Run a synthetic experiment</h3><p>Generate {health.data?.sample_equipment ?? 60} simulated histories, train real models and export a new evidence bundle.</p></div></div>
+              <div className="start-option"><FlaskConical size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Run a synthetic experiment</h3><p>Generate {health.data?.sample_equipment ?? 60} simulated histories and test the models.</p></div></div>
               {health.data?.can_train ? <Link className="button" to="/new?source=sample">Set up sample <ArrowRight size={16} aria-hidden="true" /></Link> : <span className="option-unavailable">Available in the local app</span>}
             </section>
             <section>
-              <div className="start-option"><Upload size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Use your equipment histories</h3><p>Upload a CSV up to 10 MB. Confirm sensor columns and complete run-to-failure histories.</p></div></div>
+              <div className="start-option"><Upload size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Use your equipment histories</h3><p>CSV up to 10 MB · Complete run-to-failure histories</p></div></div>
               {health.data?.can_upload ? <Link className="button" to="/new?source=upload">Upload CSV <ArrowRight size={16} aria-hidden="true" /></Link> : <span className="option-unavailable">Available in the local app</span>}
             </section>
           </div>
@@ -108,7 +108,7 @@ export function Start() {
         {["Choose data", "Check histories", "Train and challenge", "Inspect results", "Export evidence"].map(step => <li key={step}><Check size={16} aria-hidden="true" />{step}</li>)}
       </ol>
       {health.data?.mode === "demo" && <p className="scope-note">The hosted sample uses 30 short histories, three sensors and four configurations. Two runs per browser per hour, one active server run, and shared daily limits apply. Results expire after 24 hours; restarts or idle shutdowns may clear them sooner. Export evidence to keep it.</p>}
-      <p className="scope-note">A passing result supports further evaluation. Sidekick does not approve deployment, monitor live equipment, or establish field performance on ABB assets.</p>
+      <p className="scope-note">Development evidence only. ABB field performance remains unverified.</p>
     </>
   );
 }
@@ -227,7 +227,7 @@ function ExperimentSetup() {
     <>
       <header className="page-head">
         <h1>{isSample ? "Run a sample experiment" : "Use your equipment histories"}</h1>
-        <p>Check the data, choose your acceptance limits, then train and challenge the models.</p>
+        <p>Confirm the data and set your acceptance limits.</p>
       </header>
       <ol className="setup-steps" aria-label="Data setup steps">
         {["Choose data", "Confirm mapping", "Train models"].map((step, index) => <li key={step} aria-current={index === (!data ? 0 : data.confirmed ? 2 : 1) ? "step" : undefined}><span className="step-number">{index + 1}</span>{step}</li>)}
@@ -278,7 +278,7 @@ function ExperimentSetup() {
               </p>
               <details className="csv-paste">
                 <summary>File picker not opening? Paste CSV instead</summary>
-                <p className="note">Some embedded browsers block file selection. Paste the CSV including its header, or open this page in Chrome or Edge to choose a file.</p>
+                <p className="note">Paste CSV with its header, or use Chrome or Edge to choose a file.</p>
                 <Field label="CSV contents">
                   <textarea value={csvText} disabled={busy} onChange={event => setCsvText(event.target.value)} rows={8} placeholder={"equipment_id,cycle,sensor_1,failure_cycle\nengine_1,1,0.52,120"} />
                 </Field>
@@ -325,7 +325,7 @@ function ExperimentSetup() {
           {!data.confirmed && mapping && (
             <Panel
               title="Confirm what each column means"
-              description="Suggested roles are only a starting point. Choose sensors deliberately so targets and identifiers do not become model inputs."
+              description="Check suggested roles. Keep identifiers and failure targets out of sensor inputs."
             >
               <div className="mapping-roles">
                 {role("equipment_id", "Equipment ID")}
