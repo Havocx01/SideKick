@@ -30,7 +30,7 @@ include configuration, data fingerprints, source identifiers and limitations.
   workflow; do not describe recorded benchmark footage as a newly executed run.
 - Presentation: upload the final deck after checking it describes the same scope.
 - Source code: use the fresh ZIP in `artifacts/submission/`, not an older export.
-- Snapshots: use the three PNG files in `media/submission/`.
+- Snapshots: use `01-start.jpg`, `02-comparison.jpg` and `03-replay.jpg` in `media/submission/`.
 
 The document in `idea phase/documents/` describes the original plan, not the
 finished prototype. The final deck must describe the recorded Evidence guide,
@@ -53,16 +53,38 @@ If the shared server is busy or at its allowance, explore the recorded NASA
 benchmark. CSV uploads and the larger sample are available locally using the
 README commands. No API key is needed.
 
-## Short demo walkthrough
+## Live presentation walkthrough
 
-1. Explain the question: will failure warnings survive faulty sensors?
-2. Show that the NASA benchmark is recorded and the sample starts a new run.
-3. Generate the hosted sample, explain the ten evaluated and twenty unscored histories.
-4. Start training and show its actual stages.
-5. Explain detection, early alarms and the chosen model. Do not assume augmented
-   training helped; read the measured comparison.
-6. Replay a machine's warnings and export the evidence.
-7. Close with the limitation: simulated experiments support evaluation, not deployment approval.
+Use the local built app as the main live demo. Keep the public URL available for judges, but open it before the session because the free service may need to wake up. Use genuine captures from `media/submission/` in the deck. The older illustrative images and video do not show this finished workflow.
+
+Start the app before presenting. After installation and a frontend build, run:
+
+```powershell
+$env:SIDEKICK_MODE = 'full'
+.\tasks.ps1 api
+```
+
+Open http://127.0.0.1:8000. Keep that terminal open. The built app needs no separate frontend server, internet connection or API key to explore the benchmark and run synthetic experiments.
+
+Rehearse this sequence:
+
+1. **Start:** explain the question: will failure warnings survive a faulty sensor? Choose **Explore benchmark** and identify it as recorded evidence.
+2. **Fragile candidate:** select logistic regression `lr2`. It has 80/80 clean useful detections but only 41/80 in its weakest required case, sensor 8 dropout. Scroll to the required heatmap and outcome breakdown: 24 warnings were late, 15 were missed. [Open that view](http://127.0.0.1:8000/comparison?candidate=logistic_regression%2Flr2#fault-results).
+3. **Qualifying candidates:** return to the leading candidates. XGBoost `xgb1` and augmented `aug3` both retain 79/80 useful detections in their weakest required case. Do not present this as proof that augmentation caused a large improvement.
+4. **Warning replay:** [open engine 13](http://127.0.0.1:8000/replay?equipment=13&scenario=drift-persistent-sensor_3-on60-sd1-neg). For the recommended recorded model, warning lead time changes from 26 to 24 cycles with drift injected. Show the fault-onset marker and the altered sensor trace. This is not a replay of the failing logistic-regression model.
+5. **Evidence:** ask one Evidence guide question, follow its source link, and download **Export evidence**. Show the HTML report, metrics CSV and provenance.
+6. **Real execution:** if timing permits, run a new synthetic experiment through the browser. Explain the 40 development histories, five folds and 20 unscored reserved histories. Use the completed local synthetic experiment if the live run is still working; label it as an earlier run. The full sample completed in about 47 seconds on the test laptop; this is a measurement, not a promised runtime.
+7. **Close:** these simulated tests support further evaluation. They do not certify models or establish performance on ABB assets.
+
+On the presentation laptop, a completed local sample and a stricter no-model-qualified run are saved in **Your experiments**. A fresh installation starts with an empty experiment workspace. For the stricter run, use 100% useful detection and 0% early-alarm burden. Check this state during rehearsal, but keep it out of the main walkthrough unless time permits or a judge asks.
+
+## Demo results to use accurately
+
+- 256 unique injected fault scenarios in the recorded benchmark; 64 are required for qualification.
+- 2,570 result records across ten configurations, including clean cases. This is not 2,570 independent faults or additional equipment histories.
+- Ordinary and augmented leading XGBoost configurations both have 98.75% worst required detection. The augmented configuration's mean advantage is 0.04 percentage points, with 0.04 percentage points higher clean alarm burden.
+- The 70% detection and 10% burden defaults demonstrate configurable acceptance criteria. They are not plant-safety standards.
+- Warning time is in operating cycles. Useful detection requires an alert to be active in the 10-to-30-cycle window; an episode can have opened earlier.
 
 ## Deployment checks before submitting
 
@@ -114,8 +136,9 @@ partition and export checks. Desktop and mobile layouts were checked in both
 themes. Docker's local Linux engine remained unavailable; the deployed Render
 service supplied the hosted verification above.
 
-The subsequent local fixes handle blocked browser storage, malformed CSV
-headers and conflicting ignored-column roles, improve two text contrast colors,
-and explicitly disclose that development results also select thresholds and
-configurations. Deploy these changes and repeat the short live checks before
-submitting. The final pitch deck and updated video still need confirmation.
+The local presentation revision shortens the result summary, labels required and supplemental fault cases separately, displays numeric heatmap values, supports shareable candidate and replay selections, and compares clean/faulted warnings directly. Readable labels also appear in the Evidence guide and HTML export. No model families, acceptance rules, API schemas or training resource limits changed.
+
+Before judges use the public link, deploy this revision and repeat its short health, comparison, replay and export checks. The presentation and any video must use the finished interface and claims above.
+
+
+On 30 September 2026, the full local sample completed in 46.6 seconds and the stricter run completed in 26.5 seconds with no qualifying model. Each produced 370 scenario records, kept all 20 reserved histories unscored, and stored its own acceptance-criteria fingerprint. CSV metrics matched JSON evidence. All 11 archived job/access regression tests and 11 upload/mapping scenarios passed. Candidate and replay links, invalid selections, Evidence guide anchors, experiment switching and refresh persistence were checked in the browser. The desktop leaderboard fits at 1366 by 768, mobile layouts were checked at 390 by 844, both themes were inspected, and the Impeccable detector reported no findings. These are local checks of this revision; the public service still needs a deployment and a short smoke check.

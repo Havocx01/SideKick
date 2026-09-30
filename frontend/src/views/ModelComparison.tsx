@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 import { useEvidence } from "../hooks/useEvidence";
-import { DecisionSummary } from "../components/DecisionSummary";
-import type { CandidateVerdict } from "../api/types";
+import { DecisionDetails, DecisionSummary } from "../components/DecisionSummary";
+import type { CandidateVerdict, ScenarioResult } from "../api/types";
 import { Badge, Callout, Panel, StateBlock, Stat } from "../components/Chrome";
 import { IntervalBar } from "../components/IntervalBar";
 import { ReliabilityPlot } from "../components/ReliabilityPlot";
 import { ScenarioHeatmap } from "../components/ScenarioHeatmap";
-import { candidateKey, candidateLabel, cycles, integer, interval, number, percent } from "../format";
+import { candidateKey, candidateLabel, cycles, integer, interval, number, percent, scenarioLabel } from "../format";
 import { useApi } from "../hooks/useApi";
 
 export function ModelComparison() {
@@ -17,13 +18,22 @@ export function ModelComparison() {
   const calibration = useApi(() => api.calibration(), [api]);
   const reproducibility = useApi(() => api.reproducibility(), [api]);
 
-  const [focus, setFocus] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const focus = params.get("candidate");
+  const [includeSupplemental, setIncludeSupplemental] = useState(false);
+  useEffect(() => setIncludeSupplemental(false), [focus]);
+  function setFocus(key: string) {
+    const next = new URLSearchParams(params);
+    next.set("candidate", key);
+    setParams(next);
+  }
 
   const criteria = selection.data?.criteria;
   const verdicts = useMemo(() => selection.data?.ranked ?? [], [selection.data]);
 
   const focused = focus
-    ? verdicts.find(verdict => candidateKey(verdict.candidate, verdict.config_id) === focus)
+    ? verdicts.find(verdict => candidateKey(verdict.candidate, verdict.config_id) === focus) ?? verdicts[0]
     : verdicts[0];
 
   // Fetch only the selected candidate; the complete matrix is several megabytes.
@@ -32,54 +42,46 @@ export function ModelComparison() {
     () => (focusKey ? api.scenarios({ candidate: focusKey, includeClean: false }) : Promise.resolve([])),
     [api, focusKey]
   );
-  const focusedScenarios = scenarios.data ?? [];
+  const allScenarios = scenarios.data ?? [];
+  const focusedScenarios = includeSupplemental ? allScenarios : allScenarios.filter(row => row.required);
+  const invalidFocus = Boolean(focus && selection.data && !verdicts.some(v => candidateKey(v.candidate, v.config_id) === focus));
+  useEffect(() => {
+    if (location.hash === "#fault-results" && selection.data) document.getElementById("fault-results")?.scrollIntoView();
+  }, [location.hash, selection.data, scenarios.data]);
 
   return (
     <>
       <header className="page-head">
         <h1>Model comparison</h1>
         <p>
-          Candidates must pass the detection and alarm-burden limits on clean data and every required fault case.
-          Qualifying models are ranked by mean detection across those cases, with clean alarm burden breaking ties.
-          These simulated tests do not establish field performance.
+          Compare useful warnings on clean readings and simulated sensor faults. Select a candidate to inspect its weakest cases.
         </p>
       </header>
 
-      <DecisionSummary />
-      <div id="fault-results" />
       <StateBlock loading={selection.loading} error={selection.error}>
         {selection.data && criteria ? (
           <>
-            <Recommendation
-              outcome={selection.data.outcome}
-              recommended={selection.data.recommended ?? null}
-              notes={selection.data.notes ?? []}
-              uncertain={selection.data.uncertain_comparisons ?? []}
-              minDetection={criteria.min_detection_fraction}
-              maxBurden={criteria.max_early_alarm_burden}
-            />
+            <DecisionSummary selection={selection.data} />
+            {invalidFocus && <p className="note" role="status">That candidate is unavailable in this experiment. Showing the leading candidate instead.</p>}
 
             <Panel
               title="Leaderboard"
               description={
                 <>
                   Worst case is the weakest result across the {integer(verdicts[0]?.required_scenarios ?? 0)} required
-                  fault scenarios. Bars show per-case 95% detection intervals on development engines. They are not a
-                  statistical test of the ranking. Select a candidate to inspect its faults.
+                  fault scenarios. Bars show 95% detection intervals, not proof of a ranking difference.
                 </>
               }
               tight
             >
               <div className="table-scroll">
-                <table>
+                <table className="candidate-table">
                   <thead>
                     <tr>
                       <th>Candidate</th>
-                      <th style={{ width: 150 }}>Detection, clean</th>
                       <th className="num">Clean</th>
-                      <th style={{ width: 150 }}>Detection, worst fault</th>
-                      <th className="num">Worst</th>
-                      <th className="num">Drop</th>
+                      <th className="num">Worst required</th>
+                      <th className="num">Change (pp)</th>
                       <th className="num">Burden</th>
                       <th className="num">Lead</th>
                       <th>Verdict</th>
@@ -109,13 +111,14 @@ export function ModelComparison() {
                           style={{ cursor: "pointer" }}
                         >
                           <td>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
                               <span>{candidateLabel(verdict.candidate, verdict.config_id)}</span>
                               {isRecommended ? <Badge tone="ok">recommended</Badge> : null}
                               {verdict.candidate === "age_baseline" ? <Badge tone="neutral">no sensors</Badge> : null}
                             </div>
                           </td>
-                          <td>
+                          <td className="num metric-cell">
+                            <span>{percent(verdict.clean.detection_fraction, 1)}</span>
                             <IntervalBar
                               value={verdict.clean.detection_fraction}
                               lower={verdict.clean.detection_ci.lower}
@@ -123,8 +126,8 @@ export function ModelComparison() {
                               threshold={criteria.min_detection_fraction}
                             />
                           </td>
-                          <td className="num">{percent(verdict.clean.detection_fraction, 1)}</td>
-                          <td>
+                          <td className="num metric-cell">
+                            <span>{verdict.worst_metrics ? percent(verdict.worst_metrics.detection_fraction, 1) : "Not tested"}</span>
                             {verdict.worst_metrics ? (
                               <IntervalBar
                                 value={verdict.worst_metrics.detection_fraction}
@@ -137,19 +140,15 @@ export function ModelComparison() {
                             )}
                           </td>
                           <td className="num">
-                            {verdict.worst_metrics ? percent(verdict.worst_metrics.detection_fraction, 1) : "—"}
-                          </td>
-                          <td className="num">
                             {verdict.worst_metrics ? (
                               <span style={{ color: drop > 0.15 ? "var(--fault)" : "var(--ink-soft)" }} >
-                                {drop > 0 ? "−" : ""}
-                                {percent(Math.abs(drop), 1)}
+                                {drop > 0 ? "-" : drop < 0 ? "+" : ""}{number(Math.abs(drop) * 100, 1)}
                               </span>
                             ) : (
                               "—"
                             )}
                           </td>
-                          <td className="num">{percent(verdict.clean.early_alarm_burden, 1)}</td>
+                          <td className="num">{percent(verdict.clean.early_alarm_burden, 2)}</td>
                           <td className="num">{cycles(verdict.clean.median_lead_time)}</td>
                           <td>
                             {verdict.qualifies ? (
@@ -166,17 +165,16 @@ export function ModelComparison() {
                   </tbody>
                 </table>
               </div>
-              <p className="note" style={{ marginTop: 10 }}>
-                Burden is the share of eligible early-life cycles spent in alarm, excluding the transition band. Lead is
-                the median lead time for useful detections. Select a row to see its fault detail below.
+              <p className="note leaderboard-note">
+                Detection counts histories with an alert active 10 to 30 cycles before failure. Burden is the share of cycles more than 45 cycles before failure spent in alarm. Lead is in cycles, not hours; pp means percentage points.
               </p>
             </Panel>
 
             {focused ? (
-              <>
+              <div id="fault-results" className="evidence-section">
                 <Panel
-                  title={`Where ${candidateLabel(focused.candidate, focused.config_id)} breaks`}
-                  description="Every fault scenario tested, as the sensor that failed against how it failed. One dark row means a single channel this candidate depends on; a dark column means a failure mode it cannot tolerate on any channel."
+                  title={`Sensor fault results: ${candidateLabel(focused.candidate, focused.config_id)}`}
+                  description={includeSupplemental ? "All recorded cases, including supplemental tests not used for qualification. Each cell shows the lowest detection for that channel and fault type." : "Required cases used for qualification. Each cell shows the lowest detection for that channel and fault type."}
                   aside={
                     <div className="pill-row">
                       {verdicts.map(verdict => {
@@ -191,18 +189,22 @@ export function ModelComparison() {
                     </div>
                   }
                 >
+                  {allScenarios.some(row => !row.required) && (
+                    <label className="matrix-options"><input type="checkbox" checked={includeSupplemental} onChange={event => setIncludeSupplemental(event.target.checked)} /> Include supplemental cases (not used for qualification)</label>
+                  )}
                   <StateBlock loading={scenarios.loading} error={scenarios.error} empty={focusedScenarios.length === 0}>
                     <ScenarioHeatmap results={focusedScenarios} minDetection={criteria.min_detection_fraction} />
                   </StateBlock>
                 </Panel>
 
-                <FailureDetail verdict={focused} minDetection={criteria.min_detection_fraction} />
-              </>
+                <FailureDetail verdict={focused} minDetection={criteria.min_detection_fraction} scenarios={allScenarios} />
+              </div>
             ) : null}
           </>
         ) : null}
       </StateBlock>
 
+      <DecisionDetails />
       {final.data ? (
         <Panel
           title="Held-back equipment"
@@ -277,77 +279,9 @@ export function ModelComparison() {
   );
 }
 
-function Recommendation({ outcome, recommended, notes, uncertain, minDetection, maxBurden }: {
-  outcome: string;
-  recommended: CandidateVerdict | null;
-  notes: string[];
-  uncertain: string[];
-  minDetection: number;
-  maxBurden: number;
-}) {
-  if (!recommended) {
-    return (
-      <Callout tone="fault" title="No candidate is recommended">
-        <p>
-          Nothing tested kept {percent(minDetection)} detection under every required sensor fault while staying within a{" "}
-          {percent(maxBurden)} alarm burden. This is a result, not a failure of the tool: deploying any of these on this
-          data would mean accepting alerts that disappear when a sensor does.
-        </p>
-        {notes.length > 0 ? (
-          <ul>
-            {notes.map(note => (<li key={note}>{note}</li>))}
-          </ul>
-        ) : null}
-      </Callout>
-    );
-  }
-
-  // Overlapping intervals do not establish a reliable ranking.
-  const contested = uncertain.length > 0;
-  const drop = recommended.clean.detection_fraction - recommended.worst_detection_required;
-
-  return (
-    <Callout tone={contested ? "warn" : "ok"}>
-      <h3>
-        {contested ? "Recommended, but not clearly ahead" : "Recommended"}:{" "}
-        {candidateLabel(recommended.candidate, recommended.config_id)}
-      </h3>
-      <p>
-        It keeps {percent(recommended.worst_detection_required, 1)} detection in its worst required fault scenario
-        {recommended.worst_scenario_id ? (
-          <>
-            {" "}
-            (<span className="mono">{recommended.worst_scenario_id}</span>)
-          </>
-        ) : null}
-        , against {percent(recommended.clean.detection_fraction, 1)} on undamaged readings, a drop of{" "}
-        {number(drop * 100, 1)} percentage points. Median warning is {cycles(recommended.clean.median_lead_time)} before
-        failure, at an alarm burden of {percent(recommended.clean.early_alarm_burden, 1)}. Passing required scenarios:{" "}
-        {integer(recommended.required_passed)} of {integer(recommended.required_scenarios)}.
-      </p>
-      {[...notes, ...uncertain].length > 0 ? (
-        <details>
-          <summary>Why the ranking remains uncertain</summary>
-          <p className="note">
-            The clean-data detection intervals overlap. A paired analysis of fault outcomes would be needed to establish
-            whether the leading candidates differ.
-          </p>
-          <ul>
-            {[...notes, ...uncertain].map(note => (<li key={note}>{note}</li>))}
-          </ul>
-        </details>
-      ) : null}
-      {outcome === "qualified" ? null : (
-        <p className="note" style={{ margin: 0 }}>
-          Selection outcome recorded as <span className="mono">{outcome}</span>.
-        </p>
-      )}
-    </Callout>
-  );
-}
-
-function FailureDetail({ verdict, minDetection }: { verdict: CandidateVerdict; minDetection: number }) {
+function FailureDetail({ verdict, minDetection, scenarios }: { verdict: CandidateVerdict; minDetection: number; scenarios: ScenarioResult[] }) {
   const failing = verdict.failing_scenarios ?? [];
+  const worst = scenarios.find(row => row.required && row.scenario_id === verdict.worst_scenario_id)?.metrics;
 
   return (
     <Panel
@@ -373,6 +307,9 @@ function FailureDetail({ verdict, minDetection }: { verdict: CandidateVerdict; m
         />
       </div>
 
+      {worst && (
+        <p className="fault-outcome"><strong>Weakest required case:</strong> {scenarioLabel(verdict.worst_scenario_id ?? "")}. {integer(worst.detected)} warned in time, {integer(worst.late)} late, {integer(worst.missed)} missed out of {integer(worst.engines)} histories.</p>
+      )}
       {failing.length > 0 ? (
         <>
           <p className="note" style={{ marginBottom: 6 }}>
@@ -381,7 +318,7 @@ function FailureDetail({ verdict, minDetection }: { verdict: CandidateVerdict; m
           <div className="pill-row">
             {failing.map((scenario: string) => (
               <span className="tool-chip failed" key={scenario}>
-                {scenario}
+                {scenarioLabel(scenario)}
               </span>
             ))}
           </div>

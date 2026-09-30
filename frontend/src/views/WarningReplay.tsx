@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { useEvidence } from "../hooks/useEvidence";
+import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import type { ReplaySeries } from "../api/types";
 import { Badge, Field, Panel, StateBlock } from "../components/Chrome";
 import { ContributionBars } from "../components/ContributionBars";
@@ -15,35 +16,42 @@ export function WarningReplay() {
   const config = useApi(() => api.config(), [api]);
   const horizon = Number(config.data?.config.horizon_cycles ?? 30);
   const minLead = Number(config.data?.config.min_useful_lead ?? 10);
-  const [equipment, setEquipment] = useState<string>("");
-  const [scenario, setScenario] = useState<string>("");
-
+  const [params, setParams] = useSearchParams();
+  const experimentId = useExperimentId();
   const entries = index.data?.series ?? [];
-
-  useEffect(() => {
-    if (!equipment && index.data?.equipment.length) {
-      setEquipment(index.data.equipment[0] ?? "");
-    }
-  }, [index.data, equipment]);
-
+  const requestedEquipment = params.get("equipment");
+  const requestedScenario = params.get("scenario");
+  const defaultEquipment = !experimentId && index.data?.equipment.includes("13") ? "13" : index.data?.equipment[0] ?? "";
+  const equipment = requestedEquipment && index.data?.equipment.includes(requestedEquipment) ? requestedEquipment : defaultEquipment;
   const scenariosFor = useMemo(
     () => [...new Set(entries.filter(e => e.equipment_id === equipment).map(e => e.scenario_id))],
     [entries, equipment]
   );
-
-  useEffect(() => {
-    if (scenariosFor.length > 0 && !scenariosFor.includes(scenario)) {
-      // Prefer a fault scenario, since the clean run is drawn alongside it anyway.
-      setScenario(scenariosFor.find(id => id !== "clean") ?? scenariosFor[0] ?? "");
-    }
-  }, [scenariosFor, scenario]);
+  const defaultScenario = scenariosFor.find(id => id !== "clean") ?? scenariosFor[0] ?? "";
+  const scenario = requestedScenario && scenariosFor.includes(requestedScenario) ? requestedScenario : defaultScenario;
+  const invalidSelection = Boolean(index.data && ((requestedEquipment && requestedEquipment !== equipment) || (requestedScenario && requestedScenario !== scenario)));
+  function setEquipment(value: string) {
+    const next = new URLSearchParams(params);
+    next.set("equipment", value);
+    const available = entries.filter(e => e.equipment_id === value);
+    const nextScenario = available.find(e => e.scenario_id === scenario) ?? available.find(e => e.scenario_id !== "clean") ?? available[0];
+    if (nextScenario) next.set("scenario", nextScenario.scenario_id);
+    else next.delete("scenario");
+    setParams(next);
+  }
+  function setScenario(value: string) {
+    const next = new URLSearchParams(params);
+    next.set("equipment", equipment);
+    next.set("scenario", value);
+    setParams(next);
+  }
 
   const series = useApi(() => (equipment ? api.replay(equipment) : Promise.resolve([])), [api, equipment]);
   const explanations = useApi(() => (equipment ? api.explanations(equipment) : Promise.resolve([])), [api, equipment]);
 
   const all = series.data ?? [];
   const selected = all.find(s => s.equipment_id === equipment && s.scenario_id === scenario) ?? null;
-  const clean = all.find(s => s.equipment_id === equipment && s.scenario_id === "clean") ?? null;
+  const clean = all.find(s => s.equipment_id === equipment && s.scenario_id === "clean" && s.candidate === selected?.candidate && s.config_id === selected?.config_id) ?? null;
   const comparison = selected && selected.scenario_id !== "clean" ? clean : null;
 
   const explanation = useMemo(() => {
@@ -61,11 +69,11 @@ export function WarningReplay() {
       <header className="page-head">
         <h1>Warning replay</h1>
         <p>
-          One machine's history as the model saw it, cycle by cycle. The same history is shown with a sensor fault
-          injected, so the question is not whether detection fell on average but whether this warning still arrives.
+          Compare the same machine with its original readings and an injected sensor fault. Does the warning still arrive in time?
         </p>
       </header>
 
+      {invalidSelection && <p className="note" role="status">That history or scenario is unavailable in this experiment. Showing an available replay instead.</p>}
       <StateBlock loading={index.loading} error={index.error} empty={entries.length === 0}>
         <Panel title="Select a history">
           <div className="controls">
@@ -100,17 +108,23 @@ export function WarningReplay() {
         {selected ? (
           <>
             <p className="note">
-              Recorded out-of-fold replay for {candidateLabel(selected.candidate, selected.config_id)}. These are
-              development histories.
+              Replaying {candidateLabel(selected.candidate, selected.config_id)}, equipment {equipment}, failure at cycle {integer(selected.failure_cycle)}. These are recorded development traces; selecting another candidate in comparison does not change this replay model.
             </p>
             <Panel
               title="Score against remaining life"
               description={
                 selected.fault
-                  ? `Read left to right towards failure. The red line is the score with ${selected.fault.sensor} ${describeFault(selected.fault)}; the faint blue line is the same history with the sensor intact.`
+                  ? `Read left to right towards failure. The red line is the score with ${selected.fault.sensor} ${describeFault(selected.fault)}; the dashed blue line is the same history with the sensor intact.`
                   : "Read left to right towards failure. A warning is useful if the alert is active at any point inside the shaded window."
               }
             >
+              {comparison && (
+                <dl className="replay-outcomes">
+                  <div><dt>Original readings</dt><dd><Outcome series={comparison} /></dd></div>
+                  <div><dt>With the sensor fault</dt><dd><Outcome series={selected} /></dd></div>
+                  <div><dt>Warning change</dt><dd>{warningChange(comparison, selected)}</dd></div>
+                </dl>
+              )}
               <ScoreTimeline series={selected} comparison={comparison} horizon={horizon} minLead={minLead} />
             </Panel>
 
@@ -199,4 +213,14 @@ function describeFault(fault: NonNullable<ReplaySeries["fault"]>): string {
     default:
       return "faulted";
   }
+}
+
+function warningChange(clean: ReplaySeries, faulted: ReplaySeries): string {
+  if (clean.outcome.detected && !faulted.outcome.detected) return faulted.outcome.late ? "Useful warning became late" : "Useful warning was missed";
+  if (!clean.outcome.detected && faulted.outcome.detected) return "Useful warning gained";
+  const before = clean.outcome.lead_time;
+  const after = faulted.outcome.lead_time;
+  if (!clean.outcome.detected || !faulted.outcome.detected || before == null || after == null) return "No useful lead-time comparison";
+  const change = after - before;
+  return change === 0 ? "Same lead time" : `${Math.abs(change)} cycles ${change > 0 ? "longer" : "shorter"}`;
 }

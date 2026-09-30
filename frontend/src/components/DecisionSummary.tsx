@@ -1,73 +1,80 @@
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
+import type { SelectionResult } from "../api/types";
+import { candidateLabel, integer, percent } from "../format";
 import { useApi } from "../hooks/useApi";
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { Panel, StateBlock } from "./Chrome";
 
-export function DecisionSummary() {
+export function DecisionSummary({ selection }: { selection: SelectionResult }) {
   const api = useEvidence();
   const id = useExperimentId();
+  const chosen = selection.recommended;
+  const criteria = selection.criteria;
+  return (
+    <Panel
+      title={chosen ? `${candidateLabel(chosen.candidate, chosen.config_id)} meets the criteria` : "No model qualified"}
+      aside={<a className="button primary" href={api.exportUrl}>Export evidence</a>}
+    >
+      {chosen ? (
+        <dl className="decision-metrics">
+          <div><dt>Clean detection</dt><dd>{integer(chosen.clean.detected)} / {integer(chosen.clean.engines)} <span>({percent(chosen.clean.detection_fraction, 1)})</span></dd></div>
+          <div><dt>Worst required detection</dt><dd>{chosen.worst_metrics ? `${integer(chosen.worst_metrics.detected)} / ${integer(chosen.worst_metrics.engines)}` : "Not tested"} <span>({percent(chosen.worst_detection_required, 1)})</span></dd></div>
+          <div><dt>Required cases passed</dt><dd>{integer(chosen.required_passed)} / {integer(chosen.required_scenarios)}</dd></div>
+        </dl>
+      ) : (
+        <p>No candidate passed on clean data and every required fault case. No model is recommended; inspect the failing cases below.</p>
+      )}
+      <p className="note decision-rule">
+        Criteria: at least {percent(criteria.min_detection_fraction)} useful detection and at most {percent(criteria.max_early_alarm_burden)} early-alarm burden in every required case.
+        {chosen ? ` Clean alarm burden: ${percent(chosen.clean.early_alarm_burden, 2)}.` : ""}
+      </p>
+      <div className="decision-footer">
+        <p className="note">Development results support further testing, not deployment approval.{selection.uncertain_comparisons?.length ? " The leading models are not clearly separated by this evidence." : ""}</p>
+        <Link to={`${id ? `/experiments/${id}` : ""}/replay`}>Replay the {chosen ? "recommended" : "leading"} model</Link>
+      </div>
+    </Panel>
+  );
+}
+
+export function DecisionDetails() {
+  const api = useEvidence();
   const report = useApi(() => api.decision(), [api]);
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#augmentation" && report.data) document.getElementById("augmentation")?.scrollIntoView();
+  }, [location.hash, report.data]);
   return (
     <StateBlock loading={report.loading} error={report.error}>
       {report.data && (
-        <Panel
-          title={report.data.title}
-          aside={
-            <a className="button primary" href={api.exportUrl}>
-              Export evidence
-            </a>
-          }
-        >
-          <p>{report.data.summary}</p>
-          <p>{report.data.fault_summary}</p>
-          <p className="note">
-            Detection: equipment warned 10 to 30 cycles before failure. Early-alarm burden: the share of eligible
-            healthy cycles spent in an alert, more than 45 cycles before failure. Warning time is in cycles, not hours.
-          </p>
-          <Link to={`${id ? `/experiments/${id}` : ""}/replay`}>See how the warnings change for one machine</Link>
-          <div id="augmentation" className="decision-detail">
-            <h3>Did fault-augmented training help?</h3>
+        <div id="augmentation" className="evidence-section">
+          <Panel title="Did fault-augmented training help?">
             <p>{report.data.augmentation_summary}</p>
             {report.data.unaugmented && report.data.augmented && (
               <div className="table-scroll">
                 <table>
-                  <thead>
-                    <tr>
-                      <th>Qualifying configuration</th>
-                      <th>Clean detection</th>
-                      <th>Mean fault detection</th>
-                      <th>Worst fault detection</th>
-                      <th>Clean alarm burden</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Qualifying configuration</th><th>Clean detection</th><th>Mean fault detection</th><th>Worst fault detection</th><th>Clean alarm burden</th></tr></thead>
                   <tbody>
                     {[report.data.unaugmented, report.data.augmented].map(v => (
-                      <tr key={v.config_id}>
-                        <td>
-                          {v.candidate}/{v.config_id}
-                        </td>
-                        {[
-                          v.clean.detection_fraction,
-                          v.mean_detection_required,
-                          v.worst_detection_required,
-                          v.clean.early_alarm_burden
-                        ].map((n, i) => (
-                          <td key={i}>{(n * 100).toFixed(2)}%</td>
-                        ))}
+                      <tr key={`${v.candidate}/${v.config_id}`}>
+                        <td>{candidateLabel(v.candidate, v.config_id)}</td>
+                        {[v.clean.detection_fraction, v.mean_detection_required, v.worst_detection_required, v.clean.early_alarm_burden].map((n, i) => (<td key={i}>{percent(n, 2)}</td>))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
-          <details className="decision-detail">
-            <summary>What this experiment does not establish</summary>
-            <ul>
-              {report.data.limitations.map(t => (<li key={t}>{t}</li>))}
-            </ul>
-          </details>
-        </Panel>
+            <details className="decision-detail">
+              <summary>Selection rule and weakest required case</summary>
+              <p>{report.data.summary}</p><p>{report.data.fault_summary}</p>
+            </details>
+            <details className="decision-detail">
+              <summary>What this experiment does not establish</summary>
+              <ul>{report.data.limitations.map(t => (<li key={t}>{t}</li>))}</ul>
+            </details>
+          </Panel>
+        </div>
       )}
     </StateBlock>
   );

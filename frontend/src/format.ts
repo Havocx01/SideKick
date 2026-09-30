@@ -23,7 +23,13 @@ export function interval(lower: number, upper: number): string {
 }
 
 export function candidateLabel(candidate: string, configId?: string): string {
-  const pretty = candidate.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+  const names: Record<string, string> = {
+    xgboost: "XGBoost",
+    xgboost_augmented: "Augmented XGBoost",
+    logistic_regression: "Logistic regression",
+    age_baseline: "Age baseline"
+  };
+  const pretty = names[candidate] ?? candidate.replace(/_/g, " ");
   return configId ? `${pretty} · ${configId}` : pretty;
 }
 
@@ -40,10 +46,11 @@ export function scenarioLabel(scenarioId: string): string {
   const severity = rest.find(part => /^sd/.test(part));
   const sign = rest.find(part => part === "pos" || part === "neg");
 
-  const bits = [kind === "stuck" ? "stuck reading" : kind, sensor];
+  const channel = sensor.replace(/^sensor_(\d+)$/, "Sensor $1").replace(/^op_setting_(\d+)$/, "Operating setting $1");
+  const bits = [kind === "stuck" ? "frozen reading" : kind === "dropout" ? "missing readings" : kind, channel];
   if (severity) bits.push(`${severity.slice(2)} SD ${sign === "neg" ? "down" : "up"}`);
-  if (duration === "transient") bits.push("transient");
+  bits.push(duration === "transient" ? "temporary" : "persistent");
   if (onset === "onrand") bits.push("random onset");
-  else if (onset) bits.push(`from ${onset.slice(2)} cyc`);
+  else if (onset) bits.push(`starts ${onset.slice(2)} cycles before failure`);
   return bits.filter(Boolean).join(" · ");
 }
