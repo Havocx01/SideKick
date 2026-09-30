@@ -70,7 +70,7 @@ export function WarningReplay() {
       <header className="page-head">
         <h1>Warning replay</h1>
         <p>
-          Compare the same machine with its original readings and an injected sensor fault. Does the warning still arrive in time?
+          See how a sensor fault changes the same machine’s warning.
         </p>
       </header>
 
@@ -93,14 +93,14 @@ export function WarningReplay() {
         {selected ? (
           <>
             <p className="note">
-              Replaying {candidateLabel(selected.candidate, selected.config_id)}, equipment {equipment}, failure at cycle {integer(selected.failure_cycle)}. These are recorded development traces; selecting another candidate in comparison does not change this replay model.
+              Replaying {candidateLabel(selected.candidate, selected.config_id)}, equipment {equipment}, failure at cycle {integer(selected.failure_cycle)}. Recorded traces for this model.
             </p>
             <Panel
               title="Score against remaining life"
               description={
                 selected.fault
-                  ? `Read left to right towards failure. The red line is the score with ${selected.fault.sensor} ${describeFault(selected.fault)}; the dashed blue line is the same history with the sensor intact.`
-                  : "Read left to right towards failure. A warning is useful if the alert is active at any point inside the shaded window."
+                  ? `Red: ${selected.fault.sensor} ${describeFault(selected.fault)}. Dashed blue: original readings.`
+                  : "The shaded window marks useful warning time."
               }
             >
               {comparison && (
@@ -116,7 +116,7 @@ export function WarningReplay() {
             {selected.fault ? (
               <Panel
                 title={`What happened to ${selected.fault.sensor}`}
-                description={`The fault begins ${selected.fault_onset_rul ?? "—"} cycles before failure, affects ${selected.fault_affected_cycles} cycles, and is ${selected.fault.duration === "persistent" ? "never repaired" : "repaired after a short burst"}. Features are recomputed from the altered readings before scoring.`}
+                description={`The fault begins ${selected.fault_onset_rul ?? "—"} cycles before failure, affects ${selected.fault_affected_cycles} cycles, and is ${selected.fault.duration === "persistent" ? "never repaired" : "repaired after a short burst"}. `}
               >
                 <SensorTrace series={selected} />
               </Panel>
@@ -160,14 +160,13 @@ export function WarningReplay() {
 
             {selected.fault ? (
               <p className="note">
-                Feature contributions are available for the original readings only. Switch to the clean scenario to
-                inspect them.
+                Select the clean scenario to inspect feature contributions.
               </p>
             ) : null}
             {explanation ? (
               <Panel
                 title="What moved the score"
-                description={`Feature contributions at cycle ${explanation.cycle}. This describes how the model reached its number; it is not a diagnosis of the machine.`}
+                description={`Feature contributions at cycle ${explanation.cycle}. Model explanation, not a physical diagnosis.`}
                 tight
               >
                 <div className="table-scroll">

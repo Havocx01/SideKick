@@ -10,6 +10,7 @@ import { ReliabilityPlot } from "../components/ReliabilityPlot";
 import { ScenarioHeatmap } from "../components/ScenarioHeatmap";
 import { candidateKey, candidateLabel, cycles, integer, interval, number, percent, scenarioLabel } from "../format";
 import { useApi } from "../hooks/useApi";
+import { Switch } from "@/registry/components/switch/switch";
 
 export function ModelComparison() {
   const api = useEvidence();
@@ -54,7 +55,7 @@ export function ModelComparison() {
       <header className="page-head">
         <h1>Model comparison</h1>
         <p>
-          Compare useful warnings on clean readings and simulated sensor faults. Select a candidate to inspect its weakest cases.
+          Compare warnings before and after sensor faults.
         </p>
       </header>
 
@@ -68,8 +69,7 @@ export function ModelComparison() {
               title="Candidate results"
               description={
                 <>
-                  Worst case is the weakest result across the {integer(verdicts[0]?.required_scenarios ?? 0)} required
-                  fault scenarios. Bars show 95% detection intervals, not proof of a ranking difference.
+                  {integer(verdicts[0]?.required_scenarios ?? 0)} required fault cases · Bars show 95% detection intervals.
                 </>
               }
               tight
@@ -166,7 +166,7 @@ export function ModelComparison() {
                 </table>
               </div>
               <p className="note leaderboard-note">
-                Detection counts histories with an alert active 10 to 30 cycles before failure. Burden is the share of cycles more than 45 cycles before failure spent in alarm. Lead is in cycles, not hours; pp means percentage points.
+                Detection: warnings 10–30 cycles before failure. Burden: time in alarm more than 45 cycles before failure. Lead: cycles. pp: percentage points.
               </p>
             </Panel>
 
@@ -174,13 +174,13 @@ export function ModelComparison() {
               <div id="fault-results" className="evidence-section">
                 <Panel
                   title={`Sensor fault results: ${candidateLabel(focused.candidate, focused.config_id)}`}
-                  description={includeSupplemental ? "All recorded cases, including supplemental tests not used for qualification. Each cell shows the lowest detection for that channel and fault type." : "Required cases used for qualification. Each cell shows the lowest detection for that channel and fault type."}
+                  description={includeSupplemental ? "Lowest detection per sensor and fault. Supplemental cases included." : "Lowest detection per sensor and fault, across required cases."}
                   aside={
                     <div className="candidate-selector"><Select label="Inspect candidate" value={candidateKey(focused.candidate, focused.config_id)} onValueChange={setFocus} options={verdicts.map(verdict => ({ value: candidateKey(verdict.candidate, verdict.config_id), label: candidateLabel(verdict.candidate, verdict.config_id) }))} /></div>
                   }
                 >
                   {allScenarios.some(row => !row.required) && (
-                    <label className="matrix-options"><input type="checkbox" checked={includeSupplemental} onChange={event => setIncludeSupplemental(event.target.checked)} /> Include supplemental cases (not used for qualification)</label>
+                    <div className="matrix-options"><Switch label="Include supplemental cases" checked={includeSupplemental} onCheckedChange={setIncludeSupplemental} /></div>
                   )}
                   <StateBlock loading={scenarios.loading} error={scenarios.error} empty={focusedScenarios.length === 0}>
                     <ScenarioHeatmap results={focusedScenarios} minDetection={criteria.min_detection_fraction} />
@@ -198,7 +198,7 @@ export function ModelComparison() {
       {final.data ? (
         <Panel
           title="Held-back equipment"
-          description="Final evaluation is separate from model selection. Even an untouched holdout from this simulated dataset cannot establish performance on plant equipment."
+          description="Separate from model selection; does not establish field performance."
         >
           {final.data.available && final.data.selection?.ranked[0] ? (
             <>
@@ -238,7 +238,7 @@ export function ModelComparison() {
         {calibration.data && calibration.data.length > 0 ? (
           <Panel
             title="Are the scores probabilities?"
-            description="Observed failure rate against predicted score. Points below the diagonal mean the score overstates the risk. Where a curve departs from the line, treat the score as a ranking and not as a likelihood."
+            description="Below the diagonal, scores overstate risk. Poor calibration means scores should rank risk, not estimate probability."
           >
             <ReliabilityPlot reports={calibration.data} />
           </Panel>
@@ -248,7 +248,7 @@ export function ModelComparison() {
       {reproducibility.data?.available && reproducibility.data.check ? (
         <Panel
           title="Reproducibility"
-          description="The pipeline was run twice from the same seed and the metrics compared."
+          description="Two runs with the same seed."
         >
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {reproducibility.data.check.reproduced ? (
@@ -276,7 +276,7 @@ function FailureDetail({ verdict, minDetection, scenarios }: { verdict: Candidat
   return (
     <Panel
       title="Outcome breakdown"
-      description="Out-of-fold development outcomes on the original readings, followed by required cases that failed a detection or alarm-burden limit."
+      description="Original readings, evaluated on equipment excluded from training."
     >
       <div className="grid cols-4" style={{ marginBottom: failing.length > 0 ? 14 : 0 }}>
         <Stat
@@ -288,12 +288,12 @@ function FailureDetail({ verdict, minDetection, scenarios }: { verdict: Candidat
         <Stat
           label="Missed"
           value={integer(verdict.clean.missed)}
-          note="no useful or late warning; an early-only alarm may still have occurred"
+          note="no useful or late warning"
         />
         <Stat
           label="New alerts"
           value={number(verdict.clean.new_episodes_per_1000, 1)}
-          note={`per 1000 eligible early-life cycles, at threshold ${number(verdict.threshold, 3)}`}
+          note={`per 1,000 early-life cycles · threshold ${number(verdict.threshold, 3)}`}
         />
       </div>
 

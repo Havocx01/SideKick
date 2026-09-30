@@ -64,7 +64,7 @@ export function DataSetup() {
 
             <Panel
               title="What counts as a useful warning"
-              description="Set before training. Every measure on the comparison view is defined against these."
+              description="Fixed before training."
             >
               <div className="grid cols-3" style={{ marginBottom: 0 }}>
                 <Stat
@@ -102,7 +102,7 @@ export function DataSetup() {
 
             <Panel
               title="Column roles"
-              description="Sensor models see only sensor-derived features. Equipment identity, cycle count and remaining life are excluded from the design matrix, so a model cannot learn that a machine is simply old."
+              description="Sensor models exclude equipment IDs, cycle counts and failure targets."
               tight
             >
               <div className="table-scroll">
@@ -137,7 +137,7 @@ export function DataSetup() {
 
             <Panel
               title="Profile findings"
-              description="Every quality check the profiler ran, with what it found. Blockers stop the evaluation; the rest are reported so they are not discovered later."
+              description="Blockers must be resolved before training."
               tight
             >
               {(profile.data.findings ?? []).map((finding: ProfileFinding) => (
@@ -161,7 +161,7 @@ export function DataSetup() {
         {splits.data ? (
           <Panel
             title="Partitions"
-            description="Split by equipment, never by row. Consecutive cycles from one machine are near-duplicates, so a random row split would let a model see its own future and report a score that does not survive contact with a new machine."
+            description="Equipment stays separate across training and evaluation."
           >
             <div className="grid cols-3" style={{ marginBottom: 12 }}>
               <Stat
@@ -195,7 +195,7 @@ export function DataSetup() {
         {candidates.data ? (
           <Panel
             title="Candidates"
-            description="Four families. The age baseline reads no sensor at all, which makes it the comparator that gives the fault tests their meaning: a sensor model that loses to it under fault is not worth deploying."
+            description="Three sensor-based model families and an age-only baseline."
             tight
           >
             <div className="table-scroll">
@@ -229,7 +229,6 @@ export function DataSetup() {
       {limitations.data ? (
         <Panel
           title="What this evaluation does not establish"
-          description="Stated here rather than only in a report, so it travels with the numbers."
         >
           <ul className="limitations">
             {limitations.data.limitations.map(item => (<li key={item}>{item}</li>))}
