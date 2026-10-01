@@ -1,8 +1,6 @@
 # Submission handoff
 
-## Suggested title
-
-Sidekick: Stress-testing predictive maintenance models
+## Sidekick: Stress-testing predictive maintenance models
 
 ## Description
 
