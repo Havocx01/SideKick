@@ -11,7 +11,7 @@ interface Props {
 
 const MARGIN = { top: 24, right: 24, bottom: 30, left: 68 };
 
-export function ScoreTimeline({ series, comparison, height = 260, horizon = 30, minLead = 10, cursorCycle }: Props) {
+export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, minLead = 10, cursorCycle }: Props) {
   const width = 760;
   const plotWidth = width - MARGIN.left - MARGIN.right;
   const plotHeight = height - MARGIN.top - MARGIN.bottom;
@@ -56,6 +56,7 @@ export function ScoreTimeline({ series, comparison, height = 260, horizon = 30, 
           role="img"
           aria-label={`Score over time for ${series.equipment_id}`}
         >
+          <text x={16} y={MARGIN.top + plotHeight / 2} textAnchor="middle" transform={`rotate(-90 16 ${MARGIN.top + plotHeight / 2})`}>Model warning score</text>
           {/* Useful warning window: late enough to be a real signal, early enough to act on. */}
           <rect
             x={usefulLeft}
@@ -98,12 +99,12 @@ export function ScoreTimeline({ series, comparison, height = 260, horizon = 30, 
             x2={width - MARGIN.right}
             y1={y(series.threshold)}
             y2={y(series.threshold)}
-            stroke="var(--fault)"
+            stroke="var(--text-secondary)"
             strokeWidth={1.25}
             strokeDasharray="5 3"
           />
-          <text x={width - MARGIN.right} y={y(series.threshold) - 4} textAnchor="end" fill="var(--fault)">
-            threshold {series.threshold.toFixed(3)}
+          <text x={width - MARGIN.right} y={y(series.threshold) - 4} textAnchor="end">
+            Alert threshold {series.threshold.toFixed(3)}
           </text>
 
           {comparison ? (
@@ -136,34 +137,31 @@ export function ScoreTimeline({ series, comparison, height = 260, horizon = 30, 
                 {tick}
               </text>
             ))}
-            <text x={width / 2} y={height + 6} textAnchor="middle" opacity={0}>
-              cycles remaining
-            </text>
           </g>
         </svg>
       </div>
       <div className="legend">
         <span className="legend-item">
           <span className="legend-swatch" style={{ background: series.fault ? "var(--fault)" : "var(--clean)" }} />
-          {series.fault ? "score with the fault injected" : "score on the original readings"}
+          {series.fault ? "Faulted" : "Original"}
         </span>
         {comparison ? (
           <span className="legend-item">
             <span className="legend-swatch dashed" style={{ color: "var(--clean)" }} />
-            score on the original readings
+            Original
           </span>
         ) : null}
-        <span className="legend-item" style={{ color: "var(--fault)" }}>
+        <span className="legend-item" style={{ color: "var(--text-secondary)" }}>
           <span className="legend-swatch dashed" />
-          alert threshold
+          Alert threshold
         </span>
         <span className="legend-item">
           <span className="legend-swatch" style={{ background: "var(--fault)", opacity: 0.18, height: 10 }} />
-          alert active
+          Warning active
         </span>
-        <span className="legend-item">horizontal axis: cycles remaining before failure</span>
         {series.fault && <span className="legend-item" style={{ color: "var(--warn)" }}><span className="legend-swatch dashed" />fault begins</span>}
       </div>
+      <p className="chart-axis-label">Cycles before failure</p>
     </div>
   );
 }
@@ -233,13 +231,13 @@ export function SensorTrace({ series, height = 180, cursorCycle }: { series: Rep
       <div className="legend">
         <span className="legend-item">
           <span className="legend-swatch" style={{ background: "var(--clean)" }} />
-          original reading
+          Original
         </span>
         <span className="legend-item">
           <span className="legend-swatch" style={{ background: "var(--fault)" }} />
-          altered reading{series.fault ? `: ${series.fault.sensor}` : ""}
+          Faulted
         </span>
-        <span className="legend-item">gaps are cycles where the sensor reported nothing</span>
+        <span className="legend-item">Gaps = missing readings</span>
       </div>
     </div>
   );

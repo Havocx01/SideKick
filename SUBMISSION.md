@@ -29,7 +29,7 @@ Uploaded CSVs require at least 25 complete failure histories and explicit mappin
 
 1. Explain the question: will a failure warning still work when a sensor fails? Open **Start guided walkthrough** for the five-step recorded story. It never launches training or reserved scoring.
 2. Open **Explore benchmark**. Say that it is recorded, simulated NASA data, not ABB field validation.
-3. Inspect `lr2`: 80/80 clean detections falls to 41/80 under sensor 8 dropout. Click that heatmap cell to show detection, burden, coverage and failure reasons.
+3. Inspect `lr2`: 80/80 clean detections falls to 41/80 under sensor 8 dropout. The bars separate warnings in time, late and missed. Open **Sensor faults** and click that heatmap cell for detection, burden, coverage and failure reasons.
 4. Open **Replay weakest detection case**. This is now an `lr2` replay, verified against the stored benchmark metrics. Use Play/Pause and the cycle slider to show the original warning beside the faulted warning. Playback reads stored results; it does not rerun inference. The trace is a selected example, not fleet-wide performance.
 5. Compare ordinary `xgb1` and augmented `aug3`: both retain 79/80 in their weakest required case. Do not claim a large causal improvement from augmentation.
 6. Ask one Evidence guide question, follow its link and open the exported report. The inspected model is separate from the overall recommendation. Advanced comparisons, calibration and reproducibility are under **Technical details**.

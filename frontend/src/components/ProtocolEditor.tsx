@@ -36,12 +36,14 @@ export function ProtocolEditor({ value, onChange, sensors, disabled }: { value: 
     onChange({ ...value, scenarios: next }); setEditing(null); setError("");
   }
   return <div className="protocol-editor">
+    <p className="note">In time: {value.min_useful_lead ?? 10}–{value.horizon_cycles ?? 30} cycles before failure · {scenarios.filter(s => s.required !== false).length} required faults</p>
+    <details className="disclosure"><summary>Warning window and fault cases</summary>
     <div className="mapping-roles">
       <NumberField label="Minimum useful lead" value={value.min_useful_lead ?? 10} onValueChange={n => update("min_useful_lead", n)} min={1} disabled={disabled} suffix=" cycles" />
       <NumberField label="Warning horizon" value={value.horizon_cycles ?? 30} onValueChange={n => update("horizon_cycles", n)} min={2} disabled={disabled} suffix=" cycles" />
       <NumberField label="Early-alarm boundary" value={value.transition_band_end ?? 45} onValueChange={n => update("transition_band_end", n)} min={3} disabled={disabled} suffix=" cycles" />
     </div>
-    <p className="note">Minimum lead must be below the horizon, and the early-alarm boundary above it. All durations are operating cycles.</p>
+    <p className="note">Minimum lead &lt; horizon &lt; early-alarm boundary. Operating cycles, not hours.</p>
     <details className="decision-detail"><summary>Sensor fault scenarios ({scenarios.length}, {scenarios.filter(s => s.required !== false).length} required)</summary>
       <div className="table-scroll"><table><thead><tr><th>Sensor</th><th>Fault</th><th>Onset</th><th>Required</th><th>Actions</th></tr></thead><tbody>{scenarios.map((s, i) => <tr key={i}>
         <td>{s.fault.sensor}</td><td>{s.fault.kind}{s.fault.kind === "drift" ? ` ${s.fault.sign === -1 ? "down" : "up"} ${s.fault.severity_sd} SD` : ""}<span className="note comparison-kind">{s.fault.duration}{s.fault.duration === "transient" ? `, ${s.fault.length} cycles` : ""}</span></td><td>{s.fault.onset_before_failure} cycles out</td>
@@ -64,6 +66,7 @@ export function ProtocolEditor({ value, onChange, sensors, disabled }: { value: 
       </section>
     </details>
     <p className="note">Required cases must cover every evaluated history. Supplemental cases are exploratory. Maximum 128 scenarios.</p>
+    </details>
   </div>;
 }
 

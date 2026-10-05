@@ -60,8 +60,9 @@ export function Layout() {
               <Database size={18} strokeWidth={1.75} aria-hidden="true" />
               <div>
                 <strong>{id ? record.data?.source === "synthetic" ? "Synthetic experiment" : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment" : "Recorded NASA benchmark"}</strong>
-                <span>{id ? `${record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source"} · ${id.slice(0, 8)}` : "Development results · Reserved histories already examined · ABB field performance unverified"}</span>
+                <span>{location.pathname === "/walkthrough" || params.get("partition") !== "holdout" ? "Development results" : "Final validation"} · {id && record.data?.source === "upload" ? "Field performance unverified" : "Not field validated"}</span>
               </div>
+              <details className="source-details"><summary>About these results</summary><p>{id ? `${record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source"} · ${id}` : "Simulated NASA data. Reserved histories were already examined and are not fresh validation."}</p></details>
             </div>
           )}
           {isEvidence && <a className="guide-jump" href="#evidence-guide">Jump to Evidence guide</a>}

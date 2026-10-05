@@ -2,13 +2,12 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
-import type { ReplaySeries } from "../api/types";
-import { Badge, Panel, StateBlock } from "../components/Chrome";
+import { Panel, StateBlock } from "../components/Chrome";
 import { ContributionBars } from "../components/ContributionBars";
 import { ReplayExample } from "../components/ReplayExample";
 import { candidateLabel, integer, number, scenarioLabel } from "../format";
 import { useApi } from "../hooks/useApi";
-import { episodeLabel, outcomeLabel } from "../replay";
+import { episodeLabel } from "../replay";
 import { Combobox } from "@/registry/components/combobox/combobox";
 
 export function WarningReplay() {
@@ -73,9 +72,6 @@ export function WarningReplay() {
     <>
       <header className="page-head">
         <h1>Warning replay</h1>
-        <p>
-          See how a sensor fault changes the same machine’s warning.
-        </p>
       </header>
 
       {invalidSelection && <p className="note" role="status">That history or scenario is unavailable in this experiment. Showing an available replay instead.</p>}
@@ -85,11 +81,6 @@ export function WarningReplay() {
             <Combobox label="Candidate" value={candidate} onValueChange={value => { if (value) { const next = new URLSearchParams(params); next.set("candidate", value); next.delete("equipment"); next.delete("scenario"); setParams(next); } }} options={(selection.data?.ranked ?? []).map(v => ({ value: `${v.candidate}/${v.config_id}`, label: candidateLabel(v.candidate, v.config_id) }))} />
             <Combobox label="Equipment" value={equipment} onValueChange={value => { if (value) setEquipment(value); }} options={equipmentIds.map(value => ({ value, label: `Equipment ${value}` }))} />
             <Combobox label="Scenario" value={scenario} onValueChange={value => { if (value) setScenario(value); }} options={scenariosFor.map(value => ({ value, label: scenarioLabel(value) }))} />
-            {selected ? (
-              <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "flex-end" }}>
-                <Outcome series={selected} />
-              </div>
-            ) : null}
           </div>
           {!entries.length && <p className="note">No representative replay is stored for this candidate and partition. Inspect its comparison or select another candidate.</p>}
         </Panel>
@@ -98,11 +89,9 @@ export function WarningReplay() {
       <StateBlock loading={series.loading || config.loading} error={series.error || config.error} empty={!selected}>
         {selected ? (
           <>
-            <p className="note">
-              {candidateLabel(selected.candidate, selected.config_id)} · Equipment {equipment} · Failure at cycle {integer(selected.failure_cycle)}. {selected.representative_reason || "Selected representative example; not fleet-wide performance."}
-            </p>
             <ReplayExample series={selected} comparison={comparison} horizon={horizon} minLead={minLead} />
-
+            <details className="disclosure"><summary>Replay source and alert episodes</summary>
+            <p className="note">{candidateLabel(selected.candidate, selected.config_id)} · Equipment {equipment} · Failure at cycle {integer(selected.failure_cycle)}. {selected.representative_reason || "One selected example, not fleet-wide performance."}</p>
             <Panel title="Alert episodes" tight>
               {selected.episodes.length === 0 ? (
                 <p className="note">
@@ -138,13 +127,9 @@ export function WarningReplay() {
                 </div>
               )}
             </Panel>
-
-            {selected.fault ? (
-              <p className="note">
-                Select the clean scenario to inspect feature contributions.
-              </p>
-            ) : null}
+            </details>
             {explanation ? (
+              <details className="disclosure"><summary>Feature contributions</summary>
               <Panel
                 title="What moved the score"
                 description={`Feature contributions at cycle ${explanation.cycle}. Model explanation, not a physical diagnosis.`}
@@ -154,15 +139,11 @@ export function WarningReplay() {
                   <ContributionBars explanation={explanation} />
                 </div>
               </Panel>
+              </details>
             ) : null}
           </>
         ) : null}
       </StateBlock>
     </>
   );
-}
-
-function Outcome({ series }: { series: ReplaySeries }) {
-  const label = outcomeLabel(series.outcome);
-  return <Badge tone={label.tone}>{label.text}</Badge>;
 }
