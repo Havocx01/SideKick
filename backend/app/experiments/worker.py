@@ -33,6 +33,10 @@ def run(root: Path, id: str):
         from app.scoring.pipeline import evaluate
 
         record = workspace.get("experiments", id)
+        if record.get("job_kind", "development") != "development":
+            from app.experiments.validation import run_operation
+            run_operation(workspace, record)
+            return
         registration = workspace.get("datasets", record["dataset_id"])
         config = ExperimentConfig(**record["config"])
         config.validate()
@@ -56,6 +60,9 @@ def run(root: Path, id: str):
         )
         if dataset.data_hash != record["data_hash"]:
             raise ValueError("Dataset contents changed after confirmation. Upload and confirm it again.")
+        from app.experiments.exposure import history_ids
+        from app.models.splits import make_splits
+        workspace.expose(history_ids(dataset, make_splits(dataset, config).development).values(), id, "Development fitting, threshold selection and fault testing")
         evidence = EvidenceStore(directory / "runs")
         training = evidence.start_run(
             "training",
@@ -116,10 +123,14 @@ def run(root: Path, id: str):
         )
         progress("preparing results")
         bundle = build_bundle(result, config=config, runs=evidence.list_runs())
-        bundle.schema_version = 2
+        bundle.schema_version = 3
         bundle.experiment_id = id
         bundle.dataset_id = record["dataset_id"]
         bundle.source_digest = record["source_digest"]
+        from app.experiments.validation import dependency_versions
+        bundle.dependency_versions = dependency_versions()
+        from app.schemas import PilotBrief
+        bundle.pilot_brief = PilotBrief.model_validate(record["pilot_brief"]) if record.get("pilot_brief") else None
         bundle.confirmed_mapping = mapping
         bundle.complete_histories_confirmed = registration["complete_histories"]
         bundle.holdout_status = "Reserved equipment was not scored. No automatic holdout evaluation is performed."
@@ -131,7 +142,7 @@ def run(root: Path, id: str):
             "Thresholds and model configurations are selected using these same development results. Reported performance may be optimistic; it is not an independent test of the selected model.",
             "Required injected sensor faults are simulated; their severities are not calibrated to ABB field measurements.",
             "The comparison uses complete run-to-failure histories only. It does not establish performance on censored histories or live equipment.",
-            "Small differences and overlapping confidence intervals do not establish a reliable ranking or a causal benefit from augmentation.",
+            "Paired equipment-bootstrap intervals are exploratory and conditional on development model selection. Small differences do not establish field superiority or a causal benefit from augmentation.",
             "Attributions describe changes in model scores, not the physical cause of a failure.",
         ]
         if record["name"] == "Hosted sample: 30 histories, 3 sensors":

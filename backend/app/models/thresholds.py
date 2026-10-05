@@ -43,12 +43,15 @@ def choose_threshold(
     thresholds = candidate_thresholds(scores, grid)
     results = [(float(t), evaluate(float(t))) for t in thresholds]
 
-    within = [(t, m) for t, m in results if m.early_alarm_burden <= criteria.max_early_alarm_burden]
+    within = [(t, m) for t, m in results if m.early_alarm_burden is not None and m.early_alarm_burden <= criteria.max_early_alarm_burden]
     if within:
         threshold, metrics = max(within, key=lambda pair: (pair[1].detection_fraction, -pair[1].early_alarm_burden))
         return ThresholdChoice(threshold=threshold, metrics=metrics, within_budget=True, considered=len(results))
 
-    threshold, metrics = min(results, key=lambda pair: pair[1].early_alarm_burden)
+    threshold, metrics = min(results, key=lambda pair: pair[1].early_alarm_burden if pair[1].early_alarm_burden is not None else float("inf"))
+    if metrics.early_alarm_burden is None:
+        return ThresholdChoice(threshold=threshold, metrics=metrics, within_budget=False, considered=len(results),
+                               note="Early-alarm burden is unavailable because there are no eligible early-life cycles.")
     return ThresholdChoice(
         threshold=threshold,
         metrics=metrics,

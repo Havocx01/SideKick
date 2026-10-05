@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from app.config import EXPERIMENT, ExperimentConfig, get_settings
 from app.evidence.store import git_commit
 from app.experiments.provenance import source_digest
-from app.schemas import AlertExplanation, EvidenceBundle, FaultSpec, ReplaySeries, RunRecord, SelectionResult
+from app.schemas import AlertExplanation, EvidenceBundle, ExperimentProtocol, FaultSpec, ReplaySeries, RunRecord, SelectionResult
 from app.utils.jsonio import read_json, write_json
 from app.utils.logging_setup import get_logger
 
@@ -52,13 +52,16 @@ def build_bundle(
         if recommended
         else result.selection.ranked[0].candidate.value + "/" + result.selection.ranked[0].config_id
     )
-    threshold = result.thresholds[candidateName]
 
-    replaySeries = _build_replay(result, candidateName, threshold, replay_engines, replay_fault, config)
+    replaySeries = []
+    for verdict in result.selection.ranked:
+        name = f"{verdict.candidate.value}/{verdict.config_id}"
+        replaySeries.extend(_build_replay(result, name, result.thresholds[name], min(3, replay_engines), replay_fault, config))
     explanations = _build_explanations(result, candidateName, replaySeries)
+    from app.scoring.paired import paired_comparisons
 
     return EvidenceBundle(
-        schema_version=2,
+        schema_version=3,
         source_digest=source_digest(),
         confirmed_mapping=result.training.dataset.mapping,
         holdout_status=(
@@ -81,6 +84,13 @@ def build_bundle(
         runs=list(runs or []),
         reproducibility=reproducibility,
         limitations=list(LIMITATIONS),
+        paired_comparisons=paired_comparisons(result),
+        protocol=ExperimentProtocol(
+            min_useful_lead=config.min_useful_lead, horizon_cycles=config.horizon_cycles,
+            transition_band_end=config.transition_band_end, min_detection_fraction=config.min_detection_fraction,
+            max_early_alarm_burden=config.max_early_alarm_burden, base_seed=config.base_seed,
+            scenarios=list(config.fault_scenarios),
+        ) if config.fault_scenarios is not None else None,
     )
 
 
@@ -94,33 +104,30 @@ def _build_replay(
 ) -> list[ReplaySeries]:
     from app.evidence.replay import build_series, choose_replay_engines
 
-    engines = choose_replay_engines(result.training, candidate_name, threshold, limit=limit, config=config)
-
-    # Default replay to the weakest required scenario.
-    if replay_fault is None:
-        worst = None
-        for scenario in result.scenario_results:
-            if not scenario.required or scenario.fault is None:
-                continue
-            name = f"{scenario.candidate.value}/{scenario.config_id}"
-            if name != candidate_name:
-                continue
-            if worst is None or scenario.metrics.detection_fraction < worst.metrics.detection_fraction:
-                worst = scenario
-        replay_fault = worst.fault if worst else None
-
-    series: list[ReplaySeries] = []
-    for equipmentId in engines:
-        clean = build_series(result.training, candidate_name, equipmentId, threshold, spec=None, config=config)
-        if clean:
-            series.append(clean)
-        if replay_fault is not None:
-            faulted = build_series(
-                result.training, candidate_name, equipmentId, threshold, spec=replay_fault, config=config
-            )
-            if faulted:
-                series.append(faulted)
-    return series
+    required = [r for r in result.scenario_results if r.required and r.fault is not None
+                and f"{r.candidate.value}/{r.config_id}" == candidate_name]
+    if not required:
+        return []
+    weakest = min(required, key=lambda r: (r.metrics.detection_fraction, r.scenario_id))
+    highest = max(required, key=lambda r: (r.metrics.early_alarm_burden or 0, r.scenario_id))
+    targets = [(replay_fault or weakest.fault, "Weakest detection"), (highest.fault, "Highest alarm burden")]
+    series = {}
+    for spec, reason in targets:
+        scorings = result.matrix.equipment_metrics.get((candidate_name, spec.scenario_id), [])
+        if reason == "Weakest detection":
+            ranked = sorted(scorings, key=lambda s: (not s.outcome.missed, not s.outcome.late, s.outcome.equipment_id))
+        else:
+            ranked = sorted(scorings, key=lambda s: (-s.alarm_eligible_cycles / max(1, s.eligible_cycles), s.outcome.equipment_id))
+        engines = [s.outcome.equipment_id for s in ranked[:limit]]
+        if not engines:
+            engines = choose_replay_engines(result.training, candidate_name, threshold, limit=limit, config=config)
+        for equipmentId in engines:
+            for fault in (None, spec):
+                entry = build_series(result.training, candidate_name, equipmentId, threshold, spec=fault, config=config)
+                if entry:
+                    entry.representative_reason = reason
+                    series[(equipmentId, entry.scenario_id)] = entry
+    return list(series.values())
 
 
 def _build_explanations(
@@ -133,6 +140,8 @@ def _build_explanations(
     seen: set[tuple[str, int]] = set()
 
     for entry in series:
+        if f"{entry.candidate.value}/{entry.config_id}" != candidate_name:
+            continue
         # Original readings can explain only the clean history.
         if entry.fault is not None:
             continue
@@ -153,7 +162,9 @@ def _build_explanations(
             positions = (design.cycle == targetCycle).nonzero()[0]
             if positions.size == 0:
                 continue
-            explanations.append(explain_alert(candidate, design, int(positions[0])))
+            explanation = explain_alert(candidate, design, int(positions[0]))
+            explanation.candidate = candidate_name
+            explanations.append(explanation)
         except Exception as exc:  # pragma: no cover - explanation is not load-bearing
             logger.warning("explanation failed for %s: %s", entry.equipment_id, exc)
     return explanations
@@ -180,4 +191,18 @@ def load_bundle(path: Path | None = None) -> EvidenceBundle:
             f"no evidence bundle at {target}. Run 'python scripts/run_pipeline.py' "
             "locally to generate one, or set SIDEKICK_BUNDLE_PATH."
         )
-    return EvidenceBundle.model_validate(read_json(target))
+    bundle = EvidenceBundle.model_validate(read_json(target))
+    # Derive newly displayed fields from stored metrics without rewriting history.
+    for selection in (bundle.development_selection, bundle.final_evaluation):
+        if selection is None:
+            continue
+        for verdict in selection.ranked:
+            rows = [r for r in bundle.scenario_results if r.partition == selection.partition and r.required
+                    and r.candidate == verdict.candidate and r.config_id == verdict.config_id]
+            if rows and verdict.worst_burden_scenario_id is None:
+                available = [r for r in rows if r.metrics.early_alarm_burden is not None]
+                if available:
+                    worst = max(available, key=lambda r: (r.metrics.early_alarm_burden, r.scenario_id))
+                    verdict.worst_burden_required = worst.metrics.early_alarm_burden
+                    verdict.worst_burden_scenario_id = worst.scenario_id
+    return bundle

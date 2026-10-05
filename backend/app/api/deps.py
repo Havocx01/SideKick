@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, Request
 from app.config import Settings, get_settings
 from app.copilot.tools import ToolRegistry
 from app.evidence.bundle import load_bundle
-from app.schemas import EvidenceBundle
+from app.schemas import EvidenceBundle, FrozenModelRecord, ReplaySeries, ScenarioResult, SelectionResult, ValidationRecord
 from app.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -19,6 +19,8 @@ logger = get_logger(__name__)
 def _cached_bundle() -> EvidenceBundle:
     settings = get_settings()
     bundle = load_bundle(settings.bundle_path)
+    from app.evidence.supplement import attach_replays
+    attach_replays(bundle, settings.bundle_path)
     logger.info(
         "loaded evidence bundle: %s, %d scenario results, config %s",
         bundle.profile.dataset_id,
@@ -41,7 +43,23 @@ def bundle(request: Request, experiment_id: str | None = None) -> EvidenceBundle
             record = workspace.get("experiments", experiment_id)
             if record["status"] != "completed":
                 raise HTTPException(409, "This experiment has no completed results yet.")
-            return load_bundle(workspace.directory("experiments", experiment_id) / "bundle.json")
+            loaded = load_bundle(workspace.directory("experiments", experiment_id) / "bundle.json")
+            if get_settings().mode == "full":
+                frozen = workspace.operation(experiment_id, "freeze")
+                validation = workspace.operation(experiment_id, "validation")
+                loaded.frozen_model = FrozenModelRecord.model_validate(frozen) if frozen else None
+                loaded.validation = ValidationRecord.model_validate(validation) if validation else None
+                if validation and validation.get("exposure_started_at"):
+                    loaded.holdout_status = "Reserved histories are exposed. This attempt cannot be repeated or retuned."
+                if validation and validation["status"] == "completed":
+                    from app.utils.jsonio import read_json
+                    result = read_json(workspace.directory("experiments", validation["job_id"]) / "validation.json")
+                    loaded.final_evaluation = SelectionResult.model_validate(result["selection"])
+                    loaded.limitations = [text.replace(" Reserved equipment was not scored.",
+                        " Reserved results are reported separately; scoring exposes those histories.") for text in loaded.limitations]
+                    loaded.scenario_results.extend(ScenarioResult.model_validate(r) for r in result["scenario_results"])
+                    loaded.replay_series.extend(ReplaySeries.model_validate(r) for r in result["replay_series"])
+            return loaded
         except (KeyError, ValueError, FileNotFoundError):
             raise HTTPException(404, "Experiment not found") from None
     try:

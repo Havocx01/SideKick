@@ -80,7 +80,7 @@ class XGBoostCandidate(Candidate):
         )
 
     def fit(self, train: DesignMatrix, *, augmented: DesignMatrix | None = None) -> None:
-        seed = derive_seed(EXPERIMENT.base_seed, self.kind.value, self.config_id)
+        seed = int(self.params.get("model_seed", derive_seed(EXPERIMENT.base_seed, self.kind.value, self.config_id)))
         self._model = self._make_model(seed)
         self._model.fit(train.X, train.y)
         self._feature_names = list(train.feature_names)

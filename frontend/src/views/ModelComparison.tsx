@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
-import { useEvidence } from "../hooks/useEvidence";
+import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { DecisionDetails, DecisionSummary } from "../components/DecisionSummary";
 import type { CandidateVerdict, ScenarioResult } from "../api/types";
-import { Badge, Callout, Panel, Select, StateBlock, Stat } from "../components/Chrome";
+import { Badge, Button, Callout, Panel, Select, StateBlock, Stat } from "../components/Chrome";
+import { ValidationPanel } from "../components/ValidationPanel";
 import { IntervalBar } from "../components/IntervalBar";
 import { ReliabilityPlot } from "../components/ReliabilityPlot";
 import { ScenarioHeatmap } from "../components/ScenarioHeatmap";
@@ -21,12 +22,18 @@ export function ModelComparison() {
 
   const [params, setParams] = useSearchParams();
   const location = useLocation();
+  const experimentId = useExperimentId();
+  const partition = params.get("partition") === "holdout" ? "holdout" : "out_of_fold";
   const focus = params.get("candidate");
   const [includeSupplemental, setIncludeSupplemental] = useState(false);
-  useEffect(() => setIncludeSupplemental(false), [focus]);
+  const [inspected, setInspected] = useState<ScenarioResult[]>([]);
+  const [technicalOpen, setTechnicalOpen] = useState(false);
+  const replayIndex = useApi(() => api.replayIndex(), [api]);
+  useEffect(() => { setIncludeSupplemental(false); setInspected([]); }, [focus, partition]);
   function setFocus(key: string) {
     const next = new URLSearchParams(params);
     next.set("candidate", key);
+    next.delete("equipment"); next.delete("scenario");
     setParams(next);
   }
 
@@ -34,8 +41,8 @@ export function ModelComparison() {
   const verdicts = useMemo(() => selection.data?.ranked ?? [], [selection.data]);
 
   const focused = focus
-    ? verdicts.find(verdict => candidateKey(verdict.candidate, verdict.config_id) === focus) ?? verdicts[0]
-    : verdicts[0];
+    ? verdicts.find(verdict => candidateKey(verdict.candidate, verdict.config_id) === focus)
+    : selection.data?.recommended ?? verdicts[0];
 
   // Fetch only the selected candidate; the complete matrix is several megabytes.
   const focusKey = focused ? candidateKey(focused.candidate, focused.config_id) : "";
@@ -50,6 +57,13 @@ export function ModelComparison() {
     if (location.hash === "#fault-results" && selection.data) document.getElementById("fault-results")?.scrollIntoView();
   }, [location.hash, selection.data, scenarios.data]);
 
+  useEffect(() => {
+    if (location.hash === "#augmentation") setTechnicalOpen(true);
+  }, [location.hash]);
+  useEffect(() => {
+    if (technicalOpen && location.hash === "#augmentation") document.getElementById("augmentation")?.scrollIntoView();
+  }, [technicalOpen, location.hash]);
+
   return (
     <>
       <header className="page-head">
@@ -58,12 +72,13 @@ export function ModelComparison() {
           Compare warnings before and after sensor faults.
         </p>
       </header>
+      {final.data?.available && <div className="partition-control" role="group" aria-label="Evaluation partition">{([["out_of_fold", "Development"], ["holdout", "Final validation"]] as const).map(([value, label]) => <Button key={value} variant={partition === value ? "primary" : "secondary"} aria-pressed={partition === value} onClick={() => { const next = new URLSearchParams(params); next.set("partition", value); next.delete("candidate"); setParams(next); }}>{label}</Button>)}</div>}
 
       <StateBlock loading={selection.loading} error={selection.error}>
         {selection.data && criteria ? (
           <>
-            <DecisionSummary selection={selection.data} />
-            {invalidFocus && <p className="note" role="status">That candidate is unavailable in this experiment. Showing the leading candidate instead.</p>}
+            {!invalidFocus && <DecisionSummary selection={selection.data} inspected={focused} />}
+            {invalidFocus && <p className="note" role="status">That candidate is unavailable in this experiment. Select an available model below to inspect it.</p>}
 
             <Panel
               title="Candidate results"
@@ -79,11 +94,10 @@ export function ModelComparison() {
                   <thead>
                     <tr>
                       <th>Candidate</th>
-                      <th className="num">Clean</th>
-                      <th className="num">Worst required</th>
-                      <th className="num">Change (pp)</th>
-                      <th className="num">Burden</th>
-                      <th className="num">Lead</th>
+                      <th className="num">Healthy sensors</th>
+                      <th className="num">Weakest fault</th>
+                      <th className="num">Early alarm time</th>
+                      <th className="num">Highest fault alarm time</th>
                       <th>Verdict</th>
                     </tr>
                   </thead>
@@ -94,7 +108,6 @@ export function ModelComparison() {
                       const isRecommended =
                         selection.data?.recommended?.candidate === verdict.candidate &&
                         selection.data?.recommended?.config_id === verdict.config_id;
-                      const drop = verdict.clean.detection_fraction - verdict.worst_detection_required;
                       return (
                         <tr
                           key={key}
@@ -139,20 +152,11 @@ export function ModelComparison() {
                               <span className="note">not tested</span>
                             )}
                           </td>
-                          <td className="num">
-                            {verdict.worst_metrics ? (
-                              <span style={{ color: drop > 0.15 ? "var(--fault)" : "var(--ink-soft)" }} >
-                                {drop > 0 ? "-" : drop < 0 ? "+" : ""}{number(Math.abs(drop) * 100, 1)}
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
                           <td className="num">{percent(verdict.clean.early_alarm_burden, 2)}</td>
-                          <td className="num">{cycles(verdict.clean.median_lead_time)}</td>
+                          <td className="num">{percent(verdict.worst_burden_required, 2)}</td>
                           <td>
                             {verdict.qualifies ? (
-                              <Badge tone="ok">holds under fault</Badge>
+                              <Badge tone="ok">meets {partition === "holdout" ? "final" : "development"} criteria</Badge>
                             ) : verdict.passes_clean ? (
                               <Badge tone="bad">fails under fault</Badge>
                             ) : (
@@ -166,7 +170,7 @@ export function ModelComparison() {
                 </table>
               </div>
               <p className="note leaderboard-note">
-                Detection: warnings 10–30 cycles before failure. Burden: time in alarm more than 45 cycles before failure. Lead: cycles. pp: percentage points.
+                Detection: alert active {criteria.min_useful_lead} to {criteria.horizon_cycles} cycles before failure. Burden: eligible time in alarm.
               </p>
             </Panel>
 
@@ -183,8 +187,10 @@ export function ModelComparison() {
                     <div className="matrix-options"><Switch label="Include supplemental cases" checked={includeSupplemental} onCheckedChange={setIncludeSupplemental} /></div>
                   )}
                   <StateBlock loading={scenarios.loading} error={scenarios.error} empty={focusedScenarios.length === 0}>
-                    <ScenarioHeatmap results={focusedScenarios} minDetection={criteria.min_detection_fraction} />
+                    <ScenarioHeatmap results={focusedScenarios} minDetection={criteria.min_detection_fraction} maxBurden={criteria.max_early_alarm_burden} expectedEngines={focused.clean.engines} onInspect={setInspected} />
                   </StateBlock>
+                  {inspected.length > 0 && <section className="scenario-inspection" aria-label="Scenario details"><h3>Scenario details</h3><div className="table-scroll"><table><thead><tr><th>Case</th><th>Detection</th><th>Burden</th><th>Coverage</th><th>Outcome</th></tr></thead><tbody>{inspected.map(r => { const failures = [r.metrics.detection_fraction < criteria.min_detection_fraction ? "Detection below minimum" : "", r.metrics.early_alarm_burden == null ? "Burden unavailable" : r.metrics.early_alarm_burden > criteria.max_early_alarm_burden ? "Burden above maximum" : "", r.metrics.engines !== focused.clean.engines || r.coverage_complete === false ? "Coverage incomplete" : ""].filter(Boolean); return <tr key={r.scenario_id}><td>{r.fault ? scenarioLabel(r.scenario_id) : r.scenario_id}<span className="note comparison-kind">{r.required ? "Required" : "Supplemental"}</span></td><td>{percent(r.metrics.detection_fraction, 1)}</td><td>{percent(r.metrics.early_alarm_burden, 2)}</td><td>{r.metrics.engines}/{r.expected_engines ?? focused.clean.engines}</td><td>{failures.length ? failures.join("; ") : "Meets criteria"}</td></tr>; })}</tbody></table></div><Button variant="ghost" onClick={() => setInspected([])}>Close scenario details</Button></section>}
+                  <div className="actions replay-case-actions">{[[focused.worst_scenario_id, "Replay weakest detection case"], [focused.worst_burden_scenario_id, "Replay highest-burden case"]].map(([scenarioId, label]) => { const entry = replayIndex.data?.series.find(s => s.scenario_id === scenarioId && `${s.candidate}/${s.config_id}` === focusKey); const query = new URLSearchParams({ candidate: focusKey, partition }); if (entry) { query.set("equipment", entry.equipment_id); query.set("scenario", entry.scenario_id); } return entry ? <Link className="button" key={label} to={`${experimentId ? `/experiments/${experimentId}` : ""}/replay?${query}`}>{label}</Link> : <span key={label} className="note">{label}: not stored in this bundle.</span>; })}</div>
                 </Panel>
 
                 <FailureDetail verdict={focused} minDetection={criteria.min_detection_fraction} scenarios={allScenarios} />
@@ -194,7 +200,7 @@ export function ModelComparison() {
         ) : null}
       </StateBlock>
 
-      <DecisionDetails />
+      {experimentId && <ValidationPanel experimentId={experimentId} recommendation={selection.data?.recommended} qualifies={Boolean(selection.data?.recommended)} onCompleted={() => { final.reload(); selection.reload(); }} />}
       {final.data ? (
         <Panel
           title="Held-back equipment"
@@ -234,6 +240,10 @@ export function ModelComparison() {
         </Panel>
       ) : null}
 
+      <details className="technical-details" open={technicalOpen} onToggle={event => setTechnicalOpen(event.currentTarget.open)}>
+        <summary>Technical details</summary>
+        <div role="group" aria-label="Technical details">
+      <DecisionDetails />
       <StateBlock loading={calibration.loading} error={calibration.error}>
         {calibration.data && calibration.data.length > 0 ? (
           <Panel
@@ -265,6 +275,8 @@ export function ModelComparison() {
           </div>
         </Panel>
       ) : null}
+        </div>
+      </details>
     </>
   );
 }
@@ -284,7 +296,7 @@ function FailureDetail({ verdict, minDetection, scenarios }: { verdict: Candidat
           value={`${integer(verdict.clean.detected)} / ${integer(verdict.clean.engines)}`}
           note={`${percent(verdict.clean.detection_fraction, 1)} of histories`}
         />
-        <Stat label="Warned too late" value={integer(verdict.clean.late)} note="alert opened inside the final cycles" />
+        <Stat label="Warned too late" value={integer(verdict.clean.late)} note="alert active after the useful window" />
         <Stat
           label="Missed"
           value={integer(verdict.clean.missed)}

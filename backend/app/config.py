@@ -65,13 +65,17 @@ class ExperimentConfig:
     # Demonstration defaults; each experiment records the limits chosen before training.
     min_detection_fraction: float = 0.70
     max_early_alarm_burden: float = 0.10
+    fault_scenarios: tuple[dict, ...] | None = None
 
     @property
     def max_useful_lead(self) -> int:
         return self.horizon_cycles
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        result = asdict(self)
+        if self.protocol_revision < 4 and self.fault_scenarios is None:
+            result.pop("fault_scenarios")
+        return result
 
     def fingerprint(self) -> str:
         payload = json.dumps(self.as_dict(), sort_keys=True, default=list)
@@ -90,7 +94,7 @@ class ExperimentConfig:
             raise ValueError("feature_window must cover at least two cycles")
         if self.n_folds < 2:
             raise ValueError("n_folds must be at least 2")
-        if min(self.fault_onsets) < self.min_useful_lead:
+        if self.fault_scenarios is None and min(self.fault_onsets) < self.min_useful_lead:
             raise ValueError("a fault onset inside the useful window cannot be scored")
 
 

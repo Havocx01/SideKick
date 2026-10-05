@@ -1,132 +1,92 @@
-"""Fixed explanations derived only from the selected evidence bundle."""
+"""Short explanations scoped to one candidate and evaluation partition."""
 
 from urllib.parse import urlencode
 
-from app.schemas import CandidateKind, DecisionReport, EvidenceBundle, GuideAnswer
+from app.schemas import CandidateKind, DecisionReport, EvidenceBundle, GuideAnswer, Partition
 
 
 def candidateLabel(verdict):
-    names = {
-        CandidateKind.xgboost: "XGBoost",
-        CandidateKind.xgboost_augmented: "Augmented XGBoost",
-        CandidateKind.logistic_regression: "Logistic regression",
-        CandidateKind.age_baseline: "Age baseline",
-    }
+    names = {CandidateKind.xgboost: "XGBoost", CandidateKind.xgboost_augmented: "Augmented XGBoost",
+             CandidateKind.logistic_regression: "Logistic regression", CandidateKind.age_baseline: "Age baseline"}
     return f"{names[verdict.candidate]} ({verdict.config_id})"
 
 
-def faultLabel(bundle, verdict):
+def percentage(value, digits=2):
+    return f"{value:.{digits}%}" if value is not None else "unavailable"
+
+
+def faultLabel(bundle, verdict, partition=Partition.out_of_fold):
     row = next((r for r in bundle.scenario_results if r.scenario_id == verdict.worst_scenario_id
-                and r.candidate == verdict.candidate and r.config_id == verdict.config_id), None)
-    if row and row.fault:
-        return row.fault.label().replace("sensor_", "sensor ").replace("op_setting_", "operating setting ")
-    return verdict.worst_scenario_id or "unrecorded fault"
+                and r.candidate == verdict.candidate and r.config_id == verdict.config_id and r.partition == partition), None)
+    return row.fault.label() if row and row.fault else verdict.worst_scenario_id or "unrecorded fault"
 
 
-def decision(bundle: EvidenceBundle) -> DecisionReport:
-    selection = bundle.development_selection
+def decision(bundle: EvidenceBundle, candidate: str | None = None, partition=Partition.out_of_fold) -> DecisionReport:
+    selection = bundle.final_evaluation if partition == Partition.holdout else bundle.development_selection
+    if selection is None:
+        raise ValueError("No final validation is available for this experiment.")
     criteria = selection.criteria
-    chosen = selection.recommended
+    focus = selection.recommended or (selection.ranked[0] if selection.ranked else None)
+    if candidate:
+        focus = next((v for v in selection.ranked if f"{v.candidate.value}/{v.config_id}" == candidate), None)
+        if focus is None:
+            raise ValueError("That candidate is unavailable in this evaluation partition.")
+    key = f"{focus.candidate.value}/{focus.config_id}" if focus else None
+    context = {"candidate": key, "partition": partition.value} if key else {"partition": partition.value}
     prefix = f"/experiments/{bundle.experiment_id}" if bundle.experiment_id else ""
-    comparison = f"{prefix}/comparison"
-    replay = f"{prefix}/replay"
-
-    rule = (
-        f"at least {criteria.min_detection_fraction:.1%} useful detection and at most "
-        f"{criteria.max_early_alarm_burden:.1%} early-alarm burden on clean data and every required fault case"
-    )
-    if chosen:
-        title = f"{candidateLabel(chosen)} met the selected criteria"
-        summary = (
-            f"It met {rule}. Qualifying candidates are ranked by mean detection across required "
-            f"fault cases, with clean early-alarm burden breaking ties. Its clean detection was "
-            f"{chosen.clean.detection_fraction:.1%}, with {chosen.clean.early_alarm_burden:.2%} early-alarm burden. These are development results, not deployment approval."
-        )
-    else:
-        title = "No model qualified"
-        summary = f"No candidate met {rule}. No model is recommended. Inspect the required cases for the leading candidates before changing the criteria or collecting more data."
-    focus = chosen or (selection.ranked[0] if selection.ranked else None)
-    if focus and focus.worst_metrics:
-        faultSummary = (
-            f"For {candidateLabel(focus)}, the required case with lowest detection was "
-            f"{faultLabel(bundle, focus)}. Useful detection changed from "
-            f"{focus.clean.detection_fraction:.1%} clean to {focus.worst_metrics.detection_fraction:.1%}; "
-            f"{focus.worst_metrics.detected} of {focus.worst_metrics.engines} histories were warned in time. "
-            f"Late warnings: {focus.worst_metrics.late}. Missed histories: {focus.worst_metrics.missed}. "
-            f"Early-alarm burden changed from {focus.clean.early_alarm_burden:.2%} to "
-            f"{focus.worst_metrics.early_alarm_burden:.2%}. "
-            "Other cases may have higher alarm burden; check the required scenario metrics in the evidence export as well."
-        )
-    else:
-        faultSummary = "No required fault result is available for comparison."
-    ordinary = next((v for v in selection.ranked if v.qualifies and v.candidate == CandidateKind.xgboost), None)
-    augmented = next(
-        (v for v in selection.ranked if v.qualifies and v.candidate == CandidateKind.xgboost_augmented), None
-    )
-    if ordinary and augmented:
-        meanDelta = 100 * (augmented.mean_detection_required - ordinary.mean_detection_required)
-        worstDelta = 100 * (augmented.worst_detection_required - ordinary.worst_detection_required)
-        burdenDelta = 100 * (augmented.clean.early_alarm_burden - ordinary.clean.early_alarm_burden)
-        augmentation = (
-            f"Comparing the strongest qualifying configurations under the selection rule: "
-            f"{candidateLabel(ordinary)} and {candidateLabel(augmented)}. With augmentation, mean required-case detection "
-            f"changed by {meanDelta:+.2f} percentage points, worst-case detection by {worstDelta:+.2f} percentage points, "
-            f"and clean early-alarm burden by {burdenDelta:+.2f} percentage points (lower burden is better). "
-        )
-        if meanDelta <= 0 and worstDelta <= 0:
-            augmentation += "Augmentation did not improve measured mean or worst-case detection in this comparison. "
-        else:
-            augmentation += "Some measured detection results improved; this does not establish a general benefit. "
-        augmentation += "These are selected configurations, not a controlled causal test of augmentation."
-    else:
-        missing = "ordinary XGBoost" if ordinary is None else "augmented XGBoost"
-        if ordinary is None and augmented is None:
-            missing = "either XGBoost family"
-        augmentation = (
-            f"There is no qualifying candidate from {missing}. A comparison between two qualifying "
-            "configurations is therefore unavailable; do not conclude that augmentation helped."
-        )
-    faultLink = comparison + "#fault-results"
+    comparison = f"{prefix}/comparison?{urlencode(context)}"
+    replay = f"{prefix}/replay?{urlencode(context)}"
+    stage = "final-validation" if partition == Partition.holdout else "development"
+    rule = f"{criteria.min_detection_fraction:.1%} detection minimum and {criteria.max_early_alarm_burden:.1%} alarm-burden maximum"
     if focus:
-        query = urlencode({"candidate": f"{focus.candidate.value}/{focus.config_id}"})
-        faultLink = f"{comparison}?{query}#fault-results"
-        traces = [s for s in bundle.replay_series if s.candidate == focus.candidate and s.config_id == focus.config_id]
-        example = next((s for s in traces if s.fault and s.equipment_id == "13" and bundle.profile.dataset_id == "cmapss-fd001-train"), None)
-        example = example or next((s for s in traces if s.fault), traces[0] if traces else None)
-        if example:
-            replay += "?" + urlencode({"equipment": example.equipment_id, "scenario": example.scenario_id})
+        title = f"{candidateLabel(focus)} {'meets' if focus.qualifies else 'does not meet'} {stage} criteria"
+        summary = (f"With healthy sensors, {focus.clean.detected}/{focus.clean.engines} histories received a warning in time. "
+                   f"The healthy-sensor results {'meet' if focus.passes_clean else 'do not meet'} the test limits. "
+                   f"Time spent warning too early: {percentage(focus.clean.early_alarm_burden)} of eligible early cycles. "
+                   f"{focus.required_passed}/{focus.required_scenarios} required fault cases pass the {rule}.")
+        if focus.coverage_complete is False:
+            summary += " Required-case coverage is incomplete."
+        if focus.candidate == CandidateKind.age_baseline:
+            summary += " This baseline uses equipment age only, without sensor readings."
+    else:
+        title, summary = "No candidate results", "No model is recommended."
+    summary += " These results do not approve deployment."
+    if focus and focus.worst_metrics:
+        metrics = focus.worst_metrics
+        faultSummary = (f"Lowest detection: {faultLabel(bundle, focus, partition)}. Detection changed from "
+                        f"{focus.clean.detection_fraction:.1%} to {metrics.detection_fraction:.1%}. "
+                        f"{metrics.detected}/{metrics.engines} histories warned in time; {metrics.late} warned too late; "
+                        f"{metrics.missed} missed both the useful and late warning windows. "
+                        f"Time spent warning too early in this case: {percentage(metrics.early_alarm_burden)} of eligible early cycles.")
+        if focus.worst_burden_required is not None:
+            faultSummary += f" Highest required burden: {percentage(focus.worst_burden_required)}."
+    else:
+        faultSummary = "No required fault result is available."
+    ordinary = next((v for v in selection.ranked if v.qualifies and v.candidate == CandidateKind.xgboost), None)
+    augmented = next((v for v in selection.ranked if v.qualifies and v.candidate == CandidateKind.xgboost_augmented), None)
+    if ordinary and augmented:
+        delta = 100 * (augmented.mean_detection_required - ordinary.mean_detection_required)
+        augmentation = (f"Best qualifying {candidateLabel(ordinary)} versus {candidateLabel(augmented)}: "
+                        f"mean required detection changed by {delta:+.2f} percentage points. "
+                        "This compares selected configurations and does not isolate augmentation's effect. "
+                        + ("Inspect the matched-configuration comparisons separately." if bundle.paired_comparisons
+                         else "No matched experiment is recorded in this historical bundle."))
+    else:
+        augmentation = "Two qualifying XGBoost families are unavailable in this partition. No improvement claim is supported."
+    traces = [s for s in bundle.replay_series if f"{s.candidate.value}/{s.config_id}" == key and s.partition == partition]
+    example = next((s for s in traces if s.scenario_id == (focus.worst_scenario_id if focus else None)), None)
+    if example:
+        replay += "&" + urlencode({"equipment": example.equipment_id, "scenario": example.scenario_id})
+    nextAnswer = ("Replay a selected clean/faulted example, then inspect missed warnings, alarm burden and coverage. "
+                  "Representative traces do not show every history.") if traces else "No replay is stored for this candidate. Inspect its scenario metrics and export the evidence."
     return DecisionReport(
-        title=title,
-        summary=summary,
-        fault_summary=faultSummary,
-        augmentation_summary=augmentation,
-        unaugmented=ordinary,
-        augmented=augmented,
-        limitations=[bundle.holdout_status, *bundle.limitations],
+        title=title, summary=summary, fault_summary=faultSummary, augmentation_summary=augmentation,
+        unaugmented=ordinary, augmented=augmented, limitations=[bundle.holdout_status, *bundle.limitations],
+        inspected_candidate=key, partition=partition,
         guide=[
-            GuideAnswer(
-                question="Why was this model selected?",
-                answer=summary,
-                link=comparison,
-                link_label="Inspect candidate results",
-            ),
-            GuideAnswer(
-                question="Which fault caused the biggest problem?",
-                answer=faultSummary,
-                link=faultLink,
-                link_label="Inspect required fault cases",
-            ),
-            GuideAnswer(
-                question="Did augmented training help?",
-                answer=augmentation,
-                link=comparison + "#augmentation",
-                link_label="Compare the configurations",
-            ),
-            GuideAnswer(
-                question="What should I inspect next?",
-                answer="Inspect the clean and faulted warning replay, then check missed detections, early alarms and the limitations. A passing development result does not approve deployment.",
-                link=replay,
-                link_label="Open warning replay",
-            ),
+            GuideAnswer(question="Why did this model pass or fail?", answer=summary, link=comparison, link_label="Inspect candidate results"),
+            GuideAnswer(question="Which fault caused the biggest problem?", answer=faultSummary, link=comparison + "#fault-results", link_label="Inspect fault cases"),
+            GuideAnswer(question="Did augmented training help?", answer=augmentation, link=comparison + "#augmentation", link_label="Compare configurations"),
+            GuideAnswer(question="What should I inspect next?", answer=nextAnswer, link=replay if traces else comparison + "#fault-results", link_label="Open warning replay" if traces else "Inspect fault metrics"),
         ],
     )

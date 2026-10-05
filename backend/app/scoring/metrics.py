@@ -23,6 +23,13 @@ class EngineScoring:
     scored_cycles: int
 
 
+def compact_scoring(scoring: EngineScoring) -> EngineScoring:
+    """Keep equipment outcomes for bootstrap/replay selection without retaining traces."""
+    scoring.episodes = []
+    scoring.active = np.empty(0, dtype=bool)
+    return scoring
+
+
 def score_engine(
     equipment_id: str,
     scores: np.ndarray,
@@ -94,7 +101,7 @@ def aggregate(
             missed=0,
             detection_fraction=0.0,
             detection_ci=wilson_interval(0, 0, level),
-            early_alarm_burden=0.0,
+            early_alarm_burden=None,
             new_episodes_per_1000=0.0,
             median_lead_time=None,
             eligible_cycles=0,
@@ -120,7 +127,7 @@ def aggregate(
         missed=missed,
         detection_fraction=detected / engines,
         detection_ci=wilson_interval(detected, engines, level),
-        early_alarm_burden=(alarmEligible / eligible) if eligible else 0.0,
+        early_alarm_burden=(alarmEligible / eligible) if eligible else None,
         new_episodes_per_1000=(1000.0 * newEpisodes / eligible) if eligible else 0.0,
         median_lead_time=float(np.median(leads)) if leads else None,
         eligible_cycles=eligible,

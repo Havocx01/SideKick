@@ -38,6 +38,8 @@ install.log
 # OS / editor
 .playwright-cli/
 /output/
+frontend/test-results/
+frontend/playwright-report/
 .DS_Store
 Thumbs.db
 .idea/

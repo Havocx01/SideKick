@@ -89,7 +89,7 @@ def _recommendation_answer(registry: ToolRegistry):
             f"(95% interval {ci['lower']:.2f} to {ci['upper']:.2f})"
         )
         lines.append(
-            f"- Early alarm burden {best['clean_early_alarm_burden']:.1%}; median warning "
+            f"- Early alarm burden {_percent(best['clean_early_alarm_burden'])}; median warning "
             f"lead time {best['median_lead_time']} cycles"
         )
         lines.append(
@@ -99,9 +99,8 @@ def _recommendation_answer(registry: ToolRegistry):
 
     if report["uncertain_comparisons"]:
         lines.append(
-            f"\n**Ordering not established:** {len(report['uncertain_comparisons'])} "
-            "adjacent comparisons have overlapping detection intervals, so those "
-            "rankings are not supported by this evaluation."
+            "\n**Exploratory ordering:** development results selected these configurations and thresholds. "
+            "Paired comparisons do not establish independent selected-model performance."
         )
 
     lines.append(
@@ -176,7 +175,7 @@ def _metric_answer(registry: ToolRegistry):
             f"{metrics['late']} | {metrics['missed']} | "
             f"{_percent(metrics['detection_fraction'])} | "
             f"{metrics['detection_ci_lower']:.2f}-{metrics['detection_ci_upper']:.2f} | "
-            f"{metrics['early_alarm_burden']:.1%} | "
+            f"{_percent(metrics['early_alarm_burden'])} | "
             f"{'-' if lead is None else f'{lead:.1f}'} |"
         )
     lines.append(

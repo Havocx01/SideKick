@@ -9,9 +9,9 @@ from fastapi.responses import Response
 from app.api.deps import bundle
 from app.config import get_settings
 from app.experiments.decision import decision
+from app.experiments.demo import owner, public_origin
 from app.experiments.export import export_zip, render_report
 from app.experiments.jobs import Jobs
-from app.experiments.demo import owner, public_origin
 from app.experiments.store import ACTIVE
 from app.schemas import (
     DatasetConfirmation,
@@ -20,6 +20,8 @@ from app.schemas import (
     EvidenceBundle,
     ExperimentCreate,
     ExperimentRecord,
+    Partition,
+    ValidationCreate,
 )
 
 router = APIRouter(prefix="/api", tags=["experiments"])
@@ -137,7 +139,7 @@ def create_experiment(payload: ExperimentCreate, request: Request, jobs: Jobs = 
 
 @router.get("/experiments", response_model=list[ExperimentRecord])
 def experiments(request: Request, jobs: Jobs = Depends(local_jobs)):
-    records = jobs.workspace.list()
+    records = [r for r in jobs.workspace.list() if r.get("job_kind", "development") == "development"]
     if get_settings().mode == "demo":
         ids = request.app.state.demo.ids("experiments", owner(request))
         records = [record for record in records if record["experiment_id"] in ids]
@@ -164,14 +166,63 @@ def cancel(experiment_id: str, request: Request, jobs: Jobs = Depends(local_jobs
 
 
 @router.get("/decision", response_model=DecisionReport)
-def decision_report(loaded: EvidenceBundle = Depends(bundle)):
-    return decision(loaded)
+def decision_report(loaded: EvidenceBundle = Depends(bundle), candidate: str | None = None, partition: Partition = Partition.out_of_fold):
+    try:
+        return decision(loaded, candidate, partition)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+def operation_state(jobs, experiment_id, kind):
+    try:
+        parent = jobs.workspace.get("experiments", experiment_id)
+        if parent.get("job_kind", "development") != "development":
+            raise KeyError(experiment_id)
+        operation = jobs.workspace.operation(experiment_id, kind)
+        return {"available": operation is not None, "record": operation,
+                "job": jobs.workspace.get("experiments", operation["job_id"]) if operation else None}
+    except (KeyError, ValueError):
+        raise HTTPException(404, "Experiment not found") from None
+
+
+@router.get("/experiments/{experiment_id}/freeze")
+def frozen_state(experiment_id: str, jobs: Jobs = Depends(upload_jobs)):
+    return operation_state(jobs, experiment_id, "freeze")
+
+
+@router.post("/experiments/{experiment_id}/freeze", status_code=202)
+def freeze_model(experiment_id: str, jobs: Jobs = Depends(upload_jobs)):
+    try:
+        return jobs.create_operation(experiment_id, "freeze")
+    except KeyError:
+        raise HTTPException(404, "Experiment not found") from None
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/experiments/{experiment_id}/validation")
+def validation_state(experiment_id: str, jobs: Jobs = Depends(upload_jobs)):
+    return operation_state(jobs, experiment_id, "validation")
+
+
+@router.post("/experiments/{experiment_id}/validation", status_code=202)
+def validate_model(experiment_id: str, payload: ValidationCreate, jobs: Jobs = Depends(upload_jobs)):
+    try:
+        return jobs.create_operation(experiment_id, "validation", untouched_confirmed=payload.untouched_confirmed)
+    except KeyError:
+        raise HTTPException(404, "Experiment not found") from None
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/export")
-def download(loaded: EvidenceBundle = Depends(bundle)):
+def download(loaded: EvidenceBundle = Depends(bundle), candidate: str | None = None, partition: Partition = Partition.out_of_fold):
+    try:
+        content = export_zip(loaded, candidate, partition)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return Response(
-        export_zip(loaded),
+        content,
         media_type="application/zip",
         headers={
             "Content-Disposition": f'attachment; filename="sidekick-{loaded.experiment_id or "benchmark"}-evidence.zip"'
@@ -180,6 +231,9 @@ def download(loaded: EvidenceBundle = Depends(bundle)):
 
 
 @router.get("/export/report")
-def report(loaded: EvidenceBundle = Depends(bundle)):
-    html, _ = render_report(loaded)
+def report(loaded: EvidenceBundle = Depends(bundle), candidate: str | None = None, partition: Partition = Partition.out_of_fold):
+    try:
+        html, _ = render_report(loaded, candidate, partition)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return Response(html, media_type="text/html", headers={"X-Content-Type-Options": "nosniff"})

@@ -186,7 +186,10 @@ def train_development(
 
             fitted: dict[str, Candidate] = {}
             for template in grid:
-                candidate = type(template)(template.config_id, dict(template.params))
+                params = dict(template.params)
+                if config.protocol_revision >= 4:
+                    params["model_seed"] = derive_seed(config.base_seed, "model", template.config_id.lstrip("xgbau"), foldIndex)
+                candidate = type(template)(template.config_id, params)
                 candidate.fit(trainDesign, augmented=augmented)
                 fitted[candidate.name] = candidate
 
@@ -254,6 +257,9 @@ def fit_final(
             copies=augmentation_copies,
         )
 
-    refit = type(candidate)(candidate.config_id, dict(candidate.params))
+    params = dict(candidate.params)
+    if config.protocol_revision >= 4:
+        params["model_seed"] = derive_seed(config.base_seed, "model", candidate.config_id.lstrip("xgbau"), "final")
+    refit = type(candidate)(candidate.config_id, params)
     refit.fit(design, augmented=augmented)
     return refit, builder, preprocessor

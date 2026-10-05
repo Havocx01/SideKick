@@ -13,8 +13,10 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: <Layout />,
+    hydrateFallbackElement: <div className="state" role="status">Loading workspace...</div>,
     children: [
       { index: true, element: <Start /> },
+      { path: "walkthrough", lazy: async () => ({ Component: (await import("./views/Walkthrough")).Walkthrough }) },
       { path: "benchmark", lazy: async () => ({ Component: (await import("./views/DataSetup")).DataSetup }) },
       { path: "new", element: <NewExperiment /> },
       { path: "experiments", element: <ExperimentHistory /> },

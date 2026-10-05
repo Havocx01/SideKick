@@ -20,7 +20,7 @@ from app.schemas import (
     AlertMetrics,
     CalibrationReport,
     DatasetProfile,
-    FaultSpec,
+    FaultScenario,
     Partition,
     ScenarioResult,
     SelectionResult,
@@ -125,9 +125,14 @@ def evaluate(
 
     clean = score_clean(training, thresholds, config=config)
 
-    required = required_scenarios(sensors, config)
+    if config.fault_scenarios is not None:
+        entries = [FaultScenario.model_validate(s) for s in config.fault_scenarios]
+        required = [s.fault for s in entries if s.required]
+        scenarios = [s.fault for s in entries]
+    else:
+        required = required_scenarios(sensors, config)
+        scenarios = full_scenarios(sensors, config) if include_full_matrix else required
     requiredIds = {spec.scenario_id for spec in required}
-    scenarios: list[FaultSpec] = full_scenarios(sensors, config) if include_full_matrix else required
     logger.info(
         "fault matrix: %d scenarios (%d required) across %d folds", len(scenarios), len(required), len(training.folds)
     )
@@ -161,6 +166,7 @@ def evaluate(
         if incomplete:
             verdict.qualifies = False
             verdict.passes_all_required = False
+            verdict.coverage_complete = False
             verdict.notes.append(
                 "Required fault coverage is incomplete. Every required case must score all development engines."
             )

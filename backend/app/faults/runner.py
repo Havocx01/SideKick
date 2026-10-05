@@ -10,7 +10,7 @@ from app.faults.inject import apply_fault
 from app.models.design import EngineBlock, design_from_blocks
 from app.models.train import TrainingResult
 from app.schemas import CLEAN_SCENARIO_ID, AlertMetrics, FaultSpec, Partition, ScenarioResult
-from app.scoring.metrics import EngineScoring, aggregate, score_engine
+from app.scoring.metrics import EngineScoring, aggregate, compact_scoring, score_engine
 from app.utils.logging_setup import get_logger, timed
 
 logger = get_logger(__name__)
@@ -22,6 +22,7 @@ class MatrixOutcome:
     scenarios: dict[str, FaultSpec] = field(default_factory=dict)
     skipped: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
     engines_scored: dict[str, int] = field(default_factory=dict)
+    equipment_metrics: dict[tuple[str, str], list[EngineScoring]] = field(default_factory=dict)
 
     def for_candidate(self, candidate_name: str) -> dict[str, AlertMetrics]:
         return {scenarioId: metrics for (name, scenarioId), metrics in self.metrics.items() if name == candidate_name}
@@ -107,14 +108,14 @@ def run_matrix(
                     for equipmentId in faulted:
                         mask = design.equipment_id == equipmentId
                         collected[(candidateName, spec.scenario_id)].append(
-                            score_engine(
+                            compact_scoring(score_engine(
                                 equipmentId,
                                 scores[mask],
                                 design.cycle[mask],
                                 design.rul[mask],
                                 thresholds[candidateName],
                                 config=config,
-                            )
+                            ))
                         )
 
     if progress:
@@ -123,6 +124,7 @@ def run_matrix(
     for key, scorings in collected.items():
         outcome.metrics[key] = aggregate(scorings, config=config)
         outcome.engines_scored[key[1]] = len(scorings)
+        outcome.equipment_metrics[key] = scorings
 
     return outcome
 
@@ -150,7 +152,9 @@ def to_scenario_results(
                 required=False,
             )
         )
-        for scenarioId, metrics in sorted(outcome.for_candidate(candidateName).items()):
+        candidateMetrics = outcome.for_candidate(candidateName)
+        for scenarioId in sorted(outcome.scenarios):
+            metrics = candidateMetrics.get(scenarioId) or aggregate([])
             results.append(
                 ScenarioResult(
                     scenario_id=scenarioId,
@@ -161,6 +165,9 @@ def to_scenario_results(
                     fault=outcome.scenarios.get(scenarioId),
                     metrics=metrics,
                     required=scenarioId in required_ids,
+                    expected_engines=len(training.splits.development),
+                    coverage_complete=metrics.engines == len(training.splits.development),
+                    coverage_notes=outcome.skipped.get(scenarioId, [])[:20],
                 )
             )
     return results

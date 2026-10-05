@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, experiments } from "../api/client";
-import type { ColumnMapping, DatasetRegistration, ExperimentRecord } from "../api/types";
+import type { ColumnMapping, DatasetRegistration, ExperimentRecord, ExperimentProtocol, PilotBrief } from "../api/types";
+import { defaultProtocol, PilotBriefEditor, ProtocolEditor } from "../components/ProtocolEditor";
 import { Badge, Button, Field, Panel, Select, StateBlock } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
 import { ArrowRight, Check, FlaskConical, Layers, Upload } from "lucide-react";
@@ -49,16 +50,12 @@ export function Start() {
     <>
       <section className="welcome" aria-labelledby="welcome-heading">
         <div>
-          <h1 id="welcome-heading">Test failure warnings before trusting them</h1>
-          <p>Train on equipment histories. Test missing, frozen and drifting sensors. See which warnings hold up.</p>
+          <h1 id="welcome-heading">Test whether equipment warnings survive sensor faults</h1>
+          <p>Sidekick trains models that warn about equipment failure. It simulates missing, stuck and drifting sensor readings in datasets, then shows which warnings still work.</p>
           <div className="hero-actions">
-            {health.data?.can_train ? (
-              <Link className="button primary" to="/new?source=sample">Run sample experiment <ArrowRight size={16} aria-hidden="true" /></Link>
-            ) : (
-              <Link className="button primary" to="/comparison">Explore benchmark <ArrowRight size={16} aria-hidden="true" /></Link>
-            )}
+            <Link className="button primary" to="/walkthrough?step=clean">Start guided walkthrough <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
-          <p className="hero-footnote">{health.data?.can_train ? "Synthetic data · Local training · No API key" : "Recorded NASA results. No training required."}</p>
+          <p className="hero-footnote">Five steps through recorded NASA results. No training required.</p>
         </div>
         <div className="benchmark-preview">
           <div className="preview-heading"><h2>A clean score is only the start</h2><Badge>Recorded NASA</Badge></div>
@@ -105,10 +102,11 @@ export function Start() {
         </StateBlock>
       </section>
       <ol className="workflow" aria-label="Experiment workflow">
-        {["Choose data", "Check histories", "Train and challenge", "Inspect results", "Export evidence"].map(step => <li key={step}><Check size={16} aria-hidden="true" />{step}</li>)}
+        {["Choose equipment data", "Train warning models", "Simulate sensor faults", "Inspect warnings", "Export evidence"].map(step => <li key={step}><Check size={16} aria-hidden="true" />{step}</li>)}
       </ol>
       {health.data?.mode === "demo" && <p className="scope-note">The hosted sample uses 30 short histories, three sensors and four configurations. Two runs per browser per hour, one active server run, and shared daily limits apply. Results expire after 24 hours; restarts or idle shutdowns may clear them sooner. Export evidence to keep it.</p>}
       <p className="scope-note">Development evidence only. ABB field performance remains unverified.</p>
+      <p className="scope-note">The Evidence guide explains recorded metrics without an external language model. No API key is needed.</p>
     </>
   );
 }
@@ -134,12 +132,16 @@ function ExperimentSetup() {
   const [detection, setDetection] = useState(70);
   const [csvText, setCsvText] = useState("");
   const [burden, setBurden] = useState(10);
+  const [protocol, setProtocol] = useState<ExperimentProtocol>(defaultProtocol([]));
+  const [pilotBrief, setPilotBrief] = useState<PilotBrief>({ data_classification: "unverified" });
   const datasetId = params.get("dataset");
   const isSample = params.get("source") === "sample";
   function receive(value: DatasetRegistration) {
     setData(value);
     setComplete(value.complete_histories ?? false);
     setMapping(value.mapping ?? { equipment_id: "", cycle_index: "", sensors: [], failure_cycle: null });
+    if (value.confirmed) setProtocol(defaultProtocol((value.profile?.sensors ?? []).filter(s => s.varies).map(s => s.name)));
+    if (value.source === "synthetic") setPilotBrief({ data_classification: "simulated" });
   }
   useEffect(() => {
     if (!datasetId) {
@@ -205,6 +207,7 @@ function ExperimentSetup() {
         dataset_id: data.dataset_id,
         min_detection_fraction: detection / 100,
         max_early_alarm_burden: burden / 100
+        , ...(health.data?.can_edit_protocol ? { protocol: { ...protocol, min_detection_fraction: detection / 100, max_early_alarm_burden: burden / 100 }, pilot_brief: pilotBrief } : {})
       });
       navigate(`/experiments/${result.experiment_id}`);
     } catch (e) {
@@ -384,7 +387,7 @@ function ExperimentSetup() {
                 <p>
                   <strong>{data.splits.development.length} development histories</strong> are divided into{" "}
                   {data.splits.folds.length} folds. Each machine is evaluated by models that did not train on it.{" "}
-                  <strong>{data.splits.holdout.length} histories are reserved and will not be scored.</strong>
+                  <strong>{data.splits.holdout.length} histories are reserved. Development training does not score them.</strong>
                 </p>
                 <details>
                   <summary>Inspect equipment assignments</summary>
@@ -414,27 +417,24 @@ function ExperimentSetup() {
                 </p>
               </Panel>
               <Panel
-                title="Choose the acceptance limits"
-                description="70% detection and 10% early-alarm burden are demonstration settings, not operational recommendations."
+                title="Define the experiment protocol"
+                description="Choose what a model must achieve. The default 70% useful warnings and 10% early-alarm time are demonstration settings."
               >
                 <div className="mapping-roles">
-                  <NumberField label="Minimum useful detection" value={detection} onValueChange={setDetection} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
-                  <NumberField label="Maximum early-alarm burden" value={burden} onValueChange={setBurden} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
+                  <NumberField label="Minimum histories warned in time" value={detection} onValueChange={setDetection} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
+                  <NumberField label="Maximum time warning too early" value={burden} onValueChange={setBurden} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
                 </div>
-                <p>
-                  Detection counts machines warned 10 to 30 cycles before failure. Early-alarm burden measures how much
-                  eligible healthy operating time is spent in an alert, more than 45 cycles before failure.
-                </p>
+                {health.data?.can_edit_protocol ? <><ProtocolEditor value={protocol} onChange={setProtocol} sensors={data.mapping?.sensors ?? []} disabled={busy} /><PilotBriefEditor value={pilotBrief} onChange={setPilotBrief} disabled={busy} /></> : <p>Useful warnings: 10 to 30 cycles before failure. Early-alarm burden: time in alarm more than 45 cycles before failure.</p>}
                 <p className="note">
                   Fixed for this version: five equipment folds, {health.data?.sample_configurations ?? 10} candidate
-                  configurations, a 20-cycle feature window, and the required dropout, stuck-sensor and drift tests. No
-                  holdout scoring or automatic deployment.
+                  configurations and a 20-cycle feature window. Final validation is a separate, explicit local action.
                 </p>
                 <Button variant="primary" loading={busy}
                   disabled={
                     !Number.isFinite(detection) || !Number.isFinite(burden) || detection < 0 || detection > 100 ||
                     burden < 0 ||
                     burden > 100
+                    || (health.data?.can_edit_protocol && (!protocol.scenarios?.some(s => s.required !== false) || !((protocol.min_useful_lead ?? 10) < (protocol.horizon_cycles ?? 30) && (protocol.horizon_cycles ?? 30) < (protocol.transition_band_end ?? 45))))
                   }
                   onClick={start}
                 >
@@ -579,8 +579,8 @@ function Progress() {
       <header className="page-head">
         <h1>{record?.name ?? "Local experiment"}</h1>
         <p>
-          Training runs in a separate worker. Refreshing this page will not stop it. Hosted runs need the same browser
-          cookies to reopen.
+          Sidekick checks the data, trains warning models, chooses alert rules, then tests simulated sensor faults.
+          Refreshing this page will not stop the experiment.
         </p>
       </header>
       {error && (
@@ -588,7 +588,7 @@ function Progress() {
           {error}
         </div>
       )}
-      {!record && !error && <p role="status">Loading experiment…</p>}
+      {!record && !error && <p role="status">Loading experiment...</p>}
       {record && (
         <Panel
           title={

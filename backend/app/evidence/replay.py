@@ -25,12 +25,16 @@ def build_series(
     candidate = fold.candidates[candidate_name]
     block = fold.blocks[equipment_id]
     builder = fold.builder
+    return build_fitted_series(training.dataset, builder, candidate, block, equipment_id, threshold, spec=spec, config=config)
+
+
+def build_fitted_series(dataset, builder, candidate, block, equipment_id, threshold, *, spec=None, config=EXPERIMENT):
     scorable = block.scorable
 
     if not scorable.any():
         return None
 
-    readings = training.dataset.sensor_matrix(equipment_id)
+    readings = dataset.sensor_matrix(equipment_id)
     sensorClean: np.ndarray | None = None
     sensorFaulted: np.ndarray | None = None
     onsetRul: int | None = None
@@ -98,7 +102,7 @@ def build_series(
         points=points,
         episodes=scoring.episodes,
         outcome=scoring.outcome,
-        failure_cycle=int(training.dataset.failure_cycles[equipment_id]),
+        failure_cycle=int(dataset.failure_cycles[equipment_id]),
     )
 
 

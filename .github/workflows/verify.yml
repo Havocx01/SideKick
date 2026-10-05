@@ -1,0 +1,40 @@
+name: Verify Sidekick
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install -r backend/requirements-dev.txt
+      - run: ruff check --config pyproject.toml backend/app tests scripts
+      - run: python -m pytest -q
+      - run: python scripts/generate_types.py
+      - run: git diff --exit-code frontend/src/api/types.ts
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+  hosted-memory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target demo -t sidekick-memory .
+      - run: docker run -d --name sidekick-memory --memory=512m --memory-swap=512m sidekick-memory
+      - run: docker cp scripts/check_hosted_memory.py sidekick-memory:/tmp/check_hosted_memory.py
+      - run: docker exec sidekick-memory python /tmp/check_hosted_memory.py
+      - if: always()
+        run: |
+          docker logs sidekick-memory
+          docker rm -f sidekick-memory

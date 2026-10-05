@@ -4,13 +4,13 @@
 
 export type Severity = "info" | "warning" | "blocker";
 
-export type JobStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "timed_out" | "interrupted" | "failed";
-
-export type CandidateKind = "logistic_regression" | "xgboost" | "xgboost_augmented" | "age_baseline";
-
 export type FaultDuration = "persistent" | "transient";
 
 export type FaultKind = "dropout" | "stuck" | "drift";
+
+export type JobStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "timed_out" | "interrupted" | "failed";
+
+export type CandidateKind = "logistic_regression" | "xgboost" | "xgboost_augmented" | "age_baseline";
 
 export type Partition = "out_of_fold" | "holdout";
 
@@ -42,6 +42,8 @@ export interface AlertExplanation {
   contributions?: ShapContribution[];
   available?: boolean;
   note?: string;
+  candidate?: string | null;
+  partition?: Partition;
 }
 
 export interface AlertMetrics {
@@ -51,8 +53,8 @@ export interface AlertMetrics {
   missed: number;
   detection_fraction: number;
   detection_ci: WilsonInterval;
-  /** Fraction of eligible cycles (rul > transition band) spent in alarm. */
-  early_alarm_burden: number;
+  /** Fraction of eligible cycles spent in alarm; unavailable with no eligible cycles. */
+  early_alarm_burden: number | null;
   new_episodes_per_1000: number;
   median_lead_time: number | null;
   eligible_cycles: number;
@@ -94,6 +96,9 @@ export interface CandidateVerdict {
   failing_scenarios?: string[];
   qualifies?: boolean;
   notes?: string[];
+  worst_burden_required?: number | null;
+  worst_burden_scenario_id?: string | null;
+  coverage_complete?: boolean | null;
 }
 
 export interface ColumnMapping {
@@ -168,6 +173,8 @@ export interface DecisionReport {
   augmented?: CandidateVerdict | null;
   limitations: string[];
   guide: GuideAnswer[];
+  inspected_candidate?: string | null;
+  partition?: Partition;
 }
 
 export interface EngineOutcome {
@@ -184,6 +191,7 @@ export interface EvidenceBundle {
   experiment_id?: string | null;
   dataset_id?: string | null;
   source_digest?: string | null;
+  dependency_versions?: Record<string, string>;
   confirmed_mapping?: ColumnMapping | null;
   complete_histories_confirmed?: boolean | null;
   holdout_status?: string;
@@ -203,12 +211,30 @@ export interface EvidenceBundle {
   runs?: RunRecord[];
   reproducibility?: ReproducibilityCheck | null;
   limitations?: string[];
+  protocol?: ExperimentProtocol | null;
+  pilot_brief?: PilotBrief | null;
+  paired_comparisons?: PairedComparison[];
+  frozen_model?: FrozenModelRecord | null;
+  validation?: ValidationRecord | null;
 }
 
 export interface ExperimentCreate {
   dataset_id: string;
   min_detection_fraction?: number;
   max_early_alarm_burden?: number;
+  protocol?: ExperimentProtocol | null;
+  pilot_brief?: PilotBrief | null;
+}
+
+export interface ExperimentProtocol {
+  version?: number;
+  min_useful_lead?: number;
+  horizon_cycles?: number;
+  transition_band_end?: number;
+  min_detection_fraction?: number;
+  max_early_alarm_burden?: number;
+  scenarios?: FaultScenario[];
+  base_seed?: number;
 }
 
 export interface ExperimentRecord {
@@ -230,6 +256,15 @@ export interface ExperimentRecord {
   config_fingerprint: string;
   data_hash: string;
   source_digest: string;
+  job_kind?: "development" | "freeze" | "validation";
+  parent_experiment_id?: string | null;
+  operation_id?: string | null;
+  pilot_brief?: PilotBrief | null;
+}
+
+export interface FaultScenario {
+  fault: FaultSpec;
+  required?: boolean;
 }
 
 export interface FaultSpec {
@@ -247,6 +282,19 @@ export interface FaultSpec {
   seed?: number | null;
 }
 
+export interface FrozenModelRecord {
+  freeze_id: string;
+  experiment_id: string;
+  job_id: string;
+  candidate: string;
+  status?: string;
+  manifest?: Record<string, unknown>;
+  artifact_digest?: string | null;
+  manifest_digest?: string | null;
+  created_at: number;
+  error?: string | null;
+}
+
 export interface GuideAnswer {
   question: string;
   answer: string;
@@ -259,6 +307,30 @@ export interface NumericClaim {
   value: number;
   verified: boolean;
   matched_metric?: string | null;
+}
+
+export interface PairedComparison {
+  first: string;
+  second: string;
+  kind: "selected" | "matched_augmentation";
+  engines: number;
+  scenarios: number;
+  resamples?: number;
+  seed: number;
+  detection_delta: number;
+  detection_interval: number[];
+  burden_delta?: number | null;
+  burden_interval?: number[] | null;
+  note?: string;
+}
+
+export interface PilotBrief {
+  equipment_family?: string;
+  reviewing_engineer?: string;
+  current_procedure?: string;
+  intended_decision?: string;
+  success_measure?: string;
+  data_classification?: "simulated" | "field" | "unverified";
 }
 
 export interface ProfileFinding {
@@ -299,6 +371,8 @@ export interface ReplaySeries {
   episodes: AlertEpisode[];
   outcome: EngineOutcome;
   failure_cycle: number;
+  partition?: Partition;
+  representative_reason?: string | null;
 }
 
 export interface ReproducibilityCheck {
@@ -336,6 +410,9 @@ export interface ScenarioResult {
   /** Part of the bounded set used for selection. */
   required?: boolean;
   run_id?: string | null;
+  expected_engines?: number | null;
+  coverage_complete?: boolean | null;
+  coverage_notes?: string[];
 }
 
 export interface SelectionResult {
@@ -383,6 +460,22 @@ export interface ToolInvocation {
   error?: string | null;
   duration_ms?: number | null;
   run_ids?: string[];
+}
+
+export interface ValidationCreate {
+  untouched_confirmed: boolean;
+}
+
+export interface ValidationRecord {
+  validation_id: string;
+  experiment_id: string;
+  freeze_id: string;
+  job_id: string;
+  status?: string;
+  untouched_confirmed: boolean;
+  exposure_started_at?: number | null;
+  created_at: number;
+  error?: string | null;
 }
 
 export interface WilsonInterval {
