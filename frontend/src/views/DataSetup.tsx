@@ -21,11 +21,6 @@ export function DataSetup() {
     <>
       <header className="page-head">
         <h1>Data setup</h1>
-        <p>
-          The evaluation contract: which histories are being used, what the profiler found wrong with them, and what
-          counts as a useful warning. These settings are fixed before any model is trained, and the fingerprint below
-          changes if any of them do.
-        </p>
       </header>
 
       <StateBlock loading={profile.loading} error={profile.error}>
@@ -39,11 +34,11 @@ export function DataSetup() {
               </Callout>
             ) : null}
 
-            <div className="grid cols-4">
+            <div className="grid cols-3">
               <Stat
                 label="Equipment"
                 value={integer(profile.data.equipment_count)}
-                note="complete run-to-failure histories"
+                note="complete failure histories"
               />
               <Stat
                 label="Readings"
@@ -53,12 +48,7 @@ export function DataSetup() {
               <Stat
                 label="Channels"
                 value={integer(profile.data.sensors.length)}
-                note={`${profile.data.sensors.filter(s => s.varies).length} vary and are fault-tested`}
-              />
-              <Stat
-                label="Inside the horizon"
-                value={percent(profile.data.positive_label_fraction, 1)}
-                note="share of scorable cycles labelled positive"
+                note={`${profile.data.sensors.filter(s => s.varies).length} fault-tested`}
               />
             </div>
 
@@ -68,20 +58,18 @@ export function DataSetup() {
             >
               <div className="grid cols-3" style={{ marginBottom: 0 }}>
                 <Stat
-                  label="Warning horizon"
-                  value={`${settings.horizon_cycles ?? "—"} cycles`}
-                  note="a cycle is positive if failure falls this close"
+                  label="In time"
+                  value={`${settings.min_useful_lead ?? "—"}–${settings.horizon_cycles ?? "—"}`}
+                  note="cycles before failure"
                 />
                 <Stat
-                  label="Useful window"
-                  value={`${settings.horizon_cycles ?? "—"}–${settings.min_useful_lead ?? "—"}`}
-                  note="cycles before failure in which a warning is actionable"
-                />
-                <Stat
-                  label="Late, not missed"
+                  label="Late"
                   value={`≤ ${settings.late_window_end ?? "—"} cycles`}
-                  note="a warning this late is reported separately"
+                  note="before failure"
                 />
+              </div>
+              <details><summary>Scoring rules</summary><div className="grid cols-3">
+                <Stat label="Inside the horizon" value={percent(profile.data.positive_label_fraction, 1)} note="share of scorable cycles labelled positive" />
                 <Stat
                   label="Alert rule"
                   value={`${settings.alert_on_consecutive ?? 2} up / ${settings.alert_off_consecutive ?? 2} down`}
@@ -94,13 +82,14 @@ export function DataSetup() {
                 />
                 <Stat
                   label="Alarm-free band"
-                  value={`31–${settings.transition_band_end ?? "—"}`}
+                  value={`${settings.horizon_cycles != null ? settings.horizon_cycles + 1 : "—"}–${settings.transition_band_end ?? "—"}`}
                   note="excluded from the early alarm burden"
                 />
-              </div>
+              </div></details>
             </Panel>
 
-            <Panel
+            <details className="disclosure"><summary>Sensor details</summary>
+<Panel
               title="Column roles"
               description="Sensor models exclude equipment IDs, cycle counts and failure targets."
               tight
@@ -134,8 +123,10 @@ export function DataSetup() {
                 </table>
               </div>
             </Panel>
+</details>
 
-            <Panel
+            <details className="disclosure"><summary>Data findings ({profile.data.findings?.length ?? 0})</summary>
+<Panel
               title="Profile findings"
               description="Blockers must be resolved before training."
               tight
@@ -153,6 +144,7 @@ export function DataSetup() {
                 </div>
               ))}
             </Panel>
+</details>
           </>
         ) : null}
       </StateBlock>
@@ -161,39 +153,29 @@ export function DataSetup() {
         {splits.data ? (
           <Panel
             title="Partitions"
-            description="Equipment stays separate across training and evaluation."
+            description="Separate equipment per split."
           >
             <div className="grid cols-3" style={{ marginBottom: 12 }}>
               <Stat
                 label="Held back"
                 value={integer(splits.data.holdout.length)}
-                note={config.data?.holdout_status ?? "No automatic holdout scoring"}
+                note="separate evaluation"
               />
               <Stat
                 label="Development"
                 value={integer(splits.data.development.length)}
                 note={`across ${splits.data.folds.length} grouped folds`}
               />
-              <Stat
-                label="Split seed"
-                value={
-                  <span className="mono" style={{ fontSize: 15 }}>
-                    {splits.data.seed}
-                  </span>
-                }
-                note="derived from the data hash, so it is reproducible"
-              />
             </div>
-            <p className="note">
-              Held back: <span className="mono">{splits.data.holdout.join(", ")}</span>
-            </p>
+            <details><summary>Equipment assignments</summary><p className="note">{config.data?.holdout_status ?? "No automatic holdout scoring"}</p><p className="note">Held back: <span className="mono">{splits.data.holdout.join(", ")}</span>. Split seed: {splits.data.seed}.</p></details>
           </Panel>
         ) : null}
       </StateBlock>
 
       <StateBlock loading={candidates.loading} error={candidates.error}>
         {candidates.data ? (
-          <Panel
+          <details className="disclosure"><summary>Model configurations</summary>
+<Panel
             title="Candidates"
             description="Three sensor-based model families and an age-only baseline."
             tight
@@ -223,21 +205,24 @@ export function DataSetup() {
               </table>
             </div>
           </Panel>
+</details>
         ) : null}
       </StateBlock>
 
       {limitations.data ? (
-        <Panel
+        <details className="disclosure"><summary>Evaluation limits</summary>
+<Panel
           title="What this evaluation does not establish"
         >
           <ul className="limitations">
             {limitations.data.limitations.map(item => (<li key={item}>{item}</li>))}
           </ul>
         </Panel>
+</details>
       ) : null}
 
       {profile.data && config.data ? (
-        <p className="note">
+        <details className="disclosure"><summary>Source identifiers</summary><p className="note">
           Data hash <span className="mono">{profile.data.data_hash}</span> · configuration{" "}
           <span className="mono">{config.data.config_fingerprint}</span>
           {config.data.git_commit ? (
@@ -255,7 +240,7 @@ export function DataSetup() {
             " · historical bundle: no source digest was recorded"
           )}
           {config.data.matches_current_code === false ? " · recorded with a different source version" : null}
-        </p>
+        </p></details>
       ) : null}
     </>
   );

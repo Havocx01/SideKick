@@ -5,11 +5,15 @@ test("candidate, guide, heatmap and replay retain the same context", async ({ pa
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/comparison?candidate=logistic_regression%2Flr2");
   await expect(page.locator(".guide-context")).toContainText("lr2");
+  await page.getByRole("button", { name: "Why did this model pass or fail?", exact: true }).click();
+  await page.locator("#guide-answer").getByText("Full explanation", { exact: true }).click();
   await expect(page.locator("#guide-answer")).toContainText("57/64");
+  await page.locator("#fault-results > details > summary").click();
   await page.getByRole("button", { name: /Inspect sensor_8, dropout:/ }).click();
   await expect(page.getByRole("region", { name: "Scenario details" })).toContainText("Detection below minimum");
   await page.getByRole("link", { name: "Replay weakest detection case", exact: true }).click();
   await expect(page).toHaveURL(/candidate=logistic_regression%2Flr2/);
+  await page.getByText("Replay source and alert episodes", { exact: true }).click();
   await expect(page.getByText(/verified reconstruction:/i)).toBeVisible();
   await page.getByRole("link", { name: "Model comparison", exact: true }).click();
   await expect(page.locator(".guide-context")).toContainText("lr2");

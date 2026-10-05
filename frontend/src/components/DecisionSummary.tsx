@@ -6,7 +6,7 @@ import { candidateLabel, percent } from "../format";
 import { qualificationReason, ResultStory } from "./ResultStory";
 import { useApi } from "../hooks/useApi";
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
-import { Button, Panel, StateBlock } from "./Chrome";
+import { Badge, Button, Panel, StateBlock } from "./Chrome";
 
 export function EvidenceExport() {
   const api = useEvidence();
@@ -29,14 +29,14 @@ export function EvidenceExport() {
     <div className="evidence-export">
       <div className="export-actions">
         <a href={api.reportUrl} target="_blank" rel="noopener noreferrer">Open report</a>
-        <Button loading={busy} onClick={download}>Export ZIP</Button>
+        <Button variant="secondary" loading={busy} onClick={download}>Export ZIP</Button>
       </div>
       {error && <p className="state error" role="alert">{error}</p>}
     </div>
   );
 }
 
-export function DecisionSummary({ selection, inspected }: { selection: SelectionResult; inspected?: CandidateVerdict }) {
+export function DecisionSummary({ selection, inspected, inspectFaultHref }: { selection: SelectionResult; inspected?: CandidateVerdict; inspectFaultHref?: string }) {
   const id = useExperimentId();
   const chosen = selection.recommended;
   const focus = inspected ?? chosen ?? selection.ranked[0];
@@ -47,15 +47,16 @@ export function DecisionSummary({ selection, inspected }: { selection: Selection
   return (
     <>
       <div className="recommendation-strip" data-testid="recommendation-strip">
-        <p>{chosen ? <>Recommendation across all models: <strong>{candidateLabel(chosen.candidate, chosen.config_id)}</strong></> : <strong>No model meets {stage} criteria.</strong>}</p>
+        <p>{chosen ? <>Recommended: <strong>{candidateLabel(chosen.candidate, chosen.config_id)}</strong></> : <strong>No model meets {stage} criteria.</strong>}</p>
         {chosen && <Link to={`${id ? `/experiments/${id}` : ""}/comparison?${new URLSearchParams({ candidate: `${chosen.candidate}/${chosen.config_id}`, partition: selection.partition ?? "out_of_fold" })}`}>Inspect recommendation</Link>}
       </div>
       {focus && <div data-testid="inspected-summary"><Panel title={`Inspecting: ${candidateLabel(focus.candidate, focus.config_id)}`} aside={<EvidenceExport key={id ?? "benchmark"} />}>
-        <p className={`qualification ${focus.qualifies ? "passes" : "fails"}`}><strong>{focus.qualifies ? "Meets" : "Does not meet"} {stage === "development" ? "development" : "final-validation"} criteria.</strong> {qualificationReason(focus)}</p>
-        <ResultStory verdict={focus} criteria={criteria} />
-        <p className="note decision-rule">Limits in every required case: at least {percent(criteria.min_detection_fraction)} of histories warned in time; at most {percent(criteria.max_early_alarm_burden)} of eligible early cycles in alarm. {criteria.min_detection_fraction === .7 && criteria.max_early_alarm_burden === .1 ? "These default limits are demonstration settings." : ""}</p>
+        <div className="qualification-row"><Badge tone={focus.qualifies ? "ok" : "bad"}>{focus.qualifies ? "Pass" : "Fail"} · {stage === "development" ? "Development" : "Final validation"}</Badge><span>{focus.required_passed} / {focus.required_scenarios} fault tests passed</span></div>
+        {!focus.qualifies && <p className="qualification fails">{qualificationReason(focus)}</p>}
+        <ResultStory verdict={focus} criteria={criteria} inspectFaultHref={inspectFaultHref} />
+        <details className="decision-detail"><summary>Test limits</summary><p className="note">Every required case: ≥ {percent(criteria.min_detection_fraction)} warned in time; ≤ {percent(criteria.max_early_alarm_burden)} early-alarm time. {criteria.min_detection_fraction === .7 && criteria.max_early_alarm_burden === .1 ? "Demonstration settings." : ""}</p></details>
         <div className="decision-footer">
-          <p className="note">{stage === "development" ? "Development results" : "Reserved-equipment validation"}. Meeting test criteria does not approve deployment.</p>
+          <p className="note">Test result, not deployment approval.</p>
           <Link to={`${id ? `/experiments/${id}` : ""}/replay?${query}`}>Replay inspected model</Link>
         </div>
       </Panel></div>}

@@ -54,3 +54,9 @@ export function scenarioLabel(scenarioId: string): string {
   else if (onset) bits.push(`starts ${onset.slice(2)} cycles before failure`);
   return bits.filter(Boolean).join(" · ");
 }
+
+export function scenarioSummary(scenarioId: string): string {
+  const [kind = "", channel, severity] = scenarioLabel(scenarioId).split(" · ");
+  const fault = kind.charAt(0).toUpperCase() + kind.slice(1);
+  return [channel, fault, scenarioId.startsWith("drift-") ? severity : null].filter(Boolean).join(" · ");
+}

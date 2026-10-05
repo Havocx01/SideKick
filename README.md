@@ -52,7 +52,7 @@ For frontend development, run `.\tasks.ps1 web` or `make web` in another termina
 
 Start with **Start guided walkthrough**. It uses recorded NASA results to explain what Sidekick tests and how to read the warnings. It does not train models or score reserved histories.
 
-To run something new, choose **Set up sample**, generate the data, review the split and protocol, then select **Train and challenge models**. Inspect a candidate, click a heatmap cell, ask an Evidence guide question, and replay its weakest case. The prominent summary follows the inspected model; the recommendation is labeled separately. Technical details are available below the main results. Export the evidence when finished.
+To run something new, choose **Set up sample**, generate the data, review the split and protocol, then select **Train and challenge models**. The result bars show warnings in time, late and missed. Open **Sensor faults** to inspect a heatmap cell, or choose an Evidence guide question for an explanation. The summary follows the inspected model; the recommendation is labeled separately. Test settings and technical details expand when needed. Export the evidence when finished.
 
 Local runs reserve 20 histories. If a model qualifies, **Freeze recommendation** locks its fitted artifact, threshold, protocol and source identifiers. Reserved scoring requires an explicit confirmation and runs once. Histories already used in development or validation are blocked. The exposure ledger persists across server restarts; deleting the workspace destroys that audit history.
 

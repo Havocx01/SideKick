@@ -5,7 +5,7 @@ import type { ColumnMapping, DatasetRegistration, ExperimentRecord, ExperimentPr
 import { defaultProtocol, PilotBriefEditor, ProtocolEditor } from "../components/ProtocolEditor";
 import { Badge, Button, Field, Panel, Select, StateBlock } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
-import { ArrowRight, Check, FlaskConical, Layers, Upload } from "lucide-react";
+import { ArrowRight, FlaskConical, Layers, Upload } from "lucide-react";
 import { NumberField } from "@/registry/components/number-field/number-field";
 import { integer, percent, scenarioLabel } from "../format";
 
@@ -50,31 +50,31 @@ export function Start() {
     <>
       <section className="welcome" aria-labelledby="welcome-heading">
         <div>
-          <h1 id="welcome-heading">Test whether equipment warnings survive sensor faults</h1>
-          <p>Sidekick trains models that warn about equipment failure. It simulates missing, stuck and drifting sensor readings in datasets, then shows which warnings still work.</p>
+          <h1 id="welcome-heading">Will warnings survive sensor faults?</h1>
+          <p>Train failure-warning models. Test them with missing, stuck or drifting readings.</p>
           <div className="hero-actions">
             <Link className="button primary" to="/walkthrough?step=clean">Start guided walkthrough <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
-          <p className="hero-footnote">Five steps through recorded NASA results. No training required.</p>
+          <p className="hero-footnote">5 steps · Recorded results</p>
         </div>
         <div className="benchmark-preview">
-          <div className="preview-heading"><h2>A clean score is only the start</h2><Badge>Recorded NASA</Badge></div>
-          <div className="preview-subtitle">Logistic regression lr2 · Development evaluation</div>
+          <div className="preview-heading"><h2>Warnings in time</h2><Badge>Recorded NASA</Badge></div>
+          <div className="preview-subtitle">Logistic regression · lr2</div>
           <StateBlock loading={selection.loading} error={selection.error}>
             {example ? (
               <>
                 <div className="benchmark-bars">
                   <div>
-                    <div className="benchmark-bar-label"><span>Original readings</span><strong>{integer(example.clean.detected)} / {integer(example.clean.engines)}</strong></div>
+                    <div className="benchmark-bar-label"><span>Healthy sensors</span><strong>{integer(example.clean.detected)} / {integer(example.clean.engines)}</strong></div>
                     <div className="benchmark-track" aria-hidden="true"><span style={{ width: percent(example.clean.detection_fraction) }} /></div>
                   </div>
                   <div>
-                    <div className="benchmark-bar-label"><span>Weakest required fault</span><strong>{example.worst_metrics ? `${integer(example.worst_metrics.detected)} / ${integer(example.worst_metrics.engines)}` : percent(example.worst_detection_required)}</strong></div>
+                    <div className="benchmark-bar-label"><span>Weakest sensor fault</span><strong>{example.worst_metrics ? `${integer(example.worst_metrics.detected)} / ${integer(example.worst_metrics.engines)}` : percent(example.worst_detection_required)}</strong></div>
                     <div className="benchmark-track fault" aria-hidden="true"><span style={{ width: percent(example.worst_detection_required) }} /></div>
                   </div>
                 </div>
                 <div className="preview-explanation">
-                  <p>{scenarioLabel(example.worst_scenario_id ?? "")}. Counts show histories warned 10 to 30 cycles before failure. ABB field performance is unverified.</p>
+                  <details><summary>What was tested?</summary><p>{scenarioLabel(example.worst_scenario_id ?? "")}. Warnings active 10–30 cycles before failure. Simulated NASA data, not ABB field validation.</p></details>
                   <Link to="/comparison?candidate=logistic_regression%2Flr2">Inspect the evidence <ArrowRight size={16} aria-hidden="true" /></Link>
                 </div>
               </>
@@ -83,30 +83,26 @@ export function Start() {
         </div>
       </section>
       <section className="start-section" aria-labelledby="start-heading">
-        <h2 id="start-heading">Choose where to start</h2>
+        <h2 id="start-heading">Start an experiment</h2>
         <StateBlock loading={health.loading} error={health.error}>
           <div className="start-actions">
             <section>
-              <div className="start-option"><Layers size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Explore the recorded benchmark</h3><p>Compare models and replay sensor faults on NASA data.</p></div></div>
+              <div className="start-option"><Layers size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Recorded benchmark</h3><p>NASA data</p></div></div>
               <Link className="button" to="/comparison">Explore benchmark <ArrowRight size={16} aria-hidden="true" /></Link>
             </section>
             <section>
-              <div className="start-option"><FlaskConical size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Run a synthetic experiment</h3><p>Generate {health.data?.sample_equipment ?? 60} simulated histories and test the models.</p></div></div>
+              <div className="start-option"><FlaskConical size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Sample experiment</h3><p>{health.data?.sample_equipment ?? 60} simulated histories</p></div></div>
               {health.data?.can_train ? <Link className="button" to="/new?source=sample">Set up sample <ArrowRight size={16} aria-hidden="true" /></Link> : <span className="option-unavailable">Available in the local app</span>}
             </section>
             <section>
-              <div className="start-option"><Upload size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Use your equipment histories</h3><p>CSV up to 10 MB · Complete run-to-failure histories</p></div></div>
+              <div className="start-option"><Upload size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Your data</h3><p>CSV · Up to 10 MB · Complete failure histories</p></div></div>
               {health.data?.can_upload ? <Link className="button" to="/new?source=upload">Upload CSV <ArrowRight size={16} aria-hidden="true" /></Link> : <span className="option-unavailable">Available in the local app</span>}
             </section>
           </div>
         </StateBlock>
       </section>
-      <ol className="workflow" aria-label="Experiment workflow">
-        {["Choose equipment data", "Train warning models", "Simulate sensor faults", "Inspect warnings", "Export evidence"].map(step => <li key={step}><Check size={16} aria-hidden="true" />{step}</li>)}
-      </ol>
-      {health.data?.mode === "demo" && <p className="scope-note">The hosted sample uses 30 short histories, three sensors and four configurations. Two runs per browser per hour, one active server run, and shared daily limits apply. Results expire after 24 hours; restarts or idle shutdowns may clear them sooner. Export evidence to keep it.</p>}
-      <p className="scope-note">Development evidence only. ABB field performance remains unverified.</p>
-      <p className="scope-note">The Evidence guide explains recorded metrics without an external language model. No API key is needed.</p>
+      <p className="scope-note">Development evidence · Not field validated</p>
+      {health.data?.mode === "demo" && <details><summary>Hosted sample limits</summary><p className="note">30 short histories, three sensors and four configurations. Two runs per browser per hour, one active server run, and shared daily limits apply. Results expire after 24 hours or sooner after a restart. Export evidence to keep it.</p></details>}
     </>
   );
 }
@@ -230,7 +226,6 @@ function ExperimentSetup() {
     <>
       <header className="page-head">
         <h1>{isSample ? "Run a sample experiment" : "Use your equipment histories"}</h1>
-        <p>Confirm the data and set your acceptance limits.</p>
       </header>
       <ol className="setup-steps" aria-label="Data setup steps">
         {["Choose data", "Confirm mapping", "Train models"].map((step, index) => <li key={step} aria-current={index === (!data ? 0 : data.confirmed ? 2 : 1) ? "step" : undefined}><span className="step-number">{index + 1}</span>{step}</li>)}
@@ -248,10 +243,9 @@ function ExperimentSetup() {
           {isSample ? (
             <>
               <p>
-                The sample contains {health.data?.sample_equipment ?? 60} simulated equipment histories. Its results
-                demonstrate the workflow and do not validate performance on real machinery.{" "}
+                {health.data?.sample_equipment ?? 60} simulated histories. Practice data, not field validation.{" "}
                 {health.data?.mode === "demo" &&
-                  "This compact hosted sample evaluates ten histories over five folds, using three sensors and one configuration per model family. Twenty histories remain unscored."}
+                  "10 development histories; 20 reserved."}
               </p>
               <Button variant="primary" loading={busy} onClick={() => prepare()}>
                 Generate sample data
@@ -260,8 +254,7 @@ function ExperimentSetup() {
           ) : (
             <>
               <p>
-                Include at least 25 complete equipment histories: 20 are reserved, and the rest form five development
-                folds. More histories give more useful comparisons.
+                At least 25 complete failure histories. 20 will be reserved.
               </p>
               <Field label="CSV file (up to 10 MB)">
                 <input
@@ -276,12 +269,10 @@ function ExperimentSetup() {
                 />
               </Field>
               <p className="note">
-                Use UTF-8 CSV with unique headers. This version supports operating cycles and complete histories, not
-                hours-based targets or machines that have not failed.
+                UTF-8 · Unique headers · Integer cycles · Observed failures
               </p>
               <details className="csv-paste">
-                <summary>File picker not opening? Paste CSV instead</summary>
-                <p className="note">Paste CSV with its header, or use Chrome or Edge to choose a file.</p>
+                <summary>Paste CSV instead</summary>
                 <Field label="CSV contents">
                   <textarea value={csvText} disabled={busy} onChange={event => setCsvText(event.target.value)} rows={8} placeholder={"equipment_id,cycle,sensor_1,failure_cycle\nengine_1,1,0.52,120"} />
                 </Field>
@@ -306,7 +297,6 @@ function ExperimentSetup() {
             </p>
             <details open={!data.confirmed}>
               <summary>Preview the first {data.preview.length} rows</summary>
-              <p className="note">Sensor values are rounded for readability. Hover over a value to see its full precision. Training uses the original values.</p>
               <div className="table-scroll">
               <table>
                 <thead>
@@ -328,7 +318,7 @@ function ExperimentSetup() {
           {!data.confirmed && mapping && (
             <Panel
               title="Confirm what each column means"
-              description="Check suggested roles. Keep identifiers and failure targets out of sensor inputs."
+              description="IDs and failure targets cannot be sensor inputs."
             >
               <div className="mapping-roles">
                 {role("equipment_id", "Equipment ID")}
@@ -367,8 +357,7 @@ function ExperimentSetup() {
                 </label>
               )}
               <p className="note">
-                If a machine had not failed at its final reading, its history is censored and cannot be evaluated by
-                this version.
+                Histories without an observed failure are unsupported.
               </p>
               <Button variant="primary" loading={busy}
                 disabled={
@@ -384,13 +373,10 @@ function ExperimentSetup() {
           {data.confirmed && data.profile && data.splits && (
             <>
               <Panel title="Data checked: review the equipment split">
-                <p>
-                  <strong>{data.splits.development.length} development histories</strong> are divided into{" "}
-                  {data.splits.folds.length} folds. Each machine is evaluated by models that did not train on it.{" "}
-                  <strong>{data.splits.holdout.length} histories are reserved. Development training does not score them.</strong>
-                </p>
+                <div className="split-overview"><div><strong>{data.splits.development.length}</strong><span>Development · {data.splits.folds.length} folds</span></div><div><strong>{data.splits.holdout.length}</strong><span>Reserved · Unscored</span></div></div>
                 <details>
                   <summary>Inspect equipment assignments</summary>
+                  <p>Equipment stays separate across training and evaluation.</p>
                   <p>Reserved: {data.splits.holdout.join(", ")}</p>
                   {data.splits.folds.map((fold, i) => (
                     <p key={i}>
@@ -409,26 +395,26 @@ function ExperimentSetup() {
                     {data.profile.findings?.map((f) => (<li key={f.code}>{f.message}</li>))}
                   </ul>
                 </details>
-                <p className="note">
+                <details><summary>Dataset identifiers</summary><p className="note">
                   Dataset fingerprint: <code>{data.profile.data_hash}</code>.{" "}
                   {health.data?.mode === "demo"
                     ? "The hosted sample has a fixed mapping. Use the local app for your own data."
                     : "This confirmed copy is fixed; upload another copy to change its mapping."}
-                </p>
+                </p></details>
               </Panel>
               <Panel
                 title="Define the experiment protocol"
-                description="Choose what a model must achieve. The default 70% useful warnings and 10% early-alarm time are demonstration settings."
+                description="Demonstration defaults. Adjust to your equipment."
               >
                 <div className="mapping-roles">
-                  <NumberField label="Minimum histories warned in time" value={detection} onValueChange={setDetection} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
-                  <NumberField label="Maximum time warning too early" value={burden} onValueChange={setBurden} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
+                  <NumberField label="Minimum warned in time" value={detection} onValueChange={setDetection} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
+                  <NumberField label="Maximum early-alarm time" value={burden} onValueChange={setBurden} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
                 </div>
                 {health.data?.can_edit_protocol ? <><ProtocolEditor value={protocol} onChange={setProtocol} sensors={data.mapping?.sensors ?? []} disabled={busy} /><PilotBriefEditor value={pilotBrief} onChange={setPilotBrief} disabled={busy} /></> : <p>Useful warnings: 10 to 30 cycles before failure. Early-alarm burden: time in alarm more than 45 cycles before failure.</p>}
-                <p className="note">
+                <details><summary>Training settings</summary><p className="note">
                   Fixed for this version: five equipment folds, {health.data?.sample_configurations ?? 10} candidate
                   configurations and a 20-cycle feature window. Final validation is a separate, explicit local action.
-                </p>
+                </p></details>
                 <Button variant="primary" loading={busy}
                   disabled={
                     !Number.isFinite(detection) || !Number.isFinite(burden) || detection < 0 || detection > 100 ||
@@ -441,8 +427,7 @@ function ExperimentSetup() {
                   Train and challenge models
                 </Button>
                 <p className="note">
-                  One experiment at a time. Runs stop after 15 minutes. You can leave this page and return through
-                  Experiments.
+                  One run at a time · 15-minute limit
                 </p>
               </Panel>
             </>
@@ -487,7 +472,6 @@ function History() {
     <>
       <header className="page-head">
         <h1>Your experiments</h1>
-        <p>Each run keeps its own dataset, settings, logs and evidence. The recorded benchmark is separate.</p>
       </header>
       <div className="actions">
         <Link className="button primary" to="/new?source=sample">
@@ -578,10 +562,7 @@ function Progress() {
     <>
       <header className="page-head">
         <h1>{record?.name ?? "Local experiment"}</h1>
-        <p>
-          Sidekick checks the data, trains warning models, chooses alert rules, then tests simulated sensor faults.
-          Refreshing this page will not stop the experiment.
-        </p>
+        <p>Runs continue if you refresh.</p>
       </header>
       {error && (
         <div role="alert" className="state error">
@@ -601,7 +582,6 @@ function Progress() {
             {stages.map((stage) => (
               <li key={stage} aria-current={record.stage === stage ? "step" : undefined} className={stages.indexOf(stage) < stages.indexOf(record.stage ?? "") ? "stage-complete" : undefined}>
                 {stage}
-                {record.stage === stage && <strong> · current stage</strong>}
               </li>
             ))}
           </ol>
@@ -609,9 +589,6 @@ function Progress() {
             {record.completed_work ?? 0}
             {record.total_work ? ` / ${record.total_work}` : ""}{" "}
             {record.work_unit || "completed work items in this stage"}
-          </p>
-          <p className="note">
-            These counts report actual work. Runtime depends on hardware and data; no completion estimate is assumed.
           </p>
           {record.error && (
             <p className="state error" role="alert">
@@ -630,9 +607,9 @@ function Progress() {
               Set up another run with this dataset
             </Link>
           )}
-          <p className="note">
+          <details><summary>Run identifiers</summary><p className="note">
             Experiment {record.experiment_id} · configuration {record.config_fingerprint}
-          </p>
+          </p></details>
         </Panel>
       )}
     </>
