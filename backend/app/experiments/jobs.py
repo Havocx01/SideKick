@@ -7,11 +7,10 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
-from app.config import EXPERIMENT, get_settings
+from app.config import get_settings
 from app.experiments.provenance import source_digest
 from app.experiments.store import ACTIVE, Workspace
 from app.schemas import ExperimentCreate, ExperimentRecord
@@ -53,13 +52,24 @@ class Jobs:
             dataset = self.workspace.get("datasets", request.dataset_id)
             if not dataset["confirmed"]:
                 raise ValueError("Confirm the dataset mapping and resolve its validation issues first.")
-            config = replace(
-                EXPERIMENT,
-                protocol_revision=3,
-                min_detection_fraction=request.min_detection_fraction,
-                max_early_alarm_burden=request.max_early_alarm_burden,
-                configs_per_candidate=1 if get_settings().mode == "demo" else EXPERIMENT.configs_per_candidate,
+            from app.experiments.datasets import validated_dataset
+            from app.experiments.protocol import check_coverage, protocol_config, resolve_protocol
+            from app.schemas import ColumnMapping
+
+            hosted = get_settings().mode == "demo"
+            if hosted and (request.protocol is not None or request.pilot_brief is not None):
+                raise ValueError("Custom protocols and pilot briefs are local only.")
+            protocol = resolve_protocol(request, dataset)
+            config = protocol_config(protocol, hosted=hosted)
+            prepared = validated_dataset(
+                self.workspace.directory("datasets", request.dataset_id) / "data.csv",
+                ColumnMapping.model_validate(dataset["mapping"]), dataset["complete_histories"],
+                id=request.dataset_id, source=dataset["source"], config=config,
             )
+            check_coverage(prepared, protocol)
+            pilot_brief = request.pilot_brief
+            if dataset["source"] == "synthetic" and pilot_brief is not None:
+                pilot_brief = pilot_brief.model_copy(update={"data_classification": "simulated"})
             record = ExperimentRecord(
                 experiment_id=str(uuid4()),
                 dataset_id=request.dataset_id,
@@ -71,6 +81,7 @@ class Jobs:
                 config_fingerprint=config.fingerprint(),
                 data_hash=dataset["profile"]["data_hash"],
                 source_digest=source_digest(),
+                pilot_brief=pilot_brief,
             )
             directory = self.workspace.directory("experiments", record.experiment_id)
             self.workspace.reserve(record.model_dump(mode="json"))
@@ -87,6 +98,55 @@ class Jobs:
         record = self.workspace.get("experiments", id)
         if record["status"] in ACTIVE:
             self.workspace.update(id, status="cancelling")
+
+    def create_operation(self, experiment_id, kind, *, untouched_confirmed=False):
+        from app.evidence.bundle import load_bundle
+        from app.schemas import FrozenModelRecord, ValidationRecord
+
+        with self.mutex:
+            if get_settings().mode != "full":
+                raise ValueError("Model freezing and final validation are local only.")
+            if self.stopping.is_set():
+                raise ValueError("The server is shutting down.")
+            parent = self.workspace.get("experiments", experiment_id)
+            if parent.get("job_kind", "development") != "development" or parent["status"] != "completed":
+                raise ValueError("Complete the development experiment first.")
+            loaded = load_bundle(self.workspace.directory("experiments", experiment_id) / "bundle.json")
+            if loaded.schema_version < 3:
+                raise ValueError("Start a v1.5 experiment before freezing a model. Historical bundles remain unchanged.")
+            chosen = loaded.development_selection.recommended
+            if chosen is None:
+                raise ValueError("No candidate met the development criteria. There is no selected model to freeze.")
+            if source_digest() != parent["source_digest"]:
+                raise ValueError("Source changed after development. Start a new experiment with the current code.")
+            frozen = self.workspace.operation(experiment_id, "freeze")
+            if kind == "validation":
+                if not untouched_confirmed:
+                    raise ValueError("Explicitly confirm the reserved histories were not used for model or protocol decisions.")
+                if not frozen or frozen["status"] != "completed":
+                    raise ValueError("Freeze the selected model before final validation.")
+            id, operation_id = str(uuid4()), str(uuid4())
+            record = ExperimentRecord.model_validate({**parent, "experiment_id": id, "job_kind": kind,
+                "parent_experiment_id": experiment_id, "operation_id": operation_id,
+                "status": "queued", "created_at": time.time(), "started_at": None, "finished_at": None,
+                "elapsed_seconds": 0, "stage": "queued", "completed_work": 0, "total_work": None,
+                "work_unit": "", "error": None})
+            if kind == "freeze":
+                operation = FrozenModelRecord(freeze_id=operation_id, experiment_id=experiment_id, job_id=id,
+                    candidate=f"{chosen.candidate.value}/{chosen.config_id}", created_at=time.time())
+            else:
+                operation = ValidationRecord(validation_id=operation_id, experiment_id=experiment_id,
+                    freeze_id=frozen["freeze_id"], job_id=id, untouched_confirmed=True, created_at=time.time())
+            self.workspace.reserve_operation(record.model_dump(mode="json"), operation.model_dump(mode="json"), kind)
+            directory = self.workspace.directory("experiments", id)
+            try:
+                directory.mkdir(parents=True)
+                self.thread = threading.Thread(target=self._run, args=(id,), daemon=True)
+                self.thread.start()
+            except (OSError, RuntimeError) as exc:
+                self.workspace.update(id, status="failed", error=str(exc), finished_at=time.time())
+                raise
+            return operation
 
     def _run(self, id: str):
         process = None
@@ -135,7 +195,8 @@ class Jobs:
                         break
                     code = process.poll()
                     if code is not None:
-                        if code == 0 and (directory / "bundle.json").is_file():
+                        marker = "bundle.json" if self.workspace.get("experiments", id).get("job_kind", "development") == "development" else "result.json"
+                        if code == 0 and (directory / marker).is_file():
                             saved = self.workspace.update(
                                 id,
                                 expected_status=("running",),
@@ -156,7 +217,7 @@ class Jobs:
                         break
                     self.workspace.heartbeat(id)
                     self.stopping.wait(0.25)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - persist failures at the worker boundary
             if process is not None:
                 self._stop(process)
             self.workspace.update(id, status="failed", error=str(exc), finished_at=time.time())

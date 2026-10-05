@@ -1,0 +1,20 @@
+{
+  "release": "1.5.0",
+  "elapsed_seconds": 7.58,
+  "experiment_id": "c71f1c26-aee7-4cd1-8325-333b5faefef1",
+  "peak_working_set_mib": 241.56,
+  "peak_sampled_container_mib": 241.62,
+  "cgroup_peak_mib": 242.62,
+  "measurement": "50 ms cgroup v2 sampling; working set = current minus inactive_file; includes monitor, server and worker",
+  "source_digest": "c9a56d462b73a07d9985a092074b4a08cf6d14def1dbd31963407bdb5ac1d4a8",
+  "dependency_versions": {
+    "numpy": "2.4.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.9.1",
+    "xgboost": "3.2.0",
+    "joblib": "1.6.0"
+  },
+  "below_450_mib": true,
+  "environment": "Local Docker Linux demo target, 512 MiB memory limit, no additional swap",
+  "checks": ["sample completed", "decision", "replay index", "HTML report", "ZIP metrics match evidence row count", "reserved equipment unscored", "second browser receives 404"]
+}

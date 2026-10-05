@@ -29,6 +29,12 @@ class Workspace:
                     heartbeat REAL NOT NULL);
                 CREATE UNIQUE INDEX IF NOT EXISTS one_active_experiment ON experiments ((1))
                     WHERE status IN ('queued','running','cancelling');
+                CREATE TABLE IF NOT EXISTS operations (
+                    id TEXT PRIMARY KEY, experiment_id TEXT NOT NULL, kind TEXT NOT NULL,
+                    payload TEXT NOT NULL, UNIQUE(experiment_id, kind));
+                CREATE TABLE IF NOT EXISTS exposures (
+                    history_id TEXT PRIMARY KEY, experiment_id TEXT NOT NULL,
+                    reason TEXT NOT NULL, exposed_at REAL NOT NULL);
             """)
 
     @contextmanager
@@ -75,6 +81,63 @@ class Workspace:
             raise ValueError(
                 "The server is already running an experiment. Try again when it finishes, or explore the recorded benchmark."
             ) from exc
+
+    def reserve_operation(self, record, operation, kind):
+        try:
+            with self.connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                old = conn.execute("SELECT id,payload FROM operations WHERE experiment_id=? AND kind=?", (record["parent_experiment_id"], kind)).fetchone()
+                if old:
+                    previous = json.loads(old[1])
+                    job = conn.execute("SELECT status FROM experiments WHERE id=?", (previous["job_id"],)).fetchone()
+                    if job and job[0] in ("failed", "cancelled", "timed_out", "interrupted") and not previous.get("exposure_started_at"):
+                        conn.execute("DELETE FROM operations WHERE id=?", (old[0],))
+                conn.execute("INSERT INTO experiments VALUES (?,?,?,?)", (record["experiment_id"], record["status"], json.dumps(record), time.time()))
+                conn.execute("INSERT INTO operations VALUES (?,?,?,?)", (record["operation_id"], record["parent_experiment_id"], kind, json.dumps(operation)))
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("This operation already exists, or another local job is active.") from exc
+
+    def operation(self, experiment_id, kind):
+        identifier(experiment_id)
+        with self.connect() as conn:
+            row = conn.execute("SELECT payload FROM operations WHERE experiment_id=? AND kind=?", (experiment_id, kind)).fetchone()
+        if row is None:
+            return None
+        record = json.loads(row[0])
+        job = self.get("experiments", record["job_id"])
+        record["status"] = job["status"]
+        record["error"] = job.get("error")
+        return record
+
+    def update_operation(self, operation_id, **changes):
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT payload FROM operations WHERE id=?", (operation_id,)).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            record = json.loads(row[0])
+            record.update(changes)
+            conn.execute("UPDATE operations SET payload=? WHERE id=?", (json.dumps(record, allow_nan=False), operation_id))
+
+    def expose(self, histories, experiment_id, reason, *, validation_id=None):
+        histories = list(histories)
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if validation_id:
+                for history in histories:
+                    if conn.execute("SELECT 1 FROM exposures WHERE history_id=?", (history,)).fetchone():
+                        raise ValueError("Reserved equipment has already been used or scored. Use genuinely fresh histories.")
+                row = conn.execute("SELECT payload FROM operations WHERE id=?", (validation_id,)).fetchone()
+                operation = json.loads(row[0])
+                if operation.get("exposure_started_at") is not None:
+                    raise ValueError("This validation attempt has already started scoring.")
+                operation["exposure_started_at"] = time.time()
+                conn.execute("UPDATE operations SET payload=? WHERE id=?", (json.dumps(operation), validation_id))
+            conn.executemany("INSERT OR IGNORE INTO exposures VALUES (?,?,?,?)", [(h, experiment_id, reason, time.time()) for h in histories])
+
+    def exposed(self, histories):
+        with self.connect() as conn:
+            return [h for h in histories if conn.execute("SELECT 1 FROM exposures WHERE history_id=?", (h,)).fetchone()]
 
     def update(self, id: str, *, active_only: bool = True, expected_status=None, **changes):
         with self.connect() as conn:

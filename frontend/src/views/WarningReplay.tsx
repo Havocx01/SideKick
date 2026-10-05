@@ -5,7 +5,7 @@ import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import type { ReplaySeries } from "../api/types";
 import { Badge, Panel, StateBlock } from "../components/Chrome";
 import { ContributionBars } from "../components/ContributionBars";
-import { ScoreTimeline, SensorTrace } from "../components/ScoreTimeline";
+import { ReplayExample } from "../components/ReplayExample";
 import { candidateLabel, integer, number, scenarioLabel } from "../format";
 import { useApi } from "../hooks/useApi";
 import { episodeLabel, outcomeLabel } from "../replay";
@@ -15,15 +15,19 @@ export function WarningReplay() {
   const api = useEvidence();
   const index = useApi(() => api.replayIndex(), [api]);
   const config = useApi(() => api.config(), [api]);
+  const selection = useApi(() => api.selection(), [api]);
   const horizon = Number(config.data?.config.horizon_cycles ?? 30);
   const minLead = Number(config.data?.config.min_useful_lead ?? 10);
   const [params, setParams] = useSearchParams();
   const experimentId = useExperimentId();
-  const entries = index.data?.series ?? [];
+  const leader = selection.data?.recommended ?? selection.data?.ranked[0];
+  const candidate = params.get("candidate") ?? (leader ? `${leader.candidate}/${leader.config_id}` : "");
+  const entries = (index.data?.series ?? []).filter(e => `${e.candidate}/${e.config_id}` === candidate);
+  const equipmentIds = [...new Set(entries.map(e => e.equipment_id))];
   const requestedEquipment = params.get("equipment");
   const requestedScenario = params.get("scenario");
-  const defaultEquipment = !experimentId && index.data?.equipment.includes("13") ? "13" : index.data?.equipment[0] ?? "";
-  const equipment = requestedEquipment && index.data?.equipment.includes(requestedEquipment) ? requestedEquipment : defaultEquipment;
+  const defaultEquipment = !experimentId && equipmentIds.includes("13") ? "13" : equipmentIds[0] ?? "";
+  const equipment = requestedEquipment && equipmentIds.includes(requestedEquipment) ? requestedEquipment : defaultEquipment;
   const scenariosFor = useMemo(
     () => [...new Set(entries.filter(e => e.equipment_id === equipment).map(e => e.scenario_id))],
     [entries, equipment]
@@ -50,7 +54,7 @@ export function WarningReplay() {
   const series = useApi(() => (equipment ? api.replay(equipment) : Promise.resolve([])), [api, equipment]);
   const explanations = useApi(() => (equipment ? api.explanations(equipment) : Promise.resolve([])), [api, equipment]);
 
-  const all = series.data ?? [];
+  const all = (series.data ?? []).filter(s => `${s.candidate}/${s.config_id}` === candidate);
   const selected = all.find(s => s.equipment_id === equipment && s.scenario_id === scenario) ?? null;
   const clean = all.find(s => s.equipment_id === equipment && s.scenario_id === "clean" && s.candidate === selected?.candidate && s.config_id === selected?.config_id) ?? null;
   const comparison = selected && selected.scenario_id !== "clean" ? clean : null;
@@ -75,10 +79,11 @@ export function WarningReplay() {
       </header>
 
       {invalidSelection && <p className="note" role="status">That history or scenario is unavailable in this experiment. Showing an available replay instead.</p>}
-      <StateBlock loading={index.loading} error={index.error} empty={entries.length === 0}>
+      <StateBlock loading={index.loading || selection.loading} error={index.error || selection.error}>
         <Panel title="Select a history">
           <div className="controls">
-            <Combobox label="Equipment" value={equipment} onValueChange={value => { if (value) setEquipment(value); }} options={(index.data?.equipment ?? []).map(value => ({ value, label: `Equipment ${value}` }))} />
+            <Combobox label="Candidate" value={candidate} onValueChange={value => { if (value) { const next = new URLSearchParams(params); next.set("candidate", value); next.delete("equipment"); next.delete("scenario"); setParams(next); } }} options={(selection.data?.ranked ?? []).map(v => ({ value: `${v.candidate}/${v.config_id}`, label: candidateLabel(v.candidate, v.config_id) }))} />
+            <Combobox label="Equipment" value={equipment} onValueChange={value => { if (value) setEquipment(value); }} options={equipmentIds.map(value => ({ value, label: `Equipment ${value}` }))} />
             <Combobox label="Scenario" value={scenario} onValueChange={value => { if (value) setScenario(value); }} options={scenariosFor.map(value => ({ value, label: scenarioLabel(value) }))} />
             {selected ? (
               <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "flex-end" }}>
@@ -86,6 +91,7 @@ export function WarningReplay() {
               </div>
             ) : null}
           </div>
+          {!entries.length && <p className="note">No representative replay is stored for this candidate and partition. Inspect its comparison or select another candidate.</p>}
         </Panel>
       </StateBlock>
 
@@ -93,34 +99,9 @@ export function WarningReplay() {
         {selected ? (
           <>
             <p className="note">
-              Replaying {candidateLabel(selected.candidate, selected.config_id)}, equipment {equipment}, failure at cycle {integer(selected.failure_cycle)}. Recorded traces for this model.
+              {candidateLabel(selected.candidate, selected.config_id)} · Equipment {equipment} · Failure at cycle {integer(selected.failure_cycle)}. {selected.representative_reason || "Selected representative example; not fleet-wide performance."}
             </p>
-            <Panel
-              title="Score against remaining life"
-              description={
-                selected.fault
-                  ? `Red: ${selected.fault.sensor} ${describeFault(selected.fault)}. Dashed blue: original readings.`
-                  : "The shaded window marks useful warning time."
-              }
-            >
-              {comparison && (
-                <dl className="replay-outcomes">
-                  <div><dt>Original readings</dt><dd><Outcome series={comparison} /></dd></div>
-                  <div><dt>With the sensor fault</dt><dd><Outcome series={selected} /></dd></div>
-                  <div><dt>Warning change</dt><dd>{warningChange(comparison, selected)}</dd></div>
-                </dl>
-              )}
-              <ScoreTimeline series={selected} comparison={comparison} horizon={horizon} minLead={minLead} />
-            </Panel>
-
-            {selected.fault ? (
-              <Panel
-                title={`What happened to ${selected.fault.sensor}`}
-                description={`The fault begins ${selected.fault_onset_rul ?? "—"} cycles before failure, affects ${selected.fault_affected_cycles} cycles, and is ${selected.fault.duration === "persistent" ? "never repaired" : "repaired after a short burst"}. `}
-              >
-                <SensorTrace series={selected} />
-              </Panel>
-            ) : null}
+            <ReplayExample series={selected} comparison={comparison} horizon={horizon} minLead={minLead} />
 
             <Panel title="Alert episodes" tight>
               {selected.episodes.length === 0 ? (
@@ -184,27 +165,4 @@ export function WarningReplay() {
 function Outcome({ series }: { series: ReplaySeries }) {
   const label = outcomeLabel(series.outcome);
   return <Badge tone={label.tone}>{label.text}</Badge>;
-}
-
-function describeFault(fault: NonNullable<ReplaySeries["fault"]>): string {
-  switch (fault.kind) {
-    case "dropout":
-      return "reporting nothing";
-    case "stuck":
-      return "frozen at its last value";
-    case "drift":
-      return `drifting ${fault.sign && fault.sign < 0 ? "down" : "up"} by ${number(fault.severity_sd, 1)} standard deviations`;
-    default:
-      return "faulted";
-  }
-}
-
-function warningChange(clean: ReplaySeries, faulted: ReplaySeries): string {
-  if (clean.outcome.detected && !faulted.outcome.detected) return faulted.outcome.late ? "Useful warning became late" : "Useful warning was missed";
-  if (!clean.outcome.detected && faulted.outcome.detected) return "Useful warning gained";
-  const before = clean.outcome.lead_time;
-  const after = faulted.outcome.lead_time;
-  if (!clean.outcome.detected || !faulted.outcome.detected || before == null || after == null) return "No useful lead-time comparison";
-  const change = after - before;
-  return change === 0 ? "Same lead time" : `${Math.abs(change)} cycles ${change > 0 ? "longer" : "shorter"}`;
 }

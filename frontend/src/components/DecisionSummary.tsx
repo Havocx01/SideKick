@@ -1,18 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import type { SelectionResult } from "../api/types";
+import type { CandidateVerdict, SelectionResult } from "../api/types";
 import { downloadEvidence } from "../api/client";
-import { candidateLabel, integer, percent } from "../format";
+import { candidateLabel, percent } from "../format";
+import { qualificationReason, ResultStory } from "./ResultStory";
 import { useApi } from "../hooks/useApi";
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { Button, Panel, StateBlock } from "./Chrome";
 
-function EvidenceExport() {
+export function EvidenceExport() {
   const api = useEvidence();
   const id = useExperimentId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { setError(""); }, [id]);
+  useEffect(() => { setError(""); }, [id, api]);
   async function download() {
     setBusy(true);
     setError("");
@@ -35,28 +36,30 @@ function EvidenceExport() {
   );
 }
 
-export function DecisionSummary({ selection }: { selection: SelectionResult }) {
+export function DecisionSummary({ selection, inspected }: { selection: SelectionResult; inspected?: CandidateVerdict }) {
   const id = useExperimentId();
   const chosen = selection.recommended;
+  const focus = inspected ?? chosen ?? selection.ranked[0];
   const criteria = selection.criteria;
+  const stage = selection.partition === "holdout" ? "final-validation" : "development";
+  const query = new URLSearchParams({ partition: selection.partition ?? "out_of_fold" });
+  if (focus) query.set("candidate", `${focus.candidate}/${focus.config_id}`);
   return (
-    <Panel title={chosen ? `${candidateLabel(chosen.candidate, chosen.config_id)} meets the criteria` : "No model qualified"} aside={<EvidenceExport key={id ?? "benchmark"} />}>
-      {chosen ? (
-        <dl className="decision-metrics">
-          <div><dt>Clean detection</dt><dd>{integer(chosen.clean.detected)} / {integer(chosen.clean.engines)} <span>({percent(chosen.clean.detection_fraction, 1)})</span></dd></div>
-          <div><dt>Worst required detection</dt><dd>{chosen.worst_metrics ? `${integer(chosen.worst_metrics.detected)} / ${integer(chosen.worst_metrics.engines)}` : "Not tested"} <span>({percent(chosen.worst_detection_required, 1)})</span></dd></div>
-          <div><dt>Required cases passed</dt><dd>{integer(chosen.required_passed)} / {integer(chosen.required_scenarios)}</dd></div>
-        </dl>
-      ) : <p>No candidate passed every required case. Inspect the failures below.</p>}
-      <p className="note decision-rule">
-        Required in every case: detection ≥ {percent(criteria.min_detection_fraction)} · early-alarm burden ≤ {percent(criteria.max_early_alarm_burden)}.
-        {chosen ? ` Clean alarm burden: ${percent(chosen.clean.early_alarm_burden, 2)}.` : ""}
-      </p>
-      <div className="decision-footer">
-        <p className="note">Development evidence only; deployment is not approved.{selection.uncertain_comparisons?.length ? " Leading models remain closely matched." : ""}</p>
-        <Link to={`${id ? `/experiments/${id}` : ""}/replay`}>Replay the {chosen ? "recommended" : "leading"} model</Link>
+    <>
+      <div className="recommendation-strip" data-testid="recommendation-strip">
+        <p>{chosen ? <>Recommendation across all models: <strong>{candidateLabel(chosen.candidate, chosen.config_id)}</strong></> : <strong>No model meets {stage} criteria.</strong>}</p>
+        {chosen && <Link to={`${id ? `/experiments/${id}` : ""}/comparison?${new URLSearchParams({ candidate: `${chosen.candidate}/${chosen.config_id}`, partition: selection.partition ?? "out_of_fold" })}`}>Inspect recommendation</Link>}
       </div>
-    </Panel>
+      {focus && <div data-testid="inspected-summary"><Panel title={`Inspecting: ${candidateLabel(focus.candidate, focus.config_id)}`} aside={<EvidenceExport key={id ?? "benchmark"} />}>
+        <p className={`qualification ${focus.qualifies ? "passes" : "fails"}`}><strong>{focus.qualifies ? "Meets" : "Does not meet"} {stage === "development" ? "development" : "final-validation"} criteria.</strong> {qualificationReason(focus)}</p>
+        <ResultStory verdict={focus} criteria={criteria} />
+        <p className="note decision-rule">Limits in every required case: at least {percent(criteria.min_detection_fraction)} of histories warned in time; at most {percent(criteria.max_early_alarm_burden)} of eligible early cycles in alarm. {criteria.min_detection_fraction === .7 && criteria.max_early_alarm_burden === .1 ? "These default limits are demonstration settings." : ""}</p>
+        <div className="decision-footer">
+          <p className="note">{stage === "development" ? "Development results" : "Reserved-equipment validation"}. Meeting test criteria does not approve deployment.</p>
+          <Link to={`${id ? `/experiments/${id}` : ""}/replay?${query}`}>Replay inspected model</Link>
+        </div>
+      </Panel></div>}
+    </>
   );
 }
 
@@ -64,6 +67,7 @@ export function DecisionDetails() {
   const api = useEvidence();
   const report = useApi(() => api.decision(), [api]);
   const location = useLocation();
+  const paired = useApi(() => api.paired(), [api]);
   useEffect(() => {
     if (location.hash === "#augmentation" && report.data) document.getElementById("augmentation")?.scrollIntoView();
   }, [location.hash, report.data]);
@@ -91,6 +95,21 @@ export function DecisionDetails() {
               <summary>Interpret the augmentation comparison</summary>
               <p>{report.data.augmentation_summary}</p>
             </details>
+            {paired.data?.length ? (
+              <div className="table-scroll paired-comparisons">
+                <table>
+                  <thead><tr><th>Comparison</th><th>Detection change (pp)</th><th>95% interval (pp)</th><th>Burden change (pp)</th><th>95% interval (pp)</th></tr></thead>
+                  <tbody>{paired.data.map(p => (
+                    <tr key={`${p.kind}/${p.first}/${p.second}`}>
+                      <td>{p.first} to {p.second}<span className="note comparison-kind">{p.kind === "matched_augmentation" ? "Matched parameters and model seed" : "Selected configurations"}</span></td>
+                      <td>{delta(p.detection_delta)}</td><td>{pairedInterval(p.detection_interval)}</td>
+                      <td>{delta(p.burden_delta)}</td><td>{pairedInterval(p.burden_interval)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+                <p className="note">Second configuration minus first. Higher detection and lower burden are better. Exploratory paired equipment bootstrap; field benefit remains unestablished.</p>
+              </div>
+            ) : null}
             <details className="decision-detail">
               <summary>Selection rule and weakest required case</summary>
               <p>{report.data.summary}</p><p>{report.data.fault_summary}</p>
@@ -104,4 +123,12 @@ export function DecisionDetails() {
       )}
     </StateBlock>
   );
+}
+
+function delta(value: number | null | undefined) {
+  return value == null ? "Unavailable" : `${value >= 0 ? "+" : ""}${(value * 100).toFixed(3)}`;
+}
+
+function pairedInterval(values: number[] | null | undefined) {
+  return values?.length === 2 ? `[${values.map(delta).join(", ")}]` : "Unavailable";
 }

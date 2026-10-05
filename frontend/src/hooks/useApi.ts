@@ -10,34 +10,26 @@ export interface AsyncState<T> {
 }
 
 export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ApiError | Error | null>(null);
   const [nonce, setNonce] = useState(0);
-
-  // Refetch on caller dependencies, not a new closure identity.
   const run = useCallback(fetcher, deps);
+  const [state, setState] = useState<{ run: typeof run; nonce: number; data: T | null; loading: boolean; error: Error | null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setData(null);
-    setError(null);
+    setState({ run, nonce, data: null, loading: true, error: null });
     async function load() {
       try {
-        const value = await run();
-        if (!cancelled) setData(value);
+        const data = await run();
+        if (!cancelled) setState({ run, nonce, data, loading: false, error: null });
       } catch (error) {
-        if (!cancelled) setError(error as Error);
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setState({ run, nonce, data: null, loading: false, error: error as Error });
       }
     }
     void load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [run, nonce]);
 
-  return { data, loading, error, reload: () => setNonce(value => value + 1) };
+  const current = state?.run === run && state.nonce === nonce ? state : null;
+  return { data: current?.data ?? null, loading: current?.loading ?? true, error: current?.error ?? null,
+    reload: () => setNonce(value => value + 1) };
 }

@@ -6,11 +6,12 @@ interface Props {
   height?: number;
   horizon?: number;
   minLead?: number;
+  cursorCycle?: number;
 }
 
-const MARGIN = { top: 14, right: 16, bottom: 26, left: 40 };
+const MARGIN = { top: 24, right: 24, bottom: 30, left: 68 };
 
-export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, minLead = 10 }: Props) {
+export function ScoreTimeline({ series, comparison, height = 260, horizon = 30, minLead = 10, cursorCycle }: Props) {
   const width = 760;
   const plotWidth = width - MARGIN.left - MARGIN.right;
   const plotHeight = height - MARGIN.top - MARGIN.bottom;
@@ -34,9 +35,11 @@ export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, 
   const usefulLeft = x(Math.min(horizon, maxRul));
   const usefulRight = x(Math.min(minLead, maxRul));
 
-  const episodeBands = series.episodes.map(episode => {
+  const cursor = points.find(point => point.cycle === cursorCycle);
+  const visible = (items: typeof points) => cursorCycle == null ? items : items.filter(point => point.cycle <= cursorCycle);
+  const episodeBands = series.episodes.filter(episode => cursorCycle == null || episode.start_cycle <= cursorCycle).map(episode => {
     const left = x(episode.start_rul);
-    const right = x(episode.end_rul);
+    const right = x(cursor && episode.end_cycle > cursor.cycle ? cursor.rul : episode.end_rul);
     return { left, width: Math.max(1.5, right - left), key: `${episode.start_cycle}-${episode.end_cycle}` };
   });
 
@@ -104,14 +107,15 @@ export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, 
           </text>
 
           {comparison ? (
-            <path d={path(comparison.points)} fill="none" stroke="var(--clean)" strokeWidth={2} strokeDasharray="6 3" />
+            <path d={path(visible(comparison.points))} fill="none" stroke="var(--clean)" strokeWidth={2} strokeDasharray="6 3" />
           ) : null}
           <path
-            d={path(points)}
+            d={path(visible(points))}
             fill="none"
             stroke={series.fault ? "var(--fault)" : "var(--clean)"}
             strokeWidth={1.9}
           />
+          {cursor && <line className="replay-cursor" x1={x(cursor.rul)} x2={x(cursor.rul)} y1={MARGIN.top} y2={MARGIN.top + plotHeight} />}
 
           {series.fault && series.fault_onset_rul != null && series.fault_onset_rul <= maxRul && (
             <g>
@@ -164,15 +168,15 @@ export function ScoreTimeline({ series, comparison, height = 220, horizon = 30, 
   );
 }
 
-export function SensorTrace({ series, height = 150 }: { series: ReplaySeries; height?: number }) {
+export function SensorTrace({ series, height = 180, cursorCycle }: { series: ReplaySeries; height?: number; cursorCycle?: number }) {
   const width = 760;
   const plotWidth = width - MARGIN.left - MARGIN.right;
   const plotHeight = height - MARGIN.top - MARGIN.bottom;
 
-  const points = series.points.filter(p => p.sensor_clean !== null || p.sensor_faulted !== null);
+  const points = series.points.filter(p => p.sensor_clean != null || p.sensor_faulted != null);
   if (points.length === 0) return null;
 
-  const values = points.flatMap(p => [p.sensor_clean, p.sensor_faulted].filter((v): v is number => v !== null));
+  const values = points.flatMap(p => [p.sensor_clean, p.sensor_faulted].filter((v): v is number => v != null));
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const span = Math.max(1e-9, maxValue - minValue);
@@ -183,7 +187,7 @@ export function SensorTrace({ series, height = 150 }: { series: ReplaySeries; he
 
   const path = (pick: (p: (typeof points)[number]) => number | null) => {
     let started = false;
-    return points
+    return points.filter(p => cursorCycle == null || p.cycle <= cursorCycle)
       .map(p => {
         const value = pick(p);
         // Break the line at missing readings instead of interpolating across the gap.
@@ -209,6 +213,7 @@ export function SensorTrace({ series, height = 150 }: { series: ReplaySeries; he
         >
           <path d={path(p => p.sensor_clean ?? null)} fill="none" stroke="var(--clean)" strokeWidth={1.5} />
           <path d={path(p => p.sensor_faulted ?? null)} fill="none" stroke="var(--fault)" strokeWidth={1.8} />
+          {series.points.find(p => p.cycle === cursorCycle) && <line className="replay-cursor" x1={x(series.points.find(p => p.cycle === cursorCycle)!.rul)} x2={x(series.points.find(p => p.cycle === cursorCycle)!.rul)} y1={MARGIN.top} y2={MARGIN.top + plotHeight} />}
           <g className="axis">
             <line
               x1={MARGIN.left}

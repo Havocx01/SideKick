@@ -1,0 +1,51 @@
+import { expect, test } from "@playwright/test";
+
+test("candidate, guide, heatmap and replay retain the same context", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/comparison?candidate=logistic_regression%2Flr2");
+  await expect(page.locator(".guide-context")).toContainText("lr2");
+  await expect(page.locator("#guide-answer")).toContainText("57/64");
+  await page.getByRole("button", { name: /Inspect sensor_8, dropout:/ }).click();
+  await expect(page.getByRole("region", { name: "Scenario details" })).toContainText("Detection below minimum");
+  await page.getByRole("link", { name: "Replay weakest detection case", exact: true }).click();
+  await expect(page).toHaveURL(/candidate=logistic_regression%2Flr2/);
+  await expect(page.getByText(/verified reconstruction:/i)).toBeVisible();
+  await page.getByRole("link", { name: "Model comparison", exact: true }).click();
+  await expect(page.locator(".guide-context")).toContainText("lr2");
+  await page.getByRole("switch", { name: "Switch to dark theme" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.getByRole("link", { name: "Jump to Evidence guide" }).click();
+  await expect(page.getByRole("heading", { name: "Evidence guide" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("a browser sample trains, freezes, validates once and exports a ZIP", async ({ page }) => {
+  await page.goto("/new?source=sample");
+  await page.getByRole("button", { name: "Generate sample data" }).click();
+  await expect(page.getByRole("heading", { name: "Define the experiment protocol" })).toBeVisible();
+  await page.getByText("Pilot brief (optional)", { exact: true }).click();
+  await page.getByRole("textbox", { name: "Equipment family" }).fill("Simulated pilot workflow");
+  await page.getByRole("button", { name: "Train and challenge models" }).click();
+  await expect(page).toHaveURL(/\/experiments\/[^/]+\/comparison/, { timeout: 150_000 });
+  await expect(page.getByRole("heading", { name: "Freeze and validate" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Candidate results", exact: true })).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export ZIP", exact: true }).first().click();
+  expect((await download).suggestedFilename()).toMatch(/\.zip$/);
+  await page.getByRole("button", { name: "Freeze recommendation", exact: true }).click();
+  const confirmation = page.getByRole("checkbox", { name: /I confirm the reserved histories/ });
+  await expect(confirmation).toBeVisible({ timeout: 45_000 });
+  await confirmation.check();
+  await page.getByRole("button", { name: "Evaluate reserved equipment once", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Inspect final validation", exact: true })).toBeVisible({ timeout: 45_000 });
+  await page.getByRole("button", { name: "Inspect final validation", exact: true }).click();
+  await expect(page).toHaveURL(/partition=holdout/);
+  await expect(page.locator(".guide-context")).toContainText(/final/i);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Inspect final validation", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Evaluate reserved equipment once", exact: true })).toHaveCount(0);
+});

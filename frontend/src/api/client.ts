@@ -13,7 +13,10 @@ import type {
   DatasetConfirmation,
   ExperimentRecord,
   ExperimentCreate,
-  DecisionReport
+  DecisionReport,
+  FrozenModelRecord,
+  ValidationRecord,
+  Partition
 } from "./types";
 
 // Vite proxies /api when no base URL is configured.
@@ -91,6 +94,10 @@ export interface HealthReport {
   mode: "full" | "replay" | "demo";
   can_train: boolean;
   can_upload: boolean;
+  version: string;
+  can_edit_protocol: boolean;
+  can_freeze: boolean;
+  can_validate: boolean;
   sample_equipment: number;
   sample_configurations: number;
   copilot: string;
@@ -110,7 +117,8 @@ export interface ConfigReport {
   config_fingerprint: string;
   git_commit: string | null;
   current_code_fingerprint: string;
-  matches_current_code: boolean;
+  matches_current_code: boolean | null;
+  matches_default_config: boolean;
   source_digest: string | null;
   holdout_status: string;
 }
@@ -129,11 +137,17 @@ export interface ReplayIndexEntry {
   cycles: number;
 }
 
-export function evidenceApi(experimentId?: string) {
+export function evidenceApi(experimentId?: string, candidate?: string, partition: Partition = "out_of_fold") {
+  function scopedPath(path: string) {
+    const [pathname, search] = path.split("?");
+    const params = new URLSearchParams(search);
+    if (experimentId) params.set("experiment_id", experimentId);
+    if (candidate && !params.has("candidate")) params.set("candidate", candidate);
+    if (!params.has("partition")) params.set("partition", partition);
+    return `${pathname}?${params.toString()}`;
+  }
   function scoped<T>(path: string, init?: RequestInit) {
-    const separator = path.includes("?") ? "&" : "?";
-    const url = experimentId ? `${path}${separator}experiment_id=${encodeURIComponent(experimentId)}` : path;
-    return request<T>(url, init);
+    return request<T>(scopedPath(path), init);
   }
   return {
     health: () => request<HealthReport>("/api/health"),
@@ -143,8 +157,9 @@ export function evidenceApi(experimentId?: string) {
     candidates: () => scoped<CandidateConfig[]>("/api/candidates"),
     selection: () => scoped<SelectionResult>("/api/selection"),
     decision: () => scoped<DecisionReport>("/api/decision"),
-    exportUrl: `${BASE}/api/export${query({ experiment_id: experimentId })}`,
-    reportUrl: `${BASE}/api/export/report${query({ experiment_id: experimentId })}`,
+    exportUrl: `${BASE}${scopedPath("/api/export")}`,
+    reportUrl: `${BASE}${scopedPath("/api/export/report")}`,
+    paired: () => scoped<import("./types").PairedComparison[]>("/api/comparisons/paired"),
     finalEvaluation: () =>
       scoped<{ available: boolean; note?: string; selection?: SelectionResult }>("/api/final-evaluation"),
     scenarios: (options: { candidate?: string; requiredOnly?: boolean; includeClean?: boolean } = {}) =>
@@ -171,9 +186,14 @@ export function evidenceApi(experimentId?: string) {
 }
 
 export const api = evidenceApi();
+export interface OperationState<T> { available: boolean; record: T | null; job: ExperimentRecord | null }
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 export const experiments = {
+  freeze: (id: string) => post<FrozenModelRecord>(`/api/experiments/${id}/freeze`),
+  frozen: (id: string) => request<OperationState<FrozenModelRecord>>(`/api/experiments/${id}/freeze`),
+  validate: (id: string) => post<ValidationRecord>(`/api/experiments/${id}/validation`, { untouched_confirmed: true }),
+  validation: (id: string) => request<OperationState<ValidationRecord>>(`/api/experiments/${id}/validation`),
   sample: () => post<DatasetRegistration>("/api/datasets/sample"),
   upload: (file: File) =>
     request<DatasetRegistration>("/api/datasets/upload", {

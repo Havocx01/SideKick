@@ -25,6 +25,7 @@ ROOTS: list[type[BaseModel]] = [
     schemas.DatasetRegistration,
     schemas.DatasetConfirmation,
     schemas.ExperimentCreate,
+    schemas.ValidationCreate,
     schemas.ExperimentRecord,
     schemas.DecisionReport,
     schemas.DatasetProfile,

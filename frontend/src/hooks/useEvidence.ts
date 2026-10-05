@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useMatch } from "react-router-dom";
+import { useLocation, useMatch, useSearchParams } from "react-router-dom";
+import { walkthroughStep } from "../walkthrough";
 import { evidenceApi } from "../api/client";
 
 export function useExperimentId() {
@@ -8,5 +9,9 @@ export function useExperimentId() {
 
 export function useEvidence() {
   const id = useExperimentId();
-  return useMemo(() => evidenceApi(id), [id]);
+  const [params] = useSearchParams();
+  const guided = useLocation().pathname === "/walkthrough";
+  const candidate = guided ? walkthroughStep(params).candidate : params.get("candidate") ?? undefined;
+  const partition = !guided && params.get("partition") === "holdout" ? "holdout" : "out_of_fold";
+  return useMemo(() => evidenceApi(id, candidate, partition), [id, candidate, partition]);
 }

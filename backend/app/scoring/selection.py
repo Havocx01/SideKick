@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from itertools import pairwise
-
 from app.config import EXPERIMENT, ExperimentConfig
 from app.schemas import (
     AcceptanceCriteria,
@@ -14,7 +12,6 @@ from app.schemas import (
     SelectionOutcome,
     SelectionResult,
 )
-from app.scoring.stats import intervals_overlap
 
 
 def default_criteria(config: ExperimentConfig = EXPERIMENT) -> AcceptanceCriteria:
@@ -29,6 +26,7 @@ def default_criteria(config: ExperimentConfig = EXPERIMENT) -> AcceptanceCriteri
 def meets(metrics: AlertMetrics, criteria: AcceptanceCriteria) -> bool:
     return (
         metrics.detection_fraction >= criteria.min_detection_fraction
+        and metrics.early_alarm_burden is not None
         and metrics.early_alarm_burden <= criteria.max_early_alarm_burden
     )
 
@@ -50,7 +48,9 @@ def build_verdict(
                 f"clean detection {clean.detection_fraction:.0%} is below the required "
                 f"{criteria.min_detection_fraction:.0%}"
             )
-        if clean.early_alarm_burden > criteria.max_early_alarm_burden:
+        if clean.early_alarm_burden is None:
+            notes.append("Clean early-alarm burden is unavailable: no eligible early-life cycles.")
+        elif clean.early_alarm_burden > criteria.max_early_alarm_burden:
             notes.append(
                 f"clean early alarm burden {clean.early_alarm_burden:.1%} exceeds the "
                 f"permitted {criteria.max_early_alarm_burden:.1%}"
@@ -59,6 +59,9 @@ def build_verdict(
     detections = [r.metrics.detection_fraction for r in required]
     passed = [r for r in required if meets(r.metrics, criteria)]
     worstScenario = min(required, key=lambda r: r.metrics.detection_fraction) if required else None
+    knownBurden = [r for r in required if r.metrics.early_alarm_burden is not None]
+    worstBurden = max(knownBurden, key=lambda r: r.metrics.early_alarm_burden) if knownBurden else None
+    complete = bool(required) and all(r.coverage_complete is not False for r in required)
 
     if required and len(passed) < len(required):
         failed = len(required) - len(passed)
@@ -81,8 +84,11 @@ def build_verdict(
         worst_scenario_id=worstScenario.scenario_id if worstScenario else None,
         worst_metrics=worstScenario.metrics if worstScenario else None,
         failing_scenarios=[r.scenario_id for r in required if not meets(r.metrics, criteria)],
-        qualifies=passesClean and bool(required) and len(passed) == len(required),
+        qualifies=passesClean and complete and len(passed) == len(required),
         notes=notes,
+        worst_burden_required=worstBurden.metrics.early_alarm_burden if worstBurden else None,
+        worst_burden_scenario_id=worstBurden.scenario_id if worstBurden else None,
+        coverage_complete=complete,
     )
 
 
@@ -91,7 +97,7 @@ def select(
 ) -> SelectionResult:
     ranked = sorted(
         verdicts,
-        key=lambda v: (not v.qualifies, -v.mean_detection_required, v.clean.early_alarm_burden, v.candidate.value),
+        key=lambda v: (not v.qualifies, -v.mean_detection_required, v.clean.early_alarm_burden if v.clean.early_alarm_burden is not None else float("inf"), v.candidate.value),
     )
 
     qualifying = [v for v in ranked if v.qualifies]
@@ -104,13 +110,7 @@ def select(
             "required fault case. No model is recommended."
         )
     elif len(qualifying) > 1:
-        for better, worse in pairwise(qualifying):
-            if intervals_overlap(better.clean.detection_ci, worse.clean.detection_ci):
-                uncertain.append(
-                    f"{better.candidate.value}/{better.config_id} vs "
-                    f"{worse.candidate.value}/{worse.config_id}: detection intervals "
-                    "overlap, so this ordering is not established by the data"
-                )
+        uncertain.append("Ordering uses observed development metrics. Paired comparisons are exploratory and do not establish independent selected-model performance.")
 
     if qualifying and qualifying[0].clean.engines < 30:
         notes.append(

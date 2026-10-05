@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Strict(BaseModel):
@@ -149,6 +149,10 @@ class FaultSpec(Strict):
             parts.append("pos" if self.sign > 0 else "neg")
         if self.length is not None:
             parts.append(f"len{self.length}")
+        if self.ramp_cycles not in (None, 20):
+            parts.append(f"ramp{self.ramp_cycles}")
+        if self.seed is not None:
+            parts.append(f"seed{self.seed}")
         return "-".join(parts)
 
     def label(self) -> str:
@@ -169,6 +173,53 @@ class FaultSpec(Strict):
 
 
 CLEAN_SCENARIO_ID = "clean"
+
+
+class FaultScenario(Strict):
+    fault: FaultSpec
+    required: bool = True
+
+
+class ExperimentProtocol(Strict):
+    version: int = 1
+    min_useful_lead: int = Field(default=10, ge=1)
+    horizon_cycles: int = Field(default=30, ge=2)
+    transition_band_end: int = Field(default=45, ge=3)
+    min_detection_fraction: float = Field(default=0.70, ge=0, le=1, allow_inf_nan=False)
+    max_early_alarm_burden: float = Field(default=0.10, ge=0, le=1, allow_inf_nan=False)
+    scenarios: list[FaultScenario] = Field(default_factory=list, max_length=128)
+    base_seed: int = Field(default=20260918, ge=0, le=2**32 - 1)
+
+    @model_validator(mode="after")
+    def validate_protocol(self):
+        if not self.min_useful_lead < self.horizon_cycles < self.transition_band_end:
+            raise ValueError("Use minimum lead < warning horizon < early-alarm boundary.")
+        if self.scenarios and not any(s.required for s in self.scenarios):
+            raise ValueError("Mark at least one sensor fault as required.")
+        ids = [s.fault.scenario_id for s in self.scenarios]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Remove duplicate fault scenarios.")
+        for entry in self.scenarios:
+            spec = entry.fault
+            if spec.onset_before_failure is None or spec.onset_before_failure < self.min_useful_lead:
+                raise ValueError("Fault onset must be an integer at or before the minimum useful lead.")
+            if spec.duration == FaultDuration.transient and (spec.length is None or spec.length < 1):
+                raise ValueError("Transient faults need a positive length in cycles.")
+            if spec.kind == FaultKind.drift:
+                if spec.severity_sd is None or not 0 < spec.severity_sd <= 100 or spec.sign not in (-1, 1):
+                    raise ValueError("Drift needs a finite positive severity and a direction.")
+                if spec.ramp_cycles is None or spec.ramp_cycles < 1:
+                    raise ValueError("Drift needs a positive ramp length.")
+        return self
+
+
+class PilotBrief(Strict):
+    equipment_family: str = Field(default="", max_length=200)
+    reviewing_engineer: str = Field(default="", max_length=200)
+    current_procedure: str = Field(default="", max_length=2000)
+    intended_decision: str = Field(default="", max_length=2000)
+    success_measure: str = Field(default="", max_length=1000)
+    data_classification: Literal["simulated", "field", "unverified"] = "unverified"
 
 
 class WilsonInterval(Strict):
@@ -208,7 +259,7 @@ class AlertMetrics(Strict):
     missed: int
     detection_fraction: float
     detection_ci: WilsonInterval
-    early_alarm_burden: float = Field(description="Fraction of eligible cycles (rul > transition band) spent in alarm.")
+    early_alarm_burden: float | None = Field(description="Fraction of eligible cycles spent in alarm; unavailable with no eligible cycles.")
     new_episodes_per_1000: float
     median_lead_time: float | None
     eligible_cycles: int
@@ -229,6 +280,9 @@ class ScenarioResult(Strict):
     metrics: AlertMetrics
     required: bool = Field(default=False, description="Part of the bounded set used for selection.")
     run_id: str | None = None
+    expected_engines: int | None = None
+    coverage_complete: bool | None = None
+    coverage_notes: list[str] = Field(default_factory=list)
 
 
 class ReliabilityBin(Strict):
@@ -265,6 +319,8 @@ class AlertExplanation(Strict):
     contributions: list[ShapContribution] = Field(default_factory=list)
     available: bool = True
     note: str = "Attributions describe model behaviour, not physical fault causes."
+    candidate: str | None = None
+    partition: Partition = Partition.out_of_fold
 
 
 class AcceptanceCriteria(Strict):
@@ -297,6 +353,9 @@ class CandidateVerdict(Strict):
     )
     qualifies: bool = False
     notes: list[str] = Field(default_factory=list)
+    worst_burden_required: float | None = None
+    worst_burden_scenario_id: str | None = None
+    coverage_complete: bool | None = None
 
     @property
     def detection_drop(self) -> float:
@@ -342,6 +401,55 @@ class ReplaySeries(Strict):
     episodes: list[AlertEpisode]
     outcome: EngineOutcome
     failure_cycle: int
+    partition: Partition = Partition.out_of_fold
+    representative_reason: str | None = None
+
+
+class PairedComparison(Strict):
+    first: str
+    second: str
+    kind: Literal["selected", "matched_augmentation"]
+    engines: int
+    scenarios: int
+    resamples: int = 1000
+    seed: int
+    detection_delta: float
+    detection_interval: list[float]
+    burden_delta: float | None = None
+    burden_interval: list[float] | None = None
+    note: str = "Exploratory development comparison, conditional on selected thresholds and configurations."
+
+
+class FrozenModelRecord(Strict):
+    freeze_id: str
+    experiment_id: str
+    job_id: str
+    candidate: str
+    status: str = "queued"
+    manifest: dict[str, Any] = Field(default_factory=dict)
+    artifact_digest: str | None = None
+    manifest_digest: str | None = None
+    created_at: float
+    error: str | None = None
+
+
+class ValidationRecord(Strict):
+    validation_id: str
+    experiment_id: str
+    freeze_id: str
+    job_id: str
+    status: str = "queued"
+    untouched_confirmed: bool
+    exposure_started_at: float | None = None
+    created_at: float
+    error: str | None = None
+
+
+class ExposureRecord(Strict):
+    history_id: str
+    experiment_id: str
+    reason: str
+    exposed_at: float
 
 
 class RunRecord(Strict):
@@ -373,6 +481,7 @@ class EvidenceBundle(Strict):
     experiment_id: str | None = None
     dataset_id: str | None = None
     source_digest: str | None = None
+    dependency_versions: dict[str, str] = Field(default_factory=dict)
     confirmed_mapping: ColumnMapping | None = None
     complete_histories_confirmed: bool | None = None
     holdout_status: str = "Historical benchmark: previously examined holdout engines are exposed."
@@ -392,6 +501,11 @@ class EvidenceBundle(Strict):
     runs: list[RunRecord] = Field(default_factory=list)
     reproducibility: ReproducibilityCheck | None = None
     limitations: list[str] = Field(default_factory=list)
+    protocol: ExperimentProtocol | None = None
+    pilot_brief: PilotBrief | None = None
+    paired_comparisons: list[PairedComparison] = Field(default_factory=list)
+    frozen_model: FrozenModelRecord | None = None
+    validation: ValidationRecord | None = None
 
 
 class JobStatus(str, Enum):
@@ -428,6 +542,12 @@ class ExperimentCreate(Strict):
     dataset_id: str
     min_detection_fraction: float = Field(default=0.70, ge=0, le=1)
     max_early_alarm_burden: float = Field(default=0.10, ge=0, le=1)
+    protocol: ExperimentProtocol | None = None
+    pilot_brief: PilotBrief | None = None
+
+
+class ValidationCreate(Strict):
+    untouched_confirmed: bool
 
 
 class ExperimentRecord(Strict):
@@ -449,6 +569,10 @@ class ExperimentRecord(Strict):
     config_fingerprint: str
     data_hash: str
     source_digest: str
+    job_kind: Literal["development", "freeze", "validation"] = "development"
+    parent_experiment_id: str | None = None
+    operation_id: str | None = None
+    pilot_brief: PilotBrief | None = None
 
 
 class GuideAnswer(Strict):
@@ -467,6 +591,8 @@ class DecisionReport(Strict):
     augmented: CandidateVerdict | None = None
     limitations: list[str]
     guide: list[GuideAnswer]
+    inspected_candidate: str | None = None
+    partition: Partition = Partition.out_of_fold
 
 
 class ToolInvocation(Strict):

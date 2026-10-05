@@ -1,46 +1,33 @@
-# Sidekick
+# Sidekick v1.5
 
-Sidekick tests whether equipment failure-warning models still work when sensor readings go missing, freeze or drift. Choose data and acceptance limits, train candidate models, inspect their warnings, and export the evidence.
+Sidekick tests whether equipment failure warnings survive missing, frozen or drifting sensors. Train models, inspect their weakest cases, and export the evidence.
 
-Built for Theme 1 of ABB Accelerator 2026 by Adam Qablawi and Kareem Massoud.
+Built for ABB Accelerator 2026, Theme 1, by Adam Qablawi and Kareem Massoud.
 
-[Public demo](https://sidekick-e9lu.onrender.com/) · [Demo walkthrough](SUBMISSION.md#live-presentation-walkthrough)
+[Public demo](https://sidekick-e9lu.onrender.com/) · [Reviewer walkthrough](SUBMISSION.md)
 
-## What it does
+## Features
 
-- Explores a recorded NASA C-MAPSS evaluation.
-- Runs real training on synthetic equipment histories.
-- Accepts CSV uploads locally, with column mapping and failure-history validation.
-- Compares logistic regression, XGBoost, fault-augmented XGBoost and an age baseline.
-- Replays original and faulted sensor readings alongside the model's warnings.
-- Answers four Evidence guide questions using the selected experiment's recorded metrics.
-- Exports an HTML report, JSON evidence, CSV metrics and provenance in a ZIP. Raw uploaded readings are excluded.
+- Recorded NASA C-MAPSS benchmark, clearly separated from new runs.
+- Five-step guided walkthrough explaining healthy readings, sensor faults and the evidence.
+- Real local training on synthetic data or a CSV up to 10 MB.
+- Explicit column mapping and complete failure-history checks.
+- Configurable warning windows, acceptance limits and single-sensor fault scenarios.
+- Logistic regression, ordinary and augmented XGBoost, and an age-only baseline.
+- Detection, alarm burden, coverage and candidate-specific warning replays.
+- Play/Pause and a cycle slider for synchronized playback of stored warning and sensor traces.
+- Matched ordinary/augmented comparisons with exploratory paired bootstrap intervals.
+- Evidence guide scoped to the candidate and evaluation partition being inspected.
+- Frozen local models and an explicit, one-time reserved-equipment evaluation.
+- HTML, JSON, CSV and provenance exports. Raw readings and model files are excluded.
 
-No API key is needed. Sidekick does not certify models, approve deployment or monitor live equipment.
-
-## Recorded benchmark
-
-These results come from 80 development histories in NASA's simulated FD001 dataset. They are model-selection results, not independent field validation. Previously examined holdout histories remain identified as exposed.
-
-| Configuration | Clean useful detection | Worst required useful detection | Clean early-alarm burden |
-|---|---|---|---|
-| Logistic regression `lr2` | 80/80 | 41/80 (51.25%) | 0.00% |
-| XGBoost `xgb1` | 80/80 | 79/80 (98.75%) | 0.06% |
-| Augmented XGBoost `aug3` | 80/80 | 79/80 (98.75%) | 0.10% |
-
-For `lr2`, the weakest required case is sensor 8 dropout: 41 histories were warned in time, 24 were warned late and 15 were missed. The strongest ordinary and augmented XGBoost configurations have the same worst-case detection. Augmentation's mean required-case advantage is only 0.04 percentage points in this comparison; it is not a controlled test of augmentation.
-
-The bundle contains 256 unique fault scenarios, including 64 required cases, and 2,570 result records across ten model configurations. See [the evidence bundle](evidence/bundle.json) for the original identifiers and metrics.
-
-![Sidekick starting screen](media/submission/01-start.jpg)
-![Recorded model comparison](media/submission/02-comparison.jpg)
-![Recorded warning replay for engine 13](media/submission/03-replay.jpg)
+No API key is needed. This is a validation workbench, not a deployment approval system or live monitor.
 
 ## Run locally
 
-Requires Python 3.11+ and Node.js 20+.
+Requires Python 3.11+ and Node.js 22.12+ (or 20.19+).
 
-In PowerShell, from the repository folder:
+From the repository folder in PowerShell:
 
 ```powershell
 .\tasks.ps1 setup
@@ -49,7 +36,7 @@ $env:SIDEKICK_MODE = 'full'
 .\tasks.ps1 api
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). After installation, only the last two commands are needed. Keep the terminal open; press Ctrl+C to stop the server.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep the terminal open. After setup, only the last two commands are needed. Press Ctrl+C to stop.
 
 On macOS or Linux:
 
@@ -59,22 +46,26 @@ make build
 SIDEKICK_MODE=full make api
 ```
 
-For frontend development, run `.\tasks.ps1 web` or `make web` in a separate terminal. The built app only needs the API server.
+For frontend development, run `.\tasks.ps1 web` or `make web` in another terminal. The built app needs only the API server.
 
-## Try an experiment
+## Try it
 
-Choose **Run sample experiment**, then **Generate sample data**. Review the equipment split and demonstration defaults of 70% useful detection and 10% early-alarm burden. Select **Train and challenge models**. When the run finishes, inspect the comparison, try an Evidence guide question, replay a warning and export the evidence.
+Start with **Start guided walkthrough**. It uses recorded NASA results to explain what Sidekick tests and how to read the warnings. It does not train models or score reserved histories.
 
-The local sample has 60 histories and ten model configurations. The free hosted version uses 30 shorter histories, three sensors and four configurations. Both reserve 20 histories without automatically scoring them. A run where no candidate qualifies is a valid result.
+To run something new, choose **Set up sample**, generate the data, review the split and protocol, then select **Train and challenge models**. Inspect a candidate, click a heatmap cell, ask an Evidence guide question, and replay its weakest case. The prominent summary follows the inspected model; the recommendation is labeled separately. Technical details are available below the main results. Export the evidence when finished.
 
-CSV uploads are local only. Supply at least 25 complete equipment histories with IDs, integer cycle indices, numeric sensors and failure information. If no failure-cycle column exists, explicitly confirm that histories reach failure. This version does not support censored histories.
+Local runs reserve 20 histories. If a model qualifies, **Freeze recommendation** locks its fitted artifact, threshold, protocol and source identifiers. Reserved scoring requires an explicit confirmation and runs once. Histories already used in development or validation are blocked. The exposure ledger persists across server restarts; deleting the workspace destroys that audit history.
 
-If an embedded browser does not open the file picker, use **Paste CSV instead** or open the local app in Chrome or Edge. **Open report** displays the decision report directly. **Download evidence ZIP** saves the report and metrics together; extract the ZIP before opening its files. If your browser saves it without an extension, add `.zip` to the filename.
+The local sample uses 60 simulated histories and ten configurations. The hosted sample uses 30 shorter histories, three sensors and four configurations. Custom protocols, CSV uploads, freezing and final validation are local only. Hosted results expire; export them promptly.
 
-## Limits
+CSVs need at least 25 complete equipment histories, integer cycle indices, numeric sensors and failure information. Confirm histories reach failure if no failure-cycle column exists. Censored histories and timestamps are unsupported. If an embedded browser does not open the picker, use **Paste CSV instead** or Chrome/Edge.
 
-Useful detection means an alert is active between 10 and 30 operating cycles before failure. Early-alarm burden measures time spent in alarm more than 45 cycles before failure. These demonstration limits are not plant-safety standards, and cycles are not hours.
+## Evidence limits
 
-Development results also select thresholds and configurations, so their performance can be optimistic. Injected faults are not calibrated to ABB field measurements. Feature contributions describe model scores, not physical fault diagnoses.
+The recorded benchmark is simulated NASA FD001 data. Logistic regression `lr2` warns 80/80 histories on clean readings but only 41/80 under its weakest required sensor dropout. Leading ordinary and augmented XGBoost both retain 79/80 in their weakest required case. This historical comparison does not isolate augmentation's effect.
 
-The public service can sleep or reach its shared training allowance. Results belong to the browser that created them and expire after 24 hours; restarts or idle shutdowns may clear them sooner. Export results promptly. The recorded benchmark remains separate from experiments.
+V1.5 adds separately verified `lr2` replay traces without changing the original benchmark metrics. The older benchmark's tree models have only their originally stored examples. Historical FD001 histories remain exposed.
+
+The default 70% detection, 10% alarm burden and 10-to-30-cycle warning window are demonstration settings. Faults are simulated and not calibrated to ABB field measurements. Development results also select thresholds and configurations. Bootstrap intervals are exploratory. Fresh reserved results still do not establish performance on real ABB equipment.
+
+[Verification and remaining pilot work](TESTING.md)

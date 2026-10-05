@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import type { ScenarioResult } from "../api/types";
 import { percent } from "../format";
 
-export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioResult[]; minDetection: number }) {
+export function ScenarioHeatmap({ results, minDetection, maxBurden, expectedEngines, onInspect }: { results: ScenarioResult[]; minDetection: number; maxBurden?: number; expectedEngines?: number; onInspect?: (rows: ScenarioResult[]) => void }) {
   const { sensors, kinds, grid } = useMemo(() => {
     const cells = new Map<string, ScenarioResult[]>();
     const sensorSet = new Set<string>();
@@ -65,13 +65,18 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
                 <th scope="row" className="heat-row-label">{sensor}</th>
                 {kinds.map(kind => {
                   const value = worst(sensor, kind);
+                  const entries = grid.get(`${sensor}|${kind}`) ?? [];
+                  const burdenFailed = entries.some(e => e.metrics.early_alarm_burden == null || (maxBurden != null && e.metrics.early_alarm_burden > maxBurden));
+                  const coverageFailed = entries.some(e => e.coverage_complete === false || (expectedEngines != null && e.metrics.engines !== expectedEngines));
+                  const note = coverageFailed ? "Coverage incomplete" : burdenFailed ? "Burden fails" : "";
                   return (
                     <td key={kind}>
-                      <div
+                      <button type="button"
                         className="heat-cell"
                         style={{ background: colour(value) }}
-                        title={`${sensor}, ${kind}: worst detection ${percent(value, 1)}`}
-                      >{percent(value, 1)}</div>
+                        aria-label={`Inspect ${sensor}, ${kind}: detection ${percent(value, 1)}${note ? `, ${note}` : ""}`}
+                        onClick={() => onInspect?.(entries)}
+                      >{percent(value, 1)}{note && <span className="heat-cell-note">{note}</span>}</button>
                     </td>
                   );
                 })}
@@ -88,7 +93,7 @@ export function ScenarioHeatmap({ results, minDetection }: { results: ScenarioRe
           ))}
         </span>
         <span>better</span>
-        <span className="heat-threshold">Red: below {percent(minDetection)} detection</span>
+        <span className="heat-threshold">Red: below {percent(minDetection)} detection. Labels flag burden or coverage failures.</span>
       </div>
     </div>
   );

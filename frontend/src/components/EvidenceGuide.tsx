@@ -4,6 +4,8 @@ import { useApi } from "../hooks/useApi";
 import { useEvidence } from "../hooks/useEvidence";
 import { Button, StateBlock } from "./Chrome";
 import { ArrowUpRight, BookOpen, ChevronRight } from "lucide-react";
+import { candidateLabel } from "../format";
+import type { CandidateKind } from "../api/types";
 
 export function EvidenceGuide() {
   const api = useEvidence();
@@ -18,6 +20,7 @@ export function EvidenceGuide() {
       </header>
       <div className="guide-content">
         <StateBlock loading={result.loading} error={result.error} empty={!result.loading && !result.data?.guide.length}>
+          {result.data?.inspected_candidate && <p className="guide-context">{candidateLabel(result.data.inspected_candidate.split("/")[0] as CandidateKind, result.data.inspected_candidate.split("/")[1])}<br />{result.data.partition === "holdout" ? "Final validation" : "Development evidence"}</p>}
           <div className="guide-questions" role="group" aria-label="Evidence topics">
             {result.data?.guide.map((item, i) => (
               <Button variant="ghost" className="guide-question" aria-pressed={selected === i} aria-controls="guide-answer" key={item.question} onClick={() => setSelected(i)}>

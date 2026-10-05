@@ -254,9 +254,7 @@ export function DataSetup() {
           ) : (
             " · historical bundle: no source digest was recorded"
           )}
-          {config.data.matches_current_code
-            ? null
-            : " · this recorded configuration differs from the current default settings"}
+          {config.data.matches_current_code === false ? " · recorded with a different source version" : null}
         </p>
       ) : null}
     </>
