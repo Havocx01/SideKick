@@ -34,7 +34,7 @@ export function DataSetup() {
               </Callout>
             ) : null}
 
-            <div className="grid cols-3">
+            <div className="grid cols-3 metric-group">
               <Stat
                 label="Equipment"
                 value={integer(profile.data.equipment_count)}

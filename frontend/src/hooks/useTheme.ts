@@ -17,7 +17,13 @@ export function useTheme() {
   }, []);
 
   const setTheme = (next: Theme) => {
-    document.documentElement.setAttribute("data-theme", next);
+    const apply = () => {
+      document.documentElement.setAttribute("data-theme", next);
+      document.documentElement.style.colorScheme = next;
+    };
+    const transition = (document as Document & { startViewTransition?: (update: () => void) => unknown }).startViewTransition;
+    if (transition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) transition.call(document, apply);
+    else apply();
     setThemeState(next);
     try {
       localStorage.setItem("sidekick-theme", next);

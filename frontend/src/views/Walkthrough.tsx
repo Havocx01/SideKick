@@ -33,10 +33,12 @@ export function Walkthrough() {
   const next = walkthroughSteps[index + 1];
   return <>
     <header className="page-head walkthrough-heading"><h1>{step.title}</h1><p>{descriptions[step.id]}</p></header>
-    <nav className="walkthrough-steps" aria-label="Walkthrough steps">
-      {walkthroughSteps.map((item, i) => <Link key={item.id} to={walkthroughPath(item.id)} aria-current={item.id === step.id ? "step" : undefined}><span>{i + 1}</span>{["Healthy", "Fault", "Replay", "Compare", "Report"][i]}</Link>)}
-    </nav>
-    <div className="walkthrough-navigation">{previous ? <Link className="button" to={walkthroughPath(previous.id)}>Back</Link> : <Link className="button" to="/">Back to overview</Link>}<span>Step {index + 1} of {walkthroughSteps.length}</span>{next ? <Link className="button primary" to={walkthroughPath(next.id)}>Next</Link> : <Link className="button" to={walkthroughPath("clean")}>Restart walkthrough</Link>}</div>
+    <div className="walkthrough-bar">
+      <nav className="walkthrough-steps" aria-label="Walkthrough steps">
+        {walkthroughSteps.map((item, i) => <Link key={item.id} to={walkthroughPath(item.id)} aria-current={item.id === step.id ? "step" : undefined}><span>{i + 1}</span>{["Healthy", "Fault", "Replay", "Compare", "Report"][i]}</Link>)}
+      </nav>
+      <div className="walkthrough-navigation">{previous ? <Link className="button" to={walkthroughPath(previous.id)}>Back</Link> : <Link className="button" to="/">Back to overview</Link>}<span>Step {index + 1} of {walkthroughSteps.length}</span>{next ? <Link className="button primary" to={walkthroughPath(next.id)}>Next</Link> : <Link className="button" to={walkthroughPath("clean")}>Restart walkthrough</Link>}</div>
+    </div>
     <StateBlock loading={selection.loading} error={selection.error}>
       {missing ? <Panel title="This walkthrough evidence is unavailable"><p>The recorded benchmark must include the named models and their fault results. No substitute results are shown.</p><Link to="/comparison">Explore available benchmark evidence</Link></Panel> : <div data-testid="walkthrough-result">
         {step.id === "clean" && <Panel title="Logistic regression · lr2"><WarningCounts metrics={model.clean} label="Healthy sensors" /><p className="note useful-window">In time = {criteria.min_useful_lead}–{criteria.horizon_cycles} cycles before failure.</p></Panel>}

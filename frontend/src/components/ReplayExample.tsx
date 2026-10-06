@@ -51,9 +51,9 @@ function Player({ series, comparison, horizon, minLead }: { series: ReplaySeries
       </dl>
       <div className="playback-controls">
         <div className="playback-buttons">
-          <Button disabled={last < 1} onClick={() => { if (index === last) setIndex(0); setPlaying(value => !value); }}>{playing ? "Pause" : index === last ? "Replay from start" : "Play"}</Button>
-          <Button variant="ghost" disabled={last < 1} onClick={() => { setPlaying(false); setIndex(0); }}>Restart playback</Button>
-          {faultIndex >= 0 && <Button variant="ghost" onClick={() => { setPlaying(false); setIndex(faultIndex); }}>Jump to fault</Button>}
+          <Button size="sm" disabled={last < 1} onClick={() => { if (index === last) setIndex(0); setPlaying(value => !value); }}>{playing ? "Pause" : index === last ? "Replay from start" : "Play"}</Button>
+          <Button size="sm" variant="ghost" disabled={last < 1} onClick={() => { setPlaying(false); setIndex(0); }}>Restart playback</Button>
+          {faultIndex >= 0 && <Button size="sm" variant="ghost" onClick={() => { setPlaying(false); setIndex(faultIndex); }}>Jump to fault</Button>}
         </div>
         <ReplaySlider label="Replay cycle" min={0} max={Math.max(1, last)} step={1} value={[index]} disabled={last < 1}
           valueText={`Cycle ${point.cycle}; ${point.rul} cycles before documented failure`}
