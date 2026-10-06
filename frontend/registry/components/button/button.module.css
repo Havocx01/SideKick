@@ -1,5 +1,5 @@
 /* Press scale is driven by Motion (whileTap) alone, so transform never gets a CSS transition here. */
-.button { position: relative; display: inline-flex; min-height: var(--control-height-md); align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
+.button { position: relative; display: inline-flex; min-height: var(--control-height-md); align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-pill); padding: 0 var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: 500; line-height: var(--leading-body); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color var(--duration-fast) var(--ease-standard), background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
 .button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .button:disabled { cursor: not-allowed; opacity: .52; }
 .button[aria-busy="true"] { cursor: progress; }
@@ -12,21 +12,21 @@
 .labelContent { display: inline-flex; flex: none; align-items: center; }
 .labelPhase { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); white-space: nowrap; }
 .labelPhase svg { flex: none; }
-.primary { color: var(--background); background: var(--foreground); border-color: var(--foreground); }
-.primary:focus-visible:not(:disabled) { color: var(--accent-foreground); background: var(--accent-strong); border-color: var(--accent-strong); }
-.secondary { color: var(--foreground); background: var(--surface); border-color: var(--border); }
+.primary { color: var(--accent-foreground); background: var(--accent); border-color: transparent; }
+.primary:focus-visible:not(:disabled) { opacity: .88; }
+.secondary { color: var(--foreground); background: var(--fill, var(--surface-muted)); border-color: transparent; }
 .ghost { color: var(--text-secondary); background: transparent; border-color: transparent; }
-.danger { color: var(--danger); background: var(--surface); border-color: var(--border); }
+.danger { color: var(--danger); background: var(--fill, var(--surface-muted)); border-color: transparent; }
 @media (hover: hover) and (pointer: fine) {
-  .primary:hover:not(:disabled) { opacity: .91; box-shadow: var(--shadow-resting); }
-  .secondary:hover:not(:disabled) { background: var(--surface-muted); box-shadow: var(--shadow-resting); }
-  .ghost:hover:not(:disabled) { color: var(--foreground); background: var(--surface-muted); }
-  .danger:hover:not(:disabled) { border-color: var(--danger); background: var(--surface-muted); }
+  .primary:hover:not(:disabled) { opacity: .88; }
+  .secondary:hover:not(:disabled) { background: var(--fill-strong, var(--surface-muted)); }
+  .ghost:hover:not(:disabled) { color: var(--foreground); background: var(--fill, var(--surface-muted)); }
+  .danger:hover:not(:disabled) { background: color-mix(in oklab, var(--danger) 12%, transparent); }
 }
 /* Color feedback on press, so touch and menu triggers (which never scale) still answer the finger. */
-.primary:active:not(:disabled) { opacity: .84; }
-.secondary:active:not(:disabled), .ghost:active:not(:disabled) { color: var(--foreground); background: var(--surface-muted); }
-.danger:active:not(:disabled) { border-color: var(--danger); background: var(--surface-muted); }
+.primary:active:not(:disabled) { opacity: .8; }
+.secondary:active:not(:disabled), .ghost:active:not(:disabled) { color: var(--foreground); background: var(--fill-strong, var(--surface-muted)); }
+.danger:active:not(:disabled) { background: color-mix(in oklab, var(--danger) 16%, transparent); }
 .sm { min-height: var(--control-height-sm); padding-inline: var(--space-3); font-size: var(--text-sm); }
 .md { min-height: var(--control-height-md); }
 .lg { min-height: var(--control-height-lg); padding-inline: var(--space-5); font-size: var(--text-sm); }

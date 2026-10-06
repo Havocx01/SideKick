@@ -80,7 +80,7 @@ export function ModelComparison() {
         <h1>Model comparison</h1>
         {selection.data && <div className="candidate-selector"><Select label="Inspect model" placeholder="Choose a model" value={focusKey} onValueChange={setFocus} options={verdicts.map(verdict => ({ value: candidateKey(verdict.candidate, verdict.config_id), label: candidateLabel(verdict.candidate, verdict.config_id) }))} /></div>}
       </header>
-      {final.data?.available && <div className="partition-control" role="group" aria-label="Evaluation partition">{([["out_of_fold", "Development"], ["holdout", "Final validation"]] as const).map(([value, label]) => <Button key={value} variant={partition === value ? "primary" : "secondary"} aria-pressed={partition === value} onClick={() => { const next = new URLSearchParams(params); next.set("partition", value); next.delete("candidate"); setParams(next); }}>{label}</Button>)}</div>}
+      {final.data?.available && <div className="partition-control" role="group" aria-label="Evaluation partition">{([["out_of_fold", "Development"], ["holdout", "Final validation"]] as const).map(([value, label]) => <Button key={value} size="sm" variant="ghost" aria-pressed={partition === value} onClick={() => { const next = new URLSearchParams(params); next.set("partition", value); next.delete("candidate"); setParams(next); }}>{label}</Button>)}</div>}
 
       <StateBlock loading={selection.loading} error={selection.error}>
         {selection.data && criteria ? (
@@ -116,7 +116,7 @@ export function ModelComparison() {
                           className={isFocus ? "row-focus" : undefined}
                         >
                           <td>
-                            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+                            <div className="candidate-cell">
                               <Button variant="ghost" className="candidate-inspect" onClick={() => setFocus(key)} aria-label={`Inspect ${candidateLabel(verdict.candidate, verdict.config_id)}`} aria-pressed={isFocus}>{candidateLabel(verdict.candidate, verdict.config_id)}</Button>
                               {isRecommended ? <Badge tone="ok">recommended</Badge> : null}
                               {verdict.candidate === "age_baseline" ? <Badge tone="neutral">no sensors</Badge> : null}
@@ -167,8 +167,8 @@ export function ModelComparison() {
               <div id="fault-results" className="evidence-section">
                 <details className="disclosure" open={faultOpen} onToggle={event => setFaultOpen(event.currentTarget.open)}><summary>Sensor faults · {focused.required_passed} / {focused.required_scenarios} passed</summary>
                 <Panel
-                  title="Sensor faults"
-                  description={includeSupplemental ? "Lowest detection per sensor. Supplemental cases included." : "Lowest detection per sensor."}
+                  title="Lowest detection per sensor"
+                  description={includeSupplemental ? "Supplemental cases included." : undefined}
                 >
                   {allScenarios.some(row => !row.required) && (
                     <div className="matrix-options"><Switch label="Include supplemental cases" checked={includeSupplemental} onCheckedChange={setIncludeSupplemental} /></div>

@@ -7,6 +7,7 @@ import { qualificationReason, ResultStory } from "./ResultStory";
 import { useApi } from "../hooks/useApi";
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { Badge, Button, Panel, StateBlock } from "./Chrome";
+import { ArrowRight, ChevronRight, CircleAlert, Star } from "lucide-react";
 
 export function EvidenceExport() {
   const api = useEvidence();
@@ -47,8 +48,8 @@ export function DecisionSummary({ selection, inspected, inspectFaultHref }: { se
   return (
     <>
       <div className="recommendation-strip" data-testid="recommendation-strip">
-        <p>{chosen ? <>Recommended: <strong>{candidateLabel(chosen.candidate, chosen.config_id)}</strong></> : <strong>No model meets {stage} criteria.</strong>}</p>
-        {chosen && <Link to={`${id ? `/experiments/${id}` : ""}/comparison?${new URLSearchParams({ candidate: `${chosen.candidate}/${chosen.config_id}`, partition: selection.partition ?? "out_of_fold" })}`}>Inspect recommendation</Link>}
+        <p>{chosen ? <><Star size={15} strokeWidth={2} aria-hidden="true" />Recommended: <strong>{candidateLabel(chosen.candidate, chosen.config_id)}</strong></> : <><CircleAlert size={15} strokeWidth={2} aria-hidden="true" /><strong>No model meets {stage} criteria.</strong></>}</p>
+        {chosen && <Link to={`${id ? `/experiments/${id}` : ""}/comparison?${new URLSearchParams({ candidate: `${chosen.candidate}/${chosen.config_id}`, partition: selection.partition ?? "out_of_fold" })}`}>Inspect recommendation<ChevronRight size={14} aria-hidden="true" /></Link>}
       </div>
       {focus && <div data-testid="inspected-summary"><Panel title={`Inspecting: ${candidateLabel(focus.candidate, focus.config_id)}`} aside={<EvidenceExport key={id ?? "benchmark"} />}>
         <div className="qualification-row"><Badge tone={focus.qualifies ? "ok" : "bad"}>{focus.qualifies ? "Pass" : "Fail"} · {stage === "development" ? "Development" : "Final validation"}</Badge><span>{focus.required_passed} / {focus.required_scenarios} fault tests passed</span></div>
@@ -57,7 +58,7 @@ export function DecisionSummary({ selection, inspected, inspectFaultHref }: { se
         <details className="decision-detail"><summary>Test limits</summary><p className="note">Every required case: ≥ {percent(criteria.min_detection_fraction)} warned in time; ≤ {percent(criteria.max_early_alarm_burden)} early-alarm time. {criteria.min_detection_fraction === .7 && criteria.max_early_alarm_burden === .1 ? "Demonstration settings." : ""}</p></details>
         <div className="decision-footer">
           <p className="note">Test result, not deployment approval.</p>
-          <Link to={`${id ? `/experiments/${id}` : ""}/replay?${query}`}>Replay inspected model</Link>
+          <Link to={`${id ? `/experiments/${id}` : ""}/replay?${query}`}>Replay inspected model<ArrowRight size={14} aria-hidden="true" /></Link>
         </div>
       </Panel></div>}
     </>

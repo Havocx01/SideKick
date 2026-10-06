@@ -12,7 +12,7 @@ export function WarningCounts({ metrics, label, fault = false }: { metrics: Aler
     <h3>{label}</h3>
     <p className="warning-count"><strong>{integer(metrics.detected)} / {integer(metrics.engines)}</strong><span>equipment histories warned in time</span></p>
     <div className="outcome-bar" role="img" aria-label={`${label}: ${metrics.detected} in time, ${metrics.late} late, ${metrics.missed} missed, out of ${metrics.engines} histories`}>
-      {outcomes.map(item => <span key={item.tone} className={item.tone} style={{ width: `${metrics.engines > 0 ? item.value / metrics.engines * 100 : 0}%` }} />)}
+      {outcomes.filter(item => item.value > 0).map(item => <span key={item.tone} className={item.tone} style={{ width: `${metrics.engines > 0 ? item.value / metrics.engines * 100 : 0}%` }} />)}
     </div>
     <dl className="outcome-key">{outcomes.map(item => <div key={item.tone}><dt><i className={item.tone} aria-hidden="true" />{item.label}</dt><dd>{integer(item.value)}</dd></div>)}</dl>
     <div className="early-alarm"><span title="Share of eligible early cycles spent in alarm">Early alarm time{fault ? " · this fault" : ""}<span className="sr-only"> (share of eligible early cycles in alarm)</span></span><strong>{metrics.early_alarm_burden == null ? "Unavailable" : percent(metrics.early_alarm_burden, 2)}</strong></div>
@@ -24,7 +24,7 @@ export function ResultStory({ verdict, criteria, showFault = true, inspectFaultH
   const change = fault && fault.engines === verdict.clean.engines ? fault.detected - verdict.clean.detected : null;
   const faultMissesLimit = fault && (fault.detection_fraction < criteria.min_detection_fraction || (fault.early_alarm_burden != null && fault.early_alarm_burden > criteria.max_early_alarm_burden));
   return <>
-    {fault && verdict.worst_scenario_id && <div className="weakest-fault"><span>Weakest fault: <strong>{scenarioSummary(verdict.worst_scenario_id)}</strong></span>{inspectFaultHref && <Link className="button primary" to={inspectFaultHref}>Inspect fault</Link>}</div>}
+    {fault && verdict.worst_scenario_id && <div className="weakest-fault"><span>Weakest fault: <strong>{scenarioSummary(verdict.worst_scenario_id)}</strong></span>{inspectFaultHref && <Link to={inspectFaultHref}>Inspect fault</Link>}</div>}
     <div className="warning-comparison">
       <WarningCounts metrics={verdict.clean} label="Healthy sensors" />
       {showFault && (fault ? <WarningCounts metrics={fault} label="Weakest sensor fault" fault /> : <p className="state">No required sensor-fault result is available.</p>)}
