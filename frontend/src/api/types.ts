@@ -8,6 +8,8 @@ export type FaultDuration = "persistent" | "transient";
 
 export type FaultKind = "dropout" | "stuck" | "drift";
 
+export type PilotDecision = "supervised_trial" | "revise_model" | "collect_data" | "stop";
+
 export type JobStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "timed_out" | "interrupted" | "failed";
 
 export type CandidateKind = "logistic_regression" | "xgboost" | "xgboost_augmented" | "age_baseline";
@@ -216,6 +218,7 @@ export interface EvidenceBundle {
   paired_comparisons?: PairedComparison[];
   frozen_model?: FrozenModelRecord | null;
   validation?: ValidationRecord | null;
+  pilot_review?: PilotReviewRecord | null;
 }
 
 export interface ExperimentCreate {
@@ -324,6 +327,31 @@ export interface PairedComparison {
   note?: string;
 }
 
+export interface PilotAgreementCreate {
+  brief: PilotBrief;
+  single_family_confirmed: boolean;
+  failure_labels_checked: boolean;
+  representative_data_confirmed: boolean;
+  protocol_agreed: boolean;
+}
+
+export interface PilotAgreementRecord {
+  brief: PilotBrief;
+  single_family_confirmed: boolean;
+  failure_labels_checked: boolean;
+  representative_data_confirmed: boolean;
+  protocol_agreed: boolean;
+  agreement_id: string;
+  experiment_id: string;
+  dataset_id: string;
+  data_source: "synthetic" | "upload";
+  data_hash: string;
+  config_fingerprint: string;
+  source_digest: string;
+  candidate: string;
+  created_at: number;
+}
+
 export interface PilotBrief {
   equipment_family?: string;
   reviewing_engineer?: string;
@@ -331,6 +359,50 @@ export interface PilotBrief {
   intended_decision?: string;
   success_measure?: string;
   data_classification?: "simulated" | "field" | "unverified";
+}
+
+export interface PilotOutcomeCreate {
+  reviewing_engineer: string;
+  decision: PilotDecision;
+  decision_changed: boolean;
+  observations: string;
+  baseline_review_minutes?: number | null;
+  sidekick_review_minutes?: number | null;
+  evidence_reviewed: boolean;
+}
+
+export interface PilotOutcomeRecord {
+  reviewing_engineer: string;
+  decision: PilotDecision;
+  decision_changed: boolean;
+  observations: string;
+  baseline_review_minutes?: number | null;
+  sidekick_review_minutes?: number | null;
+  evidence_reviewed: boolean;
+  review_id: string;
+  agreement_id: string;
+  experiment_id: string;
+  validation_id: string;
+  freeze_id: string;
+  artifact_digest: string;
+  final_qualifies: boolean;
+  review_minutes_saved?: number | null;
+  created_at: number;
+}
+
+export interface PilotReviewRecord {
+  agreement: PilotAgreementRecord;
+  outcome?: PilotOutcomeRecord | null;
+}
+
+export interface PilotState {
+  record?: PilotReviewRecord | null;
+  agreement?: PilotAgreementRecord | null;
+  outcome?: PilotOutcomeRecord | null;
+  phase: "agreement" | "evaluation" | "review" | "complete";
+  agreement_blocked?: string | null;
+  review_blocked?: string | null;
+  final_qualifies?: boolean | null;
 }
 
 export interface ProfileFinding {

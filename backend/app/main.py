@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import routes_copilot, routes_evidence, routes_experiments
+from app.api import routes_copilot, routes_evidence, routes_experiments, routes_pilot
 from app.config import get_settings
 from app.utils.logging_setup import get_logger, setup_logging
 
@@ -137,6 +137,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_evidence.router)
     app.include_router(routes_copilot.router)
     app.include_router(routes_experiments.router)
+    app.include_router(routes_pilot.router)
 
     if not _mount_frontend(app, settings.static_dir):
 

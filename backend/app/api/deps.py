@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, Request
 from app.config import Settings, get_settings
 from app.copilot.tools import ToolRegistry
 from app.evidence.bundle import load_bundle
-from app.schemas import EvidenceBundle, FrozenModelRecord, ReplaySeries, ScenarioResult, SelectionResult, ValidationRecord
+from app.schemas import EvidenceBundle, FrozenModelRecord, PilotReviewRecord, ReplaySeries, ScenarioResult, SelectionResult, ValidationRecord
 from app.utils.logging_setup import get_logger
 
 logger = get_logger(__name__)
@@ -45,6 +45,8 @@ def bundle(request: Request, experiment_id: str | None = None) -> EvidenceBundle
                 raise HTTPException(409, "This experiment has no completed results yet.")
             loaded = load_bundle(workspace.directory("experiments", experiment_id) / "bundle.json")
             if get_settings().mode == "full":
+                pilot = workspace.pilot(experiment_id)
+                loaded.pilot_review = PilotReviewRecord.model_validate(pilot) if pilot else None
                 frozen = workspace.operation(experiment_id, "freeze")
                 validation = workspace.operation(experiment_id, "validation")
                 loaded.frozen_model = FrozenModelRecord.model_validate(frozen) if frozen else None
@@ -59,6 +61,11 @@ def bundle(request: Request, experiment_id: str | None = None) -> EvidenceBundle
                         " Reserved results are reported separately; scoring exposes those histories.") for text in loaded.limitations]
                     loaded.scenario_results.extend(ScenarioResult.model_validate(r) for r in result["scenario_results"])
                     loaded.replay_series.extend(ReplaySeries.model_validate(r) for r in result["replay_series"])
+                from app.experiments.pilot import validate_saved_record
+                try:
+                    validate_saved_record(loaded)
+                except ValueError as error:
+                    raise HTTPException(409, str(error)) from error
             return loaded
         except (KeyError, ValueError, FileNotFoundError):
             raise HTTPException(404, "Experiment not found") from None

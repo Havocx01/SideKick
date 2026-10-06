@@ -1,0 +1,56 @@
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  padding-block: var(--space-3);
+  border-bottom: 2px solid var(--border);
+  min-width: 0;
+}
+
+.steps li[aria-current="step"] {
+  color: var(--foreground);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+
+.steps svg { flex-shrink: 0; color: var(--success); }
+
+.form, .stack { display: grid; gap: var(--space-5); min-width: 0; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.fields > *, .form > *, .stack > * { min-width: 0; }
+.checks { border: 0; padding: 0; margin: 0; display: grid; gap: var(--space-1); }
+.checks legend { font-weight: 500; margin-bottom: var(--space-2); }
+.checks label { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; }
+.checks label:focus-within { background: var(--fill); border-radius: var(--radius-inner); }
+.summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin: 0; }
+.summary > div { min-width: 0; }
+.summary dt { color: var(--text-secondary); font-size: var(--text-xs); }
+.summary dd { margin: var(--space-1) 0 0; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.record { display: grid; grid-template-columns: minmax(120px, .4fr) minmax(0, 1fr); gap: var(--space-3) var(--space-4); margin: 0; }
+.record dt { color: var(--text-secondary); }
+.record dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.actions { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+.footnote { color: var(--text-secondary); font-size: var(--text-xs); margin: 0; max-width: 65ch; }
+.agreement { margin-bottom: var(--space-5); }
+.agreement summary { font-weight: 500; padding-block: var(--space-3); }
+.agreement .record { margin-top: var(--space-4); }
+.heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
+.blocked { max-width: 60ch; }
+
+@media (max-width: 600px) {
+  .fields { grid-template-columns: minmax(0, 1fr); }
+  .steps { gap: var(--space-2); font-size: var(--text-xs); }
+  .summary { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .record { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .record dd { margin-bottom: var(--space-3); }
+}

@@ -48,7 +48,7 @@ export function DataSetup() {
               <Stat
                 label="Channels"
                 value={integer(profile.data.sensors.length)}
-                note={`${profile.data.sensors.filter(s => s.varies).length} fault-tested`}
+                note={`${profile.data.sensors.filter(s => s.varies).length} with varying readings`}
               />
             </div>
 
@@ -103,7 +103,7 @@ export function DataSetup() {
                       <th className="num">Std dev</th>
                       <th className="num">Range</th>
                       <th className="num">Missing</th>
-                      <th>Fault tested</th>
+                      <th>Readings vary</th>
                     </tr>
                   </thead>
                   <tbody>

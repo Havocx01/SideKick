@@ -7,6 +7,8 @@ import zipfile
 from html import escape
 
 from app.experiments.decision import candidateLabel, decision, percentage
+from app.experiments.pilot_report import pilot_html
+from app.experiments.pilot import validate_saved_record
 from app.schemas import EvidenceBundle, Partition
 
 
@@ -50,10 +52,13 @@ def export_zip(bundle: EvidenceBundle, candidate=None, partition=Partition.out_o
         archive.writestr("evidence.json", bundle.model_dump_json(indent=2))
         archive.writestr("metrics.csv", csvStream.getvalue())
         archive.writestr("provenance.json", json.dumps(provenance, indent=2))
+        if bundle.pilot_review:
+            archive.writestr("pilot-review.json", bundle.pilot_review.model_dump_json(indent=2))
     return stream.getvalue()
 
 
 def render_report(bundle: EvidenceBundle, candidate=None, partition=Partition.out_of_fold):
+    validate_saved_record(bundle)
     report = decision(bundle, candidate, partition)
     provenance = {
         "experiment_id": bundle.experiment_id,
@@ -73,6 +78,7 @@ def render_report(bundle: EvidenceBundle, candidate=None, partition=Partition.ou
         "report_partition": partition.value,
         "protocol": bundle.protocol.model_dump(mode="json") if bundle.protocol else None,
         "pilot_brief": bundle.pilot_brief.model_dump(mode="json") if bundle.pilot_brief else None,
+        "pilot_review": bundle.pilot_review.model_dump(mode="json") if bundle.pilot_review else None,
         "frozen_model": bundle.frozen_model.model_dump(mode="json") if bundle.frozen_model else None,
         "validation": bundle.validation.model_dump(mode="json") if bundle.validation else None,
         "raw_sensor_values_included": False,
@@ -109,11 +115,14 @@ def render_report(bundle: EvidenceBundle, candidate=None, partition=Partition.ou
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Sidekick decision report</title>
 <style>body{{font:16px/1.6 system-ui;max-width:1050px;margin:40px auto;padding:0 20px;color:#18232b}}
 table{{border-collapse:collapse;width:100%;font-size:14px}}td,th{{text-align:left;border-bottom:1px solid #ccc;padding:8px}}
-pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f6;padding:20px}}.scroll{{overflow:auto}}</style>
+pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f6;padding:20px}}.scroll{{overflow:auto}}
+.pilot-context{{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,3fr);gap:8px 16px}}
+.pilot-context dt{{font-weight:500}}.pilot-context dd{{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}}
+@media(max-width:600px){{.pilot-context{{grid-template-columns:minmax(0,1fr);gap:4px}}.pilot-context dd{{margin-bottom:12px}}}}</style>
 <h1>Sidekick v1.5 decision report</h1><p>{escape(bundle.profile.source)} · {escape(partition.value)}</p><h2>{escape(report.title)}</h2>
 {paragraphs}<div class="scroll"><table><thead><tr><th>Configuration</th><th>Qualified</th><th>Clean detection</th>
 <th>Mean required detection</th><th>Worst required detection</th><th>Clean burden</th><th>Highest required burden</th><th>Complete coverage</th></tr></thead><tbody>{rows}</tbody></table></div>
-<h2>Final validation</h2>{final_html}
+{pilot_html(bundle)}<h2>Final validation</h2>{final_html}
 <h2>Exploratory paired development comparisons</h2><p>95% paired equipment bootstrap intervals. These comparisons are conditional on development selection and do not prove a causal or field benefit.</p>
 <p>Changes are second configuration minus first, in percentage points. Higher detection and lower burden are better.</p>
 <div class="scroll"><table><thead><tr><th>Configurations</th><th>Comparison</th><th>Mean required detection change</th><th>95% interval</th><th>Mean required burden change</th><th>95% interval</th></tr></thead><tbody>{paired}</tbody></table></div>

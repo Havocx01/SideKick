@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
-import { Activity, ArrowLeft, ArrowUpRight, ChevronDown, Database, FlaskConical, House, Layers, PanelRight, Plus } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUpRight, ChevronDown, ClipboardCheck, Database, FlaskConical, House, Layers, PanelRight, Plus } from "lucide-react";
 import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useExperimentId } from "../hooks/useEvidence";
@@ -43,7 +43,8 @@ export function Layout() {
     { to: "/experiments", label: "Experiments", icon: FlaskConical },
     { to: id ? `${prefix}/data` : "/benchmark", label: "Data and protocol", icon: Database },
     { to: `${prefix}/comparison`, label: "Model comparison", icon: Layers },
-    { to: `${prefix}/replay`, label: "Warning replay", icon: Activity }
+    { to: `${prefix}/replay`, label: "Warning replay", icon: Activity },
+    ...(id && health.data?.can_review_pilot && record.data?.status === "completed" ? [{ to: `${prefix}/pilot`, label: "Equipment pilot", icon: ClipboardCheck }] : [])
   ];
   const workspace = health.data?.mode === "replay" ? "Recorded demo" : health.data?.mode === "demo" ? "Hosted sample workspace" : "Local workspace";
   const currentView = views.find(view => view.to === location.pathname)?.label ?? (location.pathname === "/walkthrough" ? "Guided walkthrough" : location.pathname === "/new" ? "New experiment" : "Experiment progress");

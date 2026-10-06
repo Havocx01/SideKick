@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api, ApiError, experiments, type OperationState } from "../api/client";
 import type { CandidateVerdict, FrozenModelRecord, ValidationRecord } from "../api/types";
 import { candidateLabel } from "../format";
@@ -16,6 +16,7 @@ export function ValidationPanel({ experimentId, qualifies, recommendation, onCom
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     if (!health.data?.can_freeze) return;
@@ -52,7 +53,7 @@ export function ValidationPanel({ experimentId, qualifies, recommendation, onCom
     catch (e) { setError(e instanceof Error ? e.message : "Could not cancel this job."); }
     finally { setBusy(false); }
   }
-  return <Panel title="Freeze and validate" description="Lock the recommended model, then check it once on histories kept out of model selection.">
+  return <Panel title="Freeze and validate" description="Lock the recommended model, then check it once on histories kept out of model selection." aside={!location.pathname.endsWith("/pilot") && !exposed ? <Link to={`/experiments/${experimentId}/pilot`}>Agree an equipment pilot</Link> : undefined}>
     <p className="note">{recommendation ? `Model to freeze: ${candidateLabel(recommendation.candidate, recommendation.config_id)}. This is the recommendation, regardless of the model being inspected above.` : "No development recommendation is available to freeze."}</p><div className="validation-status">
       <span>Frozen model <Badge>{frozen?.record?.status ?? "not frozen"}</Badge></span>
       <span>Reserved validation <Badge>{validation?.record?.status ?? "not scored"}</Badge></span>

@@ -35,6 +35,8 @@ class Workspace:
                 CREATE TABLE IF NOT EXISTS exposures (
                     history_id TEXT PRIMARY KEY, experiment_id TEXT NOT NULL,
                     reason TEXT NOT NULL, exposed_at REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS pilot_reviews (
+                    experiment_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
             """)
 
     @contextmanager
@@ -118,6 +120,32 @@ class Workspace:
             record = json.loads(row[0])
             record.update(changes)
             conn.execute("UPDATE operations SET payload=? WHERE id=?", (json.dumps(record, allow_nan=False), operation_id))
+
+    def pilot(self, experiment_id):
+        identifier(experiment_id)
+        with self.connect() as conn:
+            row = conn.execute("SELECT payload FROM pilot_reviews WHERE experiment_id=?", (experiment_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_pilot_part(self, experiment_id, part, payload):
+        """An agreement and its final review are each written once, transactionally."""
+        identifier(experiment_id)
+        if part not in ("agreement", "outcome"):
+            raise ValueError("Unknown pilot record part")
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT payload FROM pilot_reviews WHERE experiment_id=?", (experiment_id,)).fetchone()
+            record = json.loads(row[0]) if row else {}
+            if record.get(part):
+                raise ValueError(f"The pilot {part} is already recorded. Start a new experiment for a different review.")
+            if part == "outcome" and not record.get("agreement"):
+                raise ValueError("Agree the pilot before recording a review.")
+            if part == "agreement":
+                operation = conn.execute("SELECT payload FROM operations WHERE experiment_id=? AND kind='validation'", (experiment_id,)).fetchone()
+                if operation and json.loads(operation[0]).get("exposure_started_at") is not None:
+                    raise ValueError("Agree the pilot before reserved scoring begins. Start a new experiment.")
+            record[part] = payload
+            conn.execute("INSERT OR REPLACE INTO pilot_reviews VALUES (?,?)", (experiment_id, json.dumps(record, allow_nan=False)))
 
     def expose(self, histories, experiment_id, reason, *, validation_id=None):
         histories = list(histories)

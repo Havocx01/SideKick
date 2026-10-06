@@ -19,6 +19,7 @@ Built for ABB Accelerator 2026, Theme 1, by Adam Qablawi and Kareem Massoud.
 - Matched ordinary/augmented comparisons with exploratory paired bootstrap intervals.
 - Evidence guide scoped to the candidate and evaluation partition being inspected.
 - Frozen local models and an explicit, one-time reserved-equipment evaluation.
+- Equipment pilot agreements and an engineer decision tied to the frozen model's final results.
 - HTML, JSON, CSV and provenance exports. Raw readings and model files are excluded.
 
 No API key is needed. This is a validation workbench, not a deployment approval system or live monitor.
@@ -55,6 +56,8 @@ Start with **Start guided walkthrough**. It uses recorded NASA results to explai
 To run something new, choose **Set up sample**, generate the data, review the split and protocol, then select **Train and challenge models**. The result bars show warnings in time, late and missed. Open **Sensor faults** to inspect a heatmap cell, or choose an Evidence guide question for an explanation. The summary follows the inspected model; the recommendation is labeled separately. Test settings and technical details expand when needed. Export the evidence when finished.
 
 Local runs reserve 20 histories. If a model qualifies, **Freeze recommendation** locks its fitted artifact, threshold, protocol and source identifiers. Reserved scoring requires an explicit confirmation and runs once. Histories already used in development or validation are blocked. The exposure ledger persists across server restarts; deleting the workspace destroys that audit history.
+
+For an engineering pilot, open **Equipment pilot** from a completed local experiment. Name one equipment family and reviewer, record the decision and success measure, then confirm the data and test settings before reserved scoring. Freeze and evaluate the model, record the engineer's next action, and download the pilot evidence. Agreements and reviews are saved once per experiment. Optional review times and changed decisions are self-reported, not proven savings. A synthetic pilot only demonstrates this workflow; field usefulness still needs representative equipment data and an engineer's assessment.
 
 The local sample uses 60 simulated histories and ten configurations. The hosted sample uses 30 shorter histories, three sensors and four configurations. Custom protocols, CSV uploads, freezing and final validation are local only. Hosted results expire; export them promptly.
 
