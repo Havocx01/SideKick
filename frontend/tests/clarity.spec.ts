@@ -189,7 +189,7 @@ test("replay seeks to fault onset and displays stored warning state rather than 
   await page.goto("/walkthrough?step=replay");
   const state = page.getByLabel("Current replay state");
   await expect(state).toContainText("Faulted Warning active");
-  await expect(page.getByText("Model warning score", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Score over time for 16", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Replay from start", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Jump to fault", exact: true }).click();
   await expect(page.getByRole("slider", { name: "Replay cycle" })).toHaveAttribute("aria-valuenow", "1");

@@ -98,6 +98,7 @@ export interface HealthReport {
   can_edit_protocol: boolean;
   can_freeze: boolean;
   can_validate: boolean;
+  can_review_pilot: boolean;
   sample_equipment: number;
   sample_configurations: number;
   copilot: string;
@@ -207,4 +208,12 @@ export const experiments = {
   list: () => request<ExperimentRecord[]>("/api/experiments"),
   get: (id: string) => request<ExperimentRecord>(`/api/experiments/${id}`),
   cancel: (id: string) => post<ExperimentRecord>(`/api/experiments/${id}/cancel`)
+};
+
+export const pilots = {
+  get: (id: string) => request<import("./types").PilotState>(`/api/experiments/${id}/pilot`),
+  agree: (id: string, body: import("./types").PilotAgreementCreate) =>
+    post<import("./types").PilotAgreementRecord>(`/api/experiments/${id}/pilot/agreement`, body),
+  review: (id: string, body: import("./types").PilotOutcomeCreate) =>
+    post<import("./types").PilotOutcomeRecord>(`/api/experiments/${id}/pilot/review`, body)
 };

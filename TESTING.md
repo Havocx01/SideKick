@@ -1,6 +1,6 @@
 # Sidekick v1.5 verification
 
-## Results
+## Previous prototype checks
 
 Checked locally on Windows and in a fresh Linux Docker image:
 
@@ -13,6 +13,12 @@ Checked locally on Windows and in a fresh Linux Docker image:
 The resource measurement predates the walkthrough and wording refinements; its recorded source digest identifies that revision. Training and resource settings are unchanged. It is a local single-run check, not a load test or a promise of Render latency. [Recorded measurement](media/submission/v1.5-linux-verification.json).
 
 The recorded walkthrough and report were also checked with external browser requests blocked. All resources came from the local server. Layout checks at 1440, 1152, 960 and 390 CSS pixels found no page overflow; the smaller desktop widths exercise the layout space available at increased browser zoom.
+
+## Equipment pilot checks (6 October 2026)
+
+The local backend suite passed 41 tests, including real training, freezing and reserved evaluation. Pilot tests cover saved agreements, incomplete checks, synthetic classification, agreements after scoring, concurrent exposure checks, mismatched evidence, failed final models, duplicate reviews, optional timings, escaped exports and local-only API access.
+
+A new browser sample completed training, agreement, freezing, reserved evaluation, engineer review and a named ZIP download. Agreement and review survived refreshes and a server restart. The ZIP's review, dataset fingerprint, validation ID and model digest matched its evidence; raw sensor readings were excluded. The pilot layout was checked at 390, 768, 1024 and 1440 pixels in light mode and at desktop width in dark mode, without sideways page overflow. The report also fits at 390 pixels. Eleven browser regression tests passed. These were synthetic workflow checks, not an actual engineer pilot or measured benefit. TypeScript, the frontend build and Ruff passed.
 
 ## Run the checks
 
@@ -64,4 +70,4 @@ Frozen artifacts are local trusted files, not an interface for importing arbitra
 - Calibrate faults to actual sensor behavior and check failure labels.
 - Evaluate on real equipment and document operating conditions, maintenance costs and missed-warning consequences.
 
-The public service still needs this revision deployed and checked. Hosted uploads, custom protocols, model freezing and reserved scoring remain disabled. This version does not monitor equipment, approve deployment or establish field reliability.
+The equipment pilot additions are local and have not been deployed. Hosted uploads, custom protocols, model freezing, reserved scoring and engineer review remain disabled. This version does not monitor equipment, approve deployment or establish field reliability.

@@ -40,6 +40,12 @@ def test_training_freeze_validation_and_exports(local_settings, monkeypatch):
         replay = client.get("/api/replay/index", params={"experiment_id": id, "candidate": key}).json()
         assert replay["series"]
         assert all(s["candidate"] + "/" + s["config_id"] == key for s in replay["series"])
+        agreement = {"brief": {"equipment_family": "Simulated demonstration family", "reviewing_engineer": "Test reviewer",
+            "current_procedure": "Manual metric review", "intended_decision": "Choose whether to investigate a model",
+            "success_measure": "Documented review decision", "data_classification": "simulated"},
+            "single_family_confirmed": True, "failure_labels_checked": True,
+            "representative_data_confirmed": True, "protocol_agreed": True}
+        assert client.post(f"/api/experiments/{id}/pilot/agreement", json=agreement).status_code == 201
         frozen = client.post(f"/api/experiments/{id}/freeze")
         assert frozen.status_code == 202, frozen.text
         wait(client, frozen.json()["job_id"])
@@ -64,6 +70,12 @@ def test_training_freeze_validation_and_exports(local_settings, monkeypatch):
         final = client.get("/api/final-evaluation", params={"experiment_id": id}).json()
         assert final["available"]
         assert final["selection"]["ranked"][0]["clean"]["engines"] == 20
+        review = client.post(f"/api/experiments/{id}/pilot/review", json={"reviewing_engineer": "Test reviewer",
+            "decision": "collect_data", "decision_changed": True, "observations": "Request real histories before a field pilot.",
+            "evidence_reviewed": True})
+        assert review.status_code == 201, review.text
+        assert review.json()["validation_id"] == validation.json()["validation_id"]
+        assert client.get(f"/api/experiments/{id}/pilot").json()["phase"] == "complete"
         assert client.post(f"/api/experiments/{id}/validation", json={"untouched_confirmed": True}).status_code == 409
         export = client.get("/api/export", params={"experiment_id": id, "candidate": key, "partition": "holdout"})
         assert export.status_code == 200, export.text

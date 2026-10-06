@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from app.evidence.bundle import load_bundle
 from app.experiments.store import Workspace
-from app.schemas import ExperimentProtocol, FaultScenario, FrozenModelRecord, ValidationRecord
+from app.schemas import ExperimentProtocol, FaultScenario, FrozenModelRecord, Partition, ValidationRecord
 
 
 @pytest.fixture
@@ -35,6 +35,7 @@ def pilot_case(tmp_path):
 def complete_validation(loaded):
     selected = loaded.development_selection.recommended
     loaded.final_evaluation = loaded.development_selection.model_copy(deep=True)
+    loaded.final_evaluation.partition = Partition.holdout
     loaded.final_evaluation.ranked = [selected.model_copy(deep=True)]
     loaded.frozen_model = FrozenModelRecord(freeze_id="freeze-a", experiment_id=loaded.experiment_id,
         job_id=str(uuid4()), candidate=f"{selected.candidate.value}/{selected.config_id}",
@@ -91,6 +92,38 @@ def test_synthetic_cannot_be_declared_field_data(pilot_case):
         agree(workspace, loaded, PilotAgreementCreate.model_validate(payload))
 
 
+def test_agreement_rechecks_exposure_inside_the_transaction(pilot_case):
+    from app.experiments.pilot import agree
+    from app.schemas import PilotAgreementCreate
+
+    workspace, loaded, payload = pilot_case
+    with workspace.connect() as connection:
+        connection.execute("INSERT INTO operations VALUES (?,?,?,?)",
+            (str(uuid4()), loaded.experiment_id, "validation", json.dumps({"exposure_started_at": 1})))
+    with pytest.raises(ValueError, match="before reserved scoring"):
+        agree(workspace, loaded, PilotAgreementCreate.model_validate(payload))
+    assert workspace.pilot(loaded.experiment_id) is None
+
+
+def test_no_qualifying_model_cannot_start_a_pilot(pilot_case):
+    from app.experiments.pilot import agree, state
+    from app.schemas import PilotAgreementCreate
+
+    workspace, loaded, payload = pilot_case
+    loaded.development_selection.recommended = None
+    assert "No candidate" in state(workspace, loaded).agreement_blocked
+    with pytest.raises(ValueError, match="No candidate"):
+        agree(workspace, loaded, PilotAgreementCreate.model_validate(payload))
+
+
+def test_historical_bundle_without_pilot_identifiers_has_a_clear_next_step(pilot_case):
+    from app.experiments.pilot import state
+
+    workspace, loaded, _ = pilot_case
+    loaded.experiment_id = None
+    assert "historical experiment" in state(workspace, loaded).agreement_blocked
+
+
 def test_review_requires_independent_results_and_cannot_override_failure(pilot_case):
     from app.experiments.pilot import agree, review
     from app.schemas import PilotAgreementCreate, PilotOutcomeCreate
@@ -127,6 +160,18 @@ def test_review_rejects_different_evidence_and_incomplete_time_pair(pilot_case):
         PilotOutcomeCreate.model_validate(outcome(baseline_review_minutes=-1))
 
 
+def test_simulated_review_cannot_claim_readiness_for_a_site_trial(pilot_case):
+    from app.experiments.pilot import agree, review
+    from app.schemas import PilotAgreementCreate, PilotOutcomeCreate
+
+    workspace, loaded, payload = pilot_case
+    payload["brief"]["data_classification"] = "simulated"
+    agree(workspace, loaded, PilotAgreementCreate.model_validate(payload))
+    complete_validation(loaded)
+    with pytest.raises(ValueError, match="requires declared field records"):
+        review(workspace, loaded, PilotOutcomeCreate.model_validate(outcome()))
+
+
 def test_export_contains_readable_pilot_and_escaped_review(pilot_case):
     from app.experiments.export import export_zip
     from app.experiments.pilot import agree, review, state
@@ -147,6 +192,9 @@ def test_export_contains_readable_pilot_and_escaped_review(pilot_case):
         exported = json.loads(archive.read("pilot-review.json"))
         assert exported["outcome"]["validation_id"] == "validation-a"
         assert exported["agreement"]["config_fingerprint"] == loaded.config_fingerprint
+    loaded.pilot_review.outcome.validation_id = "other-validation"
+    with pytest.raises(ValueError, match="no longer matches"):
+        export_zip(loaded)
 
 
 def test_experiments_never_share_review_records(pilot_case):
@@ -157,3 +205,44 @@ def test_experiments_never_share_review_records(pilot_case):
     agree(workspace, loaded, PilotAgreementCreate.model_validate(payload))
     other = loaded.model_copy(deep=True, update={"experiment_id": str(uuid4())})
     assert state(workspace, other).record is None
+
+
+@pytest.mark.parametrize("mode", ["replay", "demo"])
+def test_pilot_api_is_local_only(local_settings, monkeypatch, mode):
+    from app.config import reset_settings
+    from app.main import create_app
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("SIDEKICK_MODE", mode)
+    reset_settings()
+    with TestClient(create_app()) as client:
+        assert client.get("/api/health").json()["can_review_pilot"] is False
+        id = str(uuid4())
+        assert client.get(f"/api/experiments/{id}/pilot").status_code == 403
+        assert client.post(f"/api/experiments/{id}/pilot/agreement", json={}).status_code == 403
+        assert client.post(f"/api/experiments/{id}/pilot/review", json={}).status_code == 403
+
+
+def test_pilot_api_reads_saved_agreement_and_exports_it(local_settings, pilot_case):
+    from app.main import create_app
+    from fastapi.testclient import TestClient
+
+    seed, loaded, payload = pilot_case
+    application = create_app()
+    with TestClient(application) as client:
+        workspace = application.state.jobs.workspace
+        workspace.reserve(seed.get("experiments", loaded.experiment_id))
+        directory = workspace.directory("experiments", loaded.experiment_id)
+        directory.mkdir(parents=True)
+        (directory / "bundle.json").write_text(loaded.model_dump_json(), encoding="utf-8")
+        path = f"/api/experiments/{loaded.experiment_id}/pilot"
+        assert client.get(path).json()["phase"] == "agreement"
+        assert client.post(path + "/agreement", json=payload, headers={"Origin": "https://untrusted.example"}).status_code == 403
+        assert client.post(path + "/agreement", json={**payload, "protocol_agreed": False}).status_code == 422
+        assert client.post(path + "/agreement", json=payload).status_code == 201
+        assert client.get(path).json()["phase"] == "evaluation"
+        assert client.post(path + "/agreement", json=payload).status_code == 409
+        exported = client.get("/api/export", params={"experiment_id": loaded.experiment_id})
+        with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+            assert json.loads(archive.read("pilot-review.json"))["agreement"]["brief"]["equipment_family"] == "Motor family A"
+        assert client.get(f"/api/experiments/{uuid4()}/pilot").status_code == 404

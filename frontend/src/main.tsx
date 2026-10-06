@@ -24,6 +24,7 @@ const router = createBrowserRouter([
       { path: "experiments/:experimentId/data", lazy: async () => ({ Component: (await import("./views/DataSetup")).DataSetup }) },
       { path: "experiments/:experimentId/comparison", lazy: async () => ({ Component: (await import("./views/ModelComparison")).ModelComparison }) },
       { path: "experiments/:experimentId/replay", lazy: async () => ({ Component: (await import("./views/WarningReplay")).WarningReplay }) },
+      { path: "experiments/:experimentId/pilot", lazy: async () => ({ Component: (await import("./views/PilotReview")).PilotReview }) },
       { path: "comparison", lazy: async () => ({ Component: (await import("./views/ModelComparison")).ModelComparison }) },
       { path: "replay", lazy: async () => ({ Component: (await import("./views/WarningReplay")).WarningReplay }) }
     ]

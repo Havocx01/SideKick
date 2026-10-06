@@ -47,6 +47,7 @@ def health(config: Settings = Depends(settings)) -> dict:
         "can_edit_protocol": config.mode == "full",
         "can_freeze": config.mode == "full",
         "can_validate": config.mode == "full",
+        "can_review_pilot": config.mode == "full",
         "can_train": config.mode in ("full", "demo"),
         "can_upload": config.mode == "full",
         "sample_equipment": 30 if config.mode == "demo" else 60,

@@ -222,6 +222,90 @@ class PilotBrief(Strict):
     data_classification: Literal["simulated", "field", "unverified"] = "unverified"
 
 
+class PilotAgreementCreate(Strict):
+    brief: PilotBrief
+    single_family_confirmed: bool
+    failure_labels_checked: bool
+    representative_data_confirmed: bool
+    protocol_agreed: bool
+
+    @model_validator(mode="after")
+    def checked_brief(self):
+        for field in ("equipment_family", "reviewing_engineer", "current_procedure", "intended_decision", "success_measure"):
+            if not getattr(self.brief, field).strip():
+                raise ValueError("Complete the equipment, reviewer, decision and success measure before agreeing the pilot.")
+        if self.brief.data_classification == "unverified":
+            raise ValueError("Identify the data as field records or simulated data.")
+        if not all((self.single_family_confirmed, self.failure_labels_checked,
+                    self.representative_data_confirmed, self.protocol_agreed)):
+            raise ValueError("Check the data and agree the warning window, fault cases and limits first.")
+        return self
+
+
+class PilotAgreementRecord(PilotAgreementCreate):
+    agreement_id: str
+    experiment_id: str
+    dataset_id: str
+    data_source: Literal["synthetic", "upload"]
+    data_hash: str
+    config_fingerprint: str
+    source_digest: str
+    candidate: str
+    created_at: float
+
+
+class PilotDecision(str, Enum):
+    supervised_trial = "supervised_trial"
+    revise_model = "revise_model"
+    collect_data = "collect_data"
+    stop = "stop"
+
+
+class PilotOutcomeCreate(Strict):
+    reviewing_engineer: str = Field(min_length=1, max_length=200)
+    decision: PilotDecision
+    decision_changed: bool
+    observations: str = Field(min_length=1, max_length=2000)
+    baseline_review_minutes: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+    sidekick_review_minutes: float | None = Field(default=None, ge=0, le=100000, allow_inf_nan=False)
+    evidence_reviewed: bool
+
+    @model_validator(mode="after")
+    def checked_review(self):
+        if not self.reviewing_engineer.strip() or not self.observations.strip() or not self.evidence_reviewed:
+            raise ValueError("Name the reviewer, record the reason and confirm the evidence was reviewed.")
+        if (self.baseline_review_minutes is None) != (self.sidekick_review_minutes is None):
+            raise ValueError("Provide both review times or leave both blank.")
+        return self
+
+
+class PilotOutcomeRecord(PilotOutcomeCreate):
+    review_id: str
+    agreement_id: str
+    experiment_id: str
+    validation_id: str
+    freeze_id: str
+    artifact_digest: str
+    final_qualifies: bool
+    review_minutes_saved: float | None = None
+    created_at: float
+
+
+class PilotReviewRecord(Strict):
+    agreement: PilotAgreementRecord
+    outcome: PilotOutcomeRecord | None = None
+
+
+class PilotState(Strict):
+    record: PilotReviewRecord | None = None
+    agreement: PilotAgreementRecord | None = None
+    outcome: PilotOutcomeRecord | None = None
+    phase: Literal["agreement", "evaluation", "review", "complete"]
+    agreement_blocked: str | None = None
+    review_blocked: str | None = None
+    final_qualifies: bool | None = None
+
+
 class WilsonInterval(Strict):
     lower: float
     upper: float
@@ -506,6 +590,7 @@ class EvidenceBundle(Strict):
     paired_comparisons: list[PairedComparison] = Field(default_factory=list)
     frozen_model: FrozenModelRecord | None = None
     validation: ValidationRecord | None = None
+    pilot_review: PilotReviewRecord | None = None
 
 
 class JobStatus(str, Enum):
