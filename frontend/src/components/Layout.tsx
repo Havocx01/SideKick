@@ -1,63 +1,51 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
-import { Activity, ArrowLeft, ArrowUpRight, ChevronDown, ClipboardCheck, Database, FlaskConical, House, Layers, PanelRight, Plus } from "lucide-react";
+import { Activity, ArrowUpRight, ChevronDown, ClipboardCheck, Database, FlaskConical, House, Layers, Plus } from "lucide-react";
 import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useExperimentId } from "../hooks/useEvidence";
-import { Button } from "./Chrome";
-import { EvidenceGuide } from "./EvidenceGuide";
+import { AnalysisProvider } from "./AnalysisProvider";
+import { AnalysisInspector } from "./AnalysisInspector";
 import { ThemeToggle } from "./ThemeToggle";
 
-const GUIDE_KEY = "sidekick-guide";
-
-function useDesktop() {
-  const query = "(min-width: 901px)";
-  const [desktop, setDesktop] = useState(() => typeof window === "undefined" || window.matchMedia(query).matches);
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const sync = () => setDesktop(media.matches);
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, []);
-  return desktop;
-}
-
 export function Layout() {
+  return <AnalysisProvider><Workspace /></AnalysisProvider>;
+}
+function Workspace() {
   const health = useApi(() => api.health(), []);
   const id = useExperimentId();
   const location = useLocation();
   const [params] = useSearchParams();
-  const desktop = useDesktop();
-  const [guideOpen, setGuideOpen] = useState(() => {
-    try { return localStorage.getItem(GUIDE_KEY) !== "closed"; } catch { return true; }
-  });
   const sourceRef = useRef<HTMLDetailsElement>(null);
   const context = new URLSearchParams();
   for (const key of ["candidate", "partition"]) { const value = params.get(key); if (value) context.set(key, value); }
   const record = useApi(() => (id ? experiments.get(id) : Promise.resolve(null)), [id, location.pathname]);
   const prefix = id ? `/experiments/${id}` : "";
   const isEvidence = ["comparison", "replay", "data", "benchmark", "walkthrough"].some(page => location.pathname.endsWith(`/${page}`));
-  const guideCollapsed = isEvidence && desktop && !guideOpen;
-  const views = [
-    { to: "/", label: "Overview", icon: House },
-    { to: "/experiments", label: "Experiments", icon: FlaskConical },
-    { to: id ? `${prefix}/data` : "/benchmark", label: "Data and protocol", icon: Database },
-    { to: `${prefix}/comparison`, label: "Model comparison", icon: Layers },
-    { to: `${prefix}/replay`, label: "Warning replay", icon: Activity },
-    ...(id && health.data?.can_review_pilot && record.data?.status === "completed" ? [{ to: `${prefix}/pilot`, label: "Equipment pilot", icon: ClipboardCheck }] : [])
+  const pilotReady = Boolean(id && health.data?.can_review_pilot && record.data?.status === "completed");
+  const sections = [
+    { title: "Workspace", views: [
+      { to: "/", label: "Overview", icon: House },
+      ...(health.data?.can_train ? [{ to: "/experiments", label: "Experiments", icon: FlaskConical }] : [])
+    ] },
+    { title: "Evidence", views: [
+      { to: id ? `${prefix}/data` : "/benchmark", label: "Data and protocol", icon: Database },
+      { to: `${prefix}/comparison`, label: "Model comparison", icon: Layers },
+      { to: `${prefix}/replay`, label: "Warning replay", icon: Activity }
+    ] },
+    { title: "Pilot", views: pilotReady ? [{ to: `${prefix}/pilot`, label: "Equipment pilot", icon: ClipboardCheck }] : [] }
   ];
+  const views = sections.flatMap(section => section.views);
   const workspace = health.data?.mode === "replay" ? "Recorded demo" : health.data?.mode === "demo" ? "Hosted sample workspace" : "Local workspace";
-  const currentView = views.find(view => view.to === location.pathname)?.label ?? (location.pathname === "/walkthrough" ? "Guided walkthrough" : location.pathname === "/new" ? "New experiment" : "Experiment progress");
+  const activeView = views.find(view => view.to === location.pathname);
+  const currentView = activeView?.label ?? (location.pathname === "/walkthrough" ? "Guided walkthrough" : location.pathname.endsWith("/pilot") ? "Equipment pilot" : location.pathname === "/new" ? "New experiment" : "Experiment progress");
+  const sectionName = sections.find(section => section.views.some(view => view.to === location.pathname))?.title ?? (isEvidence ? "Evidence" : location.pathname.endsWith("/pilot") ? "Pilot" : "Workspace");
+  const sectionHref = sectionName === "Evidence" ? `${prefix}/comparison` : sectionName === "Pilot" ? "/experiments" : "/";
+  const PageIcon = activeView?.icon ?? (isEvidence ? Layers : location.pathname.endsWith("/pilot") ? ClipboardCheck : FlaskConical);
+  const isOverview = location.pathname === "/";
   const sourceName = id ? record.data?.source === "synthetic" ? "Synthetic experiment" : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment" : "Recorded NASA benchmark";
   const stage = location.pathname === "/walkthrough" || params.get("partition") !== "holdout" ? "Development results" : "Final validation";
   const validity = id && record.data?.source === "upload" ? "Field performance unverified" : "Not field validated";
-
-  function toggleGuide() {
-    setGuideOpen(open => {
-      try { localStorage.setItem(GUIDE_KEY, open ? "closed" : "open"); } catch { /* preference is optional */ }
-      return !open;
-    });
-  }
 
   useEffect(() => {
     const close = (event: PointerEvent | KeyboardEvent) => {
@@ -71,7 +59,7 @@ export function Layout() {
   }, []);
 
   return (
-    <div className={["shell", isEvidence && "has-evidence-guide", guideCollapsed && "guide-collapsed"].filter(Boolean).join(" ")}>
+    <div className="shell">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <aside className="sidebar">
         <Link to="/" className="brand" aria-label="Sidekick overview">
@@ -79,22 +67,34 @@ export function Layout() {
         </Link>
         {health.data?.can_train && <Link className="button sidebar-create" to="/new?source=sample" aria-label="New experiment" title="New experiment"><Plus size={16} aria-hidden="true" /><span>New experiment</span></Link>}
         <nav className="nav" aria-label="Main navigation">
-          {views.filter(view => health.data?.can_train || view.to !== "/experiments").map(view => (
-            <NavLink key={view.to} to={[`${prefix}/comparison`, `${prefix}/replay`, id ? `${prefix}/data` : "/benchmark"].includes(view.to) && context.size ? `${view.to}?${context}` : view.to} end title={view.label} aria-label={view.label}>
-              <view.icon size={16} strokeWidth={1.9} aria-hidden="true" /><span>{view.label}</span>
-            </NavLink>
+          {sections.map(section => (
+            <div className="nav-section" role="group" aria-labelledby={`nav-${section.title}`} key={section.title}>
+              <h2 className="nav-heading" id={`nav-${section.title}`}>{section.title}</h2>
+              {section.views.map(view => (
+                <NavLink key={view.to} to={[`${prefix}/comparison`, `${prefix}/replay`, id ? `${prefix}/data` : "/benchmark"].includes(view.to) && context.size ? `${view.to}?${context}` : view.to} end title={view.label} aria-label={view.label}>
+                  <view.icon size={16} strokeWidth={1.9} aria-hidden="true" /><span>{view.label}</span>
+                </NavLink>
+              ))}
+              {section.title === "Pilot" && !pilotReady && health.data && (health.data.can_review_pilot
+                ? <Link className="nav-pending" to="/experiments" title="Open a completed experiment to review an equipment pilot" aria-label="Equipment pilot: choose a completed experiment"><ClipboardCheck size={16} strokeWidth={1.9} aria-hidden="true" /><span>Equipment pilot</span></Link>
+                : <span className="nav-disabled" aria-disabled="true" title="Equipment pilots are available in a local workspace"><ClipboardCheck size={16} strokeWidth={1.9} aria-hidden="true" /><span>Equipment pilot</span></span>)}
+            </div>
           ))}
         </nav>
-        {id && <Link className="benchmark-return" to="/comparison" aria-label="Recorded benchmark" title="Recorded benchmark"><ArrowLeft size={14} aria-hidden="true" /><span>Recorded benchmark</span></Link>}
+        {/* {id && <Link className="benchmark-return" to="/comparison" aria-label="Recorded benchmark" title="Recorded benchmark"><ArrowLeft size={14} aria-hidden="true" /><span>Recorded benchmark</span></Link>} */}
         <div className="sidebar-foot">
           <div className="workspace-status"><span aria-hidden="true" className={health.data ? "status-dot connected" : "status-dot"} /><span>{health.data ? workspace : health.error ? "Server unavailable" : "Connecting"}</span></div>
           {health.data?.mode !== "full" && <p>{health.data?.mode === "replay" ? "Recorded results only" : "Synthetic sample · results expire"}</p>}
           {health.error && <a href="">Retry connection</a>}
-          <a href="https://github.com/Havocx01/SideKick" target="_blank" rel="noreferrer" className="repo-link">Sidekick v1.5 · Source <ArrowUpRight size={12} aria-hidden="true" /></a>
+          <a href="https://github.com/Havocx01/SideKick" target="_blank" rel="noreferrer" className="repo-link">Sidekick v2.0 · Source <ArrowUpRight size={12} aria-hidden="true" /></a>
         </div>
       </aside>
       <div className="workspace">
         <header className="workspace-bar">
+          <nav className="workspace-breadcrumb" aria-label="Breadcrumb">
+            <ol><li><Link to={sectionHref}>{sectionName}</Link></li><li className="breadcrumb-divider" aria-hidden="true">/</li><li className="breadcrumb-current" aria-current="page"><PageIcon size={15} strokeWidth={1.9} aria-hidden="true" /><span>{currentView}</span></li></ol>
+          </nav>
+          <div className="toolbar-actions">
           {isEvidence ? (
             <details className="source-chip" ref={sourceRef}>
               <summary aria-label={`${sourceName}. ${stage}. ${validity}. About these results`}>
@@ -109,26 +109,19 @@ export function Layout() {
                 <p>{id ? `${record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source"} · ${id}` : "Simulated NASA data. Reserved histories were already examined and are not fresh validation."}</p>
               </div>
             </details>
-          ) : <span className="toolbar-title">{currentView}</span>}
-          <div className="toolbar-actions">
-            {isEvidence && desktop && (
-              <Button variant="ghost" className="icon-button guide-toggle" onClick={toggleGuide} aria-pressed={guideOpen} aria-label="Evidence guide" title={guideOpen ? "Hide Evidence guide" : "Show Evidence guide"}>
-                <PanelRight size={17} strokeWidth={1.9} aria-hidden="true" />
-              </Button>
-            )}
+          ) : null}
             <ThemeToggle />
           </div>
         </header>
         <div className="workspace-body">
-          <main className="main" id="main-content" tabIndex={-1}>
+          <main className={`main${isOverview ? " overview-main" : ""}`} id="main-content" tabIndex={-1}>
             <div className="main-inner">
-              {isEvidence && <a className="guide-jump" href="#evidence-guide">Jump to Evidence guide</a>}
-              <div className="page" key={location.pathname}>
+              <div className={`page${isOverview ? " page-overview" : ""}`} key={location.pathname}>
                 <Outlet key={id ?? "benchmark"} />
               </div>
             </div>
           </main>
-          {isEvidence && <EvidenceGuide key={id ?? "benchmark"} collapsed={guideCollapsed} />}
+          <AnalysisInspector />
         </div>
       </div>
     </div>

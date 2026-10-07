@@ -53,7 +53,7 @@ export function Start() {
           <h1 id="welcome-heading">Will warnings survive sensor faults?</h1>
           <p>Train failure-warning models. Test them with missing, stuck or drifting readings.</p>
           <div className="hero-actions">
-            <Link className="button primary" to="/walkthrough?step=clean">Start guided walkthrough <ArrowRight size={16} aria-hidden="true" /></Link>
+            <Link className="button contrast" to="/walkthrough?step=clean">Start guided walkthrough <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
           <p className="hero-footnote">5 steps · Recorded results</p>
         </div>
@@ -384,7 +384,7 @@ function ExperimentSetup() {
                     </p>
                   ))}
                 </details>
-                <details>
+                <details className="disclosure-plain">
                   <summary>Data findings ({data.profile.findings?.length ?? 0}) and confirmed mapping</summary>
                   <p>
                     Equipment: {data.mapping?.equipment_id}. Cycle: {data.mapping?.cycle_index}. Failure:{" "}

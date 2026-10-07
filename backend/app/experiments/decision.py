@@ -3,6 +3,7 @@
 from urllib.parse import urlencode
 
 from app.schemas import CandidateKind, DecisionReport, EvidenceBundle, GuideAnswer, Partition
+from app.experiments.qualification import qualification_reason
 
 
 def candidateLabel(verdict):
@@ -38,6 +39,7 @@ def decision(bundle: EvidenceBundle, candidate: str | None = None, partition=Par
     replay = f"{prefix}/replay?{urlencode(context)}"
     stage = "final-validation" if partition == Partition.holdout else "development"
     rule = f"{criteria.min_detection_fraction:.1%} detection minimum and {criteria.max_early_alarm_burden:.1%} alarm-burden maximum"
+    reason = qualification_reason(bundle, focus, criteria, partition) if focus else "No model results are available."
     if focus:
         title = f"{candidateLabel(focus)} {'meets' if focus.qualifies else 'does not meet'} {stage} criteria"
         summary = (f"With healthy sensors, {focus.clean.detected}/{focus.clean.engines} histories received a warning in time. "
@@ -53,13 +55,17 @@ def decision(bundle: EvidenceBundle, candidate: str | None = None, partition=Par
     summary += " These results do not approve deployment."
     if focus and focus.worst_metrics:
         metrics = focus.worst_metrics
-        faultSummary = (f"Lowest detection: {faultLabel(bundle, focus, partition)}. Detection changed from "
-                        f"{focus.clean.detection_fraction:.1%} to {metrics.detection_fraction:.1%}. "
-                        f"{metrics.detected}/{metrics.engines} histories warned in time; {metrics.late} warned too late; "
-                        f"{metrics.missed} missed both the useful and late warning windows. "
-                        f"Time spent warning too early in this case: {percentage(metrics.early_alarm_burden)} of eligible early cycles.")
+        faultSummary = (f"Lowest detection: {faultLabel(bundle, focus, partition)}; "
+                        f"{metrics.detected}/{metrics.engines} histories warned in time ({metrics.detection_fraction:.1%}).")
         if focus.worst_burden_required is not None:
-            faultSummary += f" Highest required burden: {percentage(focus.worst_burden_required)}."
+            burdenRow = next((r for r in bundle.scenario_results if r.scenario_id == focus.worst_burden_scenario_id
+                             and r.candidate == focus.candidate and r.config_id == focus.config_id and r.partition == partition), None)
+            burdenLabel = burdenRow.fault.label() if burdenRow and burdenRow.fault else focus.worst_burden_scenario_id
+            faultSummary += f" Highest early alarm time: {percentage(focus.worst_burden_required)}" + (f" ({burdenLabel})." if burdenLabel else ".")
+        faultSummary += (f" Healthy detection was {focus.clean.detection_fraction:.1%}. "
+                         f"In the lowest-detection case, {metrics.late} warned too late and "
+                         f"{metrics.missed} missed both warning windows. "
+                         f"Early alarm time in that case: {percentage(metrics.early_alarm_burden)} of eligible early cycles.")
     else:
         faultSummary = "No required fault result is available."
     ordinary = next((v for v in selection.ranked if v.qualifies and v.candidate == CandidateKind.xgboost), None)
@@ -80,12 +86,12 @@ def decision(bundle: EvidenceBundle, candidate: str | None = None, partition=Par
     nextAnswer = ("Replay a selected clean/faulted example, then inspect missed warnings, alarm burden and coverage. "
                   "Representative traces do not show every history.") if traces else "No replay is stored for this candidate. Inspect its scenario metrics and export the evidence."
     return DecisionReport(
-        title=title, summary=summary, fault_summary=faultSummary, augmentation_summary=augmentation,
+        title=title, qualification_reason=reason, summary=summary, fault_summary=faultSummary, augmentation_summary=augmentation,
         unaugmented=ordinary, augmented=augmented, limitations=[bundle.holdout_status, *bundle.limitations],
         inspected_candidate=key, partition=partition,
         guide=[
-            GuideAnswer(question="Why did this model pass or fail?", answer=summary, link=comparison, link_label="Inspect candidate results"),
-            GuideAnswer(question="Which fault caused the biggest problem?", answer=faultSummary, link=comparison + "#fault-results", link_label="Inspect fault cases"),
+            GuideAnswer(question="Why did this model pass or fail?", answer=f"{reason} {summary}", link=comparison, link_label="Inspect candidate results"),
+            GuideAnswer(question="Which faults should I inspect?", answer=faultSummary, link=comparison + "#fault-results", link_label="Inspect fault cases"),
             GuideAnswer(question="Did augmented training help?", answer=augmentation, link=comparison + "#augmentation", link_label="Compare configurations"),
             GuideAnswer(question="What should I inspect next?", answer=nextAnswer, link=replay if traces else comparison + "#fault-results", link_label="Open warning replay" if traces else "Inspect fault metrics"),
         ],

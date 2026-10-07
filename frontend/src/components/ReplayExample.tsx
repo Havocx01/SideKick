@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { ReplaySeries } from "../api/types";
-import { Badge, Button, Panel } from "./Chrome";
+import { useAnalysis } from "./AnalysisProvider";
+import { useExperimentId } from "../hooks/useEvidence";
+import { Badge, Button, IconButton, Panel } from "./Chrome";
+import { Pause, Play, RotateCcw } from "lucide-react";
 import { ScoreTimeline, SensorTrace } from "./ScoreTimeline";
 import { ReplaySlider } from "./ReplaySlider";
 import { outcomeLabel } from "../replay";
@@ -12,8 +16,14 @@ export function ReplayExample(props: { series: ReplaySeries; comparison?: Replay
 }
 
 function Player({ series, comparison, horizon, minLead }: { series: ReplaySeries; comparison?: ReplaySeries | null; horizon: number; minLead: number }) {
+  const analysis = useAnalysis();
+  const experimentId = useExperimentId();
   const last = Math.max(0, series.points.length - 1);
-  const [index, setIndex] = useState(last);
+  const [params] = useSearchParams();
+  const requestedCycle = params.get("cycle");
+  const requestedIndex = requestedCycle === null ? -1 : series.points.findIndex(p => String(p.cycle) === requestedCycle);
+  const [index, setIndex] = useState(requestedIndex >= 0 ? requestedIndex : last);
+  useEffect(() => { if (requestedIndex >= 0) { setPlaying(false); setIndex(requestedIndex); } }, [requestedIndex]);
   const [playing, setPlaying] = useState(false);
   const point = series.points[index];
   const original = comparison?.points.find(p => p.cycle === point?.cycle);
@@ -44,15 +54,15 @@ function Player({ series, comparison, horizon, minLead }: { series: ReplaySeries
   const cleanOutcome = comparison ? outcomeLabel(comparison.outcome) : null;
   const window = point.rul >= minLead && point.rul <= horizon ? "Useful window" : point.rul > horizon ? "Before window" : "After window";
   return <>
-    <Panel title="When the warning appears" description="Playback of stored results">
+    <Panel title="When the warning appears" description="Playback of stored results" aside={analysis.enabled("warning") && <Button variant="secondary" onClick={() => { setPlaying(false); analysis.start({ task: "warning", experiment_id: experimentId, partition: series.partition, candidates: [`${series.candidate}/${series.config_id}`], equipment_id: series.equipment_id, scenario_id: series.scenario_id, cycle: point.cycle }); }}>Explain warning</Button>}>
       <dl className="replay-outcomes" aria-label="Whole-history results">
         {cleanOutcome && <div><dt>Original · Whole history</dt><dd><Badge tone={cleanOutcome.tone}>{cleanOutcome.text}</Badge></dd></div>}
         <div><dt>{series.fault ? "Faulted" : "Original"} · Whole history</dt><dd><Badge tone={outcome.tone}>{outcome.text}</Badge></dd></div>
       </dl>
       <div className="playback-controls">
         <div className="playback-buttons">
-          <Button size="sm" disabled={last < 1} onClick={() => { if (index === last) setIndex(0); setPlaying(value => !value); }}>{playing ? "Pause" : index === last ? "Replay from start" : "Play"}</Button>
-          <Button size="sm" variant="ghost" disabled={last < 1} onClick={() => { setPlaying(false); setIndex(0); }}>Restart playback</Button>
+          <IconButton label={playing ? "Pause" : index === last ? "Replay from start" : "Play"} variant="secondary" disabled={last < 1} onClick={() => { if (index === last) setIndex(0); setPlaying(value => !value); }}>{playing ? <Pause size={17} aria-hidden="true" /> : <Play size={17} aria-hidden="true" />}</IconButton>
+          <IconButton label="Restart playback" disabled={last < 1} onClick={() => { setPlaying(false); setIndex(0); }}><RotateCcw size={17} aria-hidden="true" /></IconButton>
           {faultIndex >= 0 && <Button size="sm" variant="ghost" onClick={() => { setPlaying(false); setIndex(faultIndex); }}>Jump to fault</Button>}
         </div>
         <ReplaySlider label="Replay cycle" min={0} max={Math.max(1, last)} step={1} value={[index]} disabled={last < 1}

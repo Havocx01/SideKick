@@ -5,6 +5,7 @@ import importlib.metadata
 import json
 import time
 
+from app import __version__
 from app.config import ExperimentConfig
 from app.experiments.provenance import source_digest
 from app.schemas import ColumnMapping, FaultScenario, Partition, ScenarioResult
@@ -122,7 +123,7 @@ def freeze(workspace, record, bundle, dataset, config, directory):
         if not np.array_equal(sample_scores[name], fitted.score(design)):
             raise ValueError("Frozen model serialization did not reproduce development scores.")
     thresholds = {f"{v.candidate.value}/{v.config_id}": v.threshold for v in bundle.development_selection.ranked}
-    manifest = {"release": "1.5.0", "candidate": selected_name, "thresholds": {n: thresholds[n] for n in names},
+    manifest = {"release": __version__, "candidate": selected_name, "thresholds": {n: thresholds[n] for n in names},
                 "candidate_parameters": {n: models[n][0].params for n in names}, "config": config.as_dict(),
                 "config_fingerprint": bundle.config_fingerprint, "data_hash": dataset.data_hash,
                 "dataset_id": record["dataset_id"], "splits": bundle.splits.model_dump(mode="json"),

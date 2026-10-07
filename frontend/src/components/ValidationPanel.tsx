@@ -15,7 +15,7 @@ export function ValidationPanel({ experimentId, qualifies, recommendation, onCom
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const location = useLocation();
   const [revision, setRevision] = useState(0);
   useEffect(() => {
@@ -47,6 +47,7 @@ export function ValidationPanel({ experimentId, qualifies, recommendation, onCom
     finally { setBusy(false); }
   }
   const exposed = validation?.record?.exposure_started_at != null;
+  const viewingFinal = location.pathname.endsWith("/comparison") && params.get("partition") === "holdout";
   async function cancelJob(id: string) {
     setBusy(true); setError("");
     try { await experiments.cancel(id); setRevision(n => n + 1); }
@@ -61,7 +62,7 @@ export function ValidationPanel({ experimentId, qualifies, recommendation, onCom
     {error && <p className="state error" role="alert">{error}</p>}
     {frozen?.record?.error && <p className="state error" role="alert">{frozen.record.error}</p>}
     {validation?.record?.error && <p className="state error" role="alert">{validation.record.error}</p>}
-    {running?.job ? <div role="status"><p>{running.job.stage}. {Math.floor(running.job.elapsed_seconds ?? 0)} seconds elapsed. {running.job.total_work != null ? `${running.job.completed_work}/${running.job.total_work} ${running.job.work_unit}.` : ""}</p><Button disabled={busy || running.job.status === "cancelling"} onClick={() => cancelJob(running.job!.experiment_id)}>Cancel job</Button></div> : frozen?.record?.status !== "completed" ? <><Button variant="primary" loading={busy} disabled={!qualifies || !frozen} onClick={() => launch("freeze")}>Freeze recommendation</Button><p className="note">{qualifies ? "Refits the recommendation on development histories and locks the model, threshold, protocol and source version." : "No candidate met the development criteria. There is no model to freeze."}</p></> : validation?.record?.status === "completed" ? <><p>Final validation is complete. The reserved histories are now exposed.</p><Button onClick={() => { const next = new URLSearchParams(params); next.set("partition", "holdout"); next.delete("candidate"); setParams(next); }}>Inspect final validation</Button></> : exposed ? <p className="note">Scoring started, so these histories are exposed. This attempt cannot be repeated. Use fresh equipment histories for another final evaluation.</p> : <>
+    {running?.job ? <div role="status"><p>{running.job.stage}. {Math.floor(running.job.elapsed_seconds ?? 0)} seconds elapsed. {running.job.total_work != null ? `${running.job.completed_work}/${running.job.total_work} ${running.job.work_unit}.` : ""}</p><Button disabled={busy || running.job.status === "cancelling"} onClick={() => cancelJob(running.job!.experiment_id)}>Cancel job</Button></div> : frozen?.record?.status !== "completed" ? <><Button variant="primary" loading={busy} disabled={!qualifies || !frozen} onClick={() => launch("freeze")}>Freeze recommendation</Button><p className="note">{qualifies ? "Refits the recommendation on development histories and locks the model, threshold, protocol and source version." : "No candidate met the development criteria. There is no model to freeze."}</p></> : validation?.record?.status === "completed" ? <><p>Final validation is complete. The reserved histories are now exposed.</p>{!viewingFinal && <Link className="button" to={`/experiments/${experimentId}/comparison?partition=holdout`}>Inspect final validation</Link>}</> : exposed ? <p className="note">Scoring started, so these histories are exposed. This attempt cannot be repeated. Use fresh equipment histories for another final evaluation.</p> : <>
       <label className="confirmation"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} />I confirm the reserved histories were not used to choose models, thresholds or fault rules.</label>
       <Button variant="primary" loading={busy} disabled={!confirmed || !validation} onClick={() => launch("validation")}>Evaluate reserved equipment once</Button>
       <p className="note">Known exposed histories are blocked. Cancelled or interrupted scoring still exposes the histories. NASA and synthetic results do not establish field performance.</p>

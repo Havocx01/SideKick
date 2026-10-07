@@ -88,7 +88,7 @@ export function DataSetup() {
               </div></details>
             </Panel>
 
-            <details className="disclosure"><summary>Sensor details</summary>
+            <details className="disclosure disclosure-plain"><summary>Sensor details</summary>
 <Panel
               title="Column roles"
               description="Sensor models exclude equipment IDs, cycle counts and failure targets."
@@ -125,7 +125,7 @@ export function DataSetup() {
             </Panel>
 </details>
 
-            <details className="disclosure"><summary>Data findings ({profile.data.findings?.length ?? 0})</summary>
+            <details className="disclosure disclosure-plain"><summary>Data findings ({profile.data.findings?.length ?? 0})</summary>
 <Panel
               title="Profile findings"
               description="Blockers must be resolved before training."
@@ -174,7 +174,7 @@ export function DataSetup() {
 
       <StateBlock loading={candidates.loading} error={candidates.error}>
         {candidates.data ? (
-          <details className="disclosure"><summary>Model configurations</summary>
+          <details className="disclosure disclosure-plain"><summary>Model configurations</summary>
 <Panel
             title="Candidates"
             description="Three sensor-based model families and an age-only baseline."
@@ -210,7 +210,7 @@ export function DataSetup() {
       </StateBlock>
 
       {limitations.data ? (
-        <details className="disclosure"><summary>Evaluation limits</summary>
+        <details className="disclosure disclosure-plain"><summary>Evaluation limits</summary>
 <Panel
           title="What this evaluation does not establish"
         >
@@ -222,7 +222,7 @@ export function DataSetup() {
       ) : null}
 
       {profile.data && config.data ? (
-        <details className="disclosure"><summary>Source identifiers</summary><p className="note">
+        <details className="disclosure disclosure-plain"><summary>Source identifiers</summary><p className="note">
           Data hash <span className="mono">{profile.data.data_hash}</span> · configuration{" "}
           <span className="mono">{config.data.config_fingerprint}</span>
           {config.data.git_commit ? (

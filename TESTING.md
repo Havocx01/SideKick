@@ -1,4 +1,18 @@
-# Sidekick v1.5 verification
+# Sidekick V2 verification
+
+## Comparison UI refinement (7 October 2026)
+
+Five comparison browser regressions passed, covering model switching, keyboard selection, progressive disclosure, metric scope and fault links. TypeScript and the production build passed. Passing and failing results were visually checked, including light and dark themes. Layouts at 390, 768, 1024 and 1440 pixels had no page overflow. The existing main-chunk size warning remains.
+
+## V2 analysis checks (6 October 2026)
+
+The local backend suite passed 81 tests and the browser suite passed 13. Assistant tests cover the request header, origin and cross-site guards, owner-scoped records and exports, escaped review briefs, invalid candidates, disabled workflows, session and daily quotas, the public evidence allowance (HTTP 429), presenter-code throttling, browser-bound presenter access, timeouts, cancellation, restart recovery, consent revocation and replay mode never calling the provider.
+
+Evidence tests cover detection and burden failures in the same or different cases, missing measurements, deep links to the fault matrix and replay cycle, the comparison overview and unchanged recommendation, unavailable replays and cycles, and the generated brief draft. Provider tests use mocked responses only. The provider receives aliased models and cases with recorded metric values. Interpretations with numbers, links, unknown aliases, cause or deployment claims, or contradictory verdicts are rejected and fall back to recorded evidence.
+
+Browser tests cover the contextual analysis inspector, keyboard focus return, two-model comparison, replay warning explanation linked to the replay cycle, and editing, saving and exporting a review brief. Analysis opens in a centered modal dialog at every width, up to 640 pixels wide, and was checked at 390 and 1440 pixels. Generated API types match the backend. TypeScript, the production build and Ruff passed. The existing bundle-size warning remains.
+
+Live OpenAI behaviour has not been evaluated; run `scripts/evaluate_assistant.py` with a server-side key. The engineer usability comparison against V1.5 has not been run. The V2 changes are local and have not been deployed.
 
 ## Previous prototype checks
 
@@ -21,6 +35,10 @@ The local backend suite passed 41 tests, including real training, freezing and r
 A new browser sample completed training, agreement, freezing, reserved evaluation, engineer review and a named ZIP download. Agreement and review survived refreshes and a server restart. The ZIP's review, dataset fingerprint, validation ID and model digest matched its evidence; raw sensor readings were excluded. The pilot layout was checked at 390, 768, 1024 and 1440 pixels in light mode and at desktop width in dark mode, without sideways page overflow. The report also fits at 390 pixels. Eleven browser regression tests passed. These were synthetic workflow checks, not an actual engineer pilot or measured benefit. TypeScript, the frontend build and Ruff passed.
 
 ## Run the checks
+
+The 6 October decision-explanation update passed 50 backend tests and 11 browser tests. Regression cases distinguish lowest detection from highest early-alarm time, name the failing fault and limit, handle missing measurements and incomplete coverage, preserve historical evidence, and keep development and final-validation explanations separate. The result, Evidence guide and HTML export use the same recorded reason. TypeScript, the production build and Ruff passed. The existing bundle-size warning remains.
+
+The interface was also checked at 390, 768, 1024 and 1440 pixels and in dark mode. No page overflow was found. [First equipment pilot checklist](PILOT.md) documents the remaining field-data and engineer-review work. No actual industrial pilot or measured field benefit is claimed.
 
 After the README setup and build, use PowerShell from the repository root:
 

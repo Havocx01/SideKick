@@ -113,7 +113,7 @@ class Jobs:
                 raise ValueError("Complete the development experiment first.")
             loaded = load_bundle(self.workspace.directory("experiments", experiment_id) / "bundle.json")
             if loaded.schema_version < 3:
-                raise ValueError("Start a v1.5 experiment before freezing a model. Historical bundles remain unchanged.")
+                raise ValueError("Start a new experiment before freezing a model. Historical bundles remain unchanged.")
             chosen = loaded.development_selection.recommended
             if chosen is None:
                 raise ValueError("No candidate met the development criteria. There is no selected model to freeze.")

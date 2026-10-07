@@ -4,9 +4,15 @@ import { ApiError } from "../api/client";
 import { Badge as ArcBadge } from "@/registry/components/badge/badge";
 import { Skeleton } from "@/registry/components/skeleton/skeleton";
 import { AlertCircle, Inbox } from "lucide-react";
+import { Button } from "@/registry/components/button/button";
+import type { ButtonProps } from "@/registry/components/button/button";
 
 export { Button } from "@/registry/components/button/button";
 export { Select } from "@/registry/components/select/select";
+
+export function IconButton({ label, className, variant = "ghost", ...props }: ButtonProps & { label: string }) {
+  return <Button {...props} variant={variant} className={`action-icon${className ? ` ${className}` : ""}`} aria-label={label} title={label} />;
+}
 
 export function Panel({ title, description, aside, tight, children }: {
   title: string;

@@ -669,6 +669,7 @@ class GuideAnswer(Strict):
 
 class DecisionReport(Strict):
     title: str
+    qualification_reason: str
     summary: str
     fault_summary: str
     augmentation_summary: str

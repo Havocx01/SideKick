@@ -2,6 +2,8 @@
 // Do not edit by hand: run `python scripts/generate_types.py` instead.
 
 
+export type Partition = "out_of_fold" | "holdout";
+
 export type Severity = "info" | "warning" | "blocker";
 
 export type FaultDuration = "persistent" | "transient";
@@ -13,8 +15,6 @@ export type PilotDecision = "supervised_trial" | "revise_model" | "collect_data"
 export type JobStatus = "queued" | "running" | "cancelling" | "completed" | "cancelled" | "timed_out" | "interrupted" | "failed";
 
 export type CandidateKind = "logistic_regression" | "xgboost" | "xgboost_augmented" | "age_baseline";
-
-export type Partition = "out_of_fold" | "holdout";
 
 export type SelectionOutcome = "qualified" | "none_qualified";
 
@@ -61,6 +61,83 @@ export interface AlertMetrics {
   median_lead_time: number | null;
   eligible_cycles: number;
   scored_cycles: number;
+}
+
+export interface AnalysisAction {
+  id: string;
+  label: string;
+  detail: string;
+  href: string;
+}
+
+export interface AnalysisFinding {
+  id: string;
+  title: string;
+  detail: string;
+  tone?: "neutral" | "success" | "warning" | "danger";
+  source_ids: string[];
+}
+
+export interface AnalysisRecord {
+  id: string;
+  context: AnalysisRequest;
+  status: "queued" | "running" | "completed" | "cancelled" | "interrupted" | "failed";
+  created_at: number;
+  updated_at: number;
+  stages: AnalysisStage[];
+  result?: AnalysisResult | null;
+  error?: string | null;
+  brief_text?: string | null;
+  brief_saved_at?: number | null;
+}
+
+export interface AnalysisRequest {
+  task: "investigate" | "compare" | "warning" | "brief";
+  experiment_id?: string | null;
+  partition?: Partition;
+  candidates: string[];
+  scenario_id?: string | null;
+  equipment_id?: string | null;
+  cycle?: number | null;
+}
+
+export interface AnalysisResult {
+  title: string;
+  summary: string;
+  findings: AnalysisFinding[];
+  sources: EvidenceReference[];
+  actions: AnalysisAction[];
+  limitations: string[];
+  evidence_digest: string;
+  /** Generated interpretation without numbers, links or verdicts. */
+  interpretation?: string | null;
+  brief_draft?: string | null;
+  mode?: "evidence" | "ai";
+  model?: string | null;
+  prompt_version?: string;
+  verification?: string;
+  fallback_reason?: string | null;
+}
+
+export interface AnalysisStage {
+  id: string;
+  label: string;
+  status: "pending" | "running" | "completed" | "failed";
+}
+
+export interface AssistantCapabilities {
+  tasks: string[];
+  live_available: boolean;
+  unlock_available: boolean;
+  unlocked: boolean;
+  consent_required: boolean;
+  consent_granted: boolean;
+  mode: "full" | "demo" | "replay";
+  note: string;
+}
+
+export interface BriefUpdate {
+  text: string;
 }
 
 export interface CalibrationReport {
@@ -112,6 +189,12 @@ export interface ColumnMapping {
   inferred?: boolean;
   /** Columns the profiler could not assign confidently. The engineer confirms these before training. */
   ambiguous?: string[];
+}
+
+export interface ConsentState {
+  experiment_id: string;
+  allowed: boolean;
+  disclosure: string;
 }
 
 export interface CopilotAnswer {
@@ -168,6 +251,7 @@ export interface DatasetRegistration {
 
 export interface DecisionReport {
   title: string;
+  qualification_reason: string;
   summary: string;
   fault_summary: string;
   augmentation_summary: string;
@@ -219,6 +303,24 @@ export interface EvidenceBundle {
   frozen_model?: FrozenModelRecord | null;
   validation?: ValidationRecord | null;
   pilot_review?: PilotReviewRecord | null;
+}
+
+export interface EvidenceReference {
+  id: string;
+  label: string;
+  candidate: string;
+  partition: Partition;
+  scenario_id?: string | null;
+  equipment_id?: string | null;
+  cycle?: number | null;
+  metric: string;
+  value: string;
+  unit: string;
+  /** Server-formatted value shown to people; never supplied by the provider. */
+  display: string;
+  /** Model, scenario and evaluation context for this reference. */
+  context: string;
+  href: string;
 }
 
 export interface ExperimentCreate {

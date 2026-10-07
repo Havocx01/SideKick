@@ -12,7 +12,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import routes_copilot, routes_evidence, routes_experiments, routes_pilot
+from app.api import routes_assistant, routes_copilot, routes_evidence, routes_experiments, routes_pilot
+from app.assistant.service import AssistantService
 from app.config import get_settings
 from app.utils.logging_setup import get_logger, setup_logging
 
@@ -26,8 +27,8 @@ bounded worker experiment. Each experiment stores its own data fingerprint,
 configuration, partitions, source identifiers and results. Replay mode serves the
 committed benchmark and rejects upload and training requests. Hosted demo mode
 trains a compact synthetic sample with browser isolation, quotas and expiry. All modes provide
-comparison, warning replay, a deterministic Evidence guide and evidence exports.
-No external language model or API key is required.
+comparison, warning replay, contextual evidence analysis and evidence exports.
+Optional cloud analysis prioritizes verified findings. No API key is required for evidence analysis.
 """
 
 
@@ -57,7 +58,8 @@ async def lifespan(app: FastAPI):
                         logger.exception("Could not clean expired demo results; will retry")
 
             cleanupTask = asyncio.create_task(expireResults())
-    logger.info("Evidence guide uses recorded metrics; external model calls are disabled")
+    app.state.assistant = AssistantService(settings)
+    logger.info("Contextual evidence analysis ready; cloud prioritization is optional")
     # Warm the bundle so a cold start pays the parse cost before the first request.
     try:
         from app.api.deps import _cached_bundle
@@ -71,6 +73,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await app.state.assistant.close()
         if cleanupTask:
             cleanupTask.cancel()
             with suppress(asyncio.CancelledError):
@@ -96,7 +99,9 @@ def create_app() -> FastAPI:
                         {"detail": "Start demo experiments from the Sidekick website."}, status_code=403
                     )
                 size = request.headers.get("content-length", "0")
-                if not size.isdigit() or int(size) > 8192:
+                brief_request = request.url.path.startswith("/api/assistant/analyses/") and request.url.path.endswith("/brief")
+                body_limit = 80_000 if brief_request else 8192
+                if not size.isdigit() or int(size) > body_limit:
                     return JSONResponse(
                         {
                             "detail": "Hosted experiments accept only small configuration requests; CSV uploads are local only."
@@ -107,7 +112,7 @@ def create_app() -> FastAPI:
                 bodySize = 0
                 async for chunk in request.stream():
                     bodySize += len(chunk)
-                    if bodySize > 8192:
+                    if bodySize > body_limit:
                         return JSONResponse(
                             {"detail": "The hosted request is too large. CSV uploads are local only."}, status_code=413
                         )
@@ -138,6 +143,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_copilot.router)
     app.include_router(routes_experiments.router)
     app.include_router(routes_pilot.router)
+    app.include_router(routes_assistant.router)
 
     if not _mount_frontend(app, settings.static_dir):
 
