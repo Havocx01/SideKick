@@ -72,7 +72,7 @@ export function ScoreTimeline({ series, comparison, height = 240, horizon = 30, 
   });
 
   return (
-    <div>
+    <div className="replay-chart">
       <div className="chart-scroll" tabIndex={0} aria-label="Scrollable score chart">
         <svg
           className="chart"
@@ -173,7 +173,7 @@ export function SensorTrace({ series, height = 200, cursorCycle }: { series: Rep
   const cursor = series.points.find(p => p.cycle === cursorCycle);
 
   return (
-    <div>
+    <div className="replay-chart">
       <div className="chart-scroll" tabIndex={0} aria-label="Scrollable sensor chart">
         <svg
           className="chart"

@@ -78,9 +78,9 @@ export function WarningReplay() {
       <StateBlock loading={index.loading || selection.loading} error={index.error || selection.error}>
         <Panel title="Select a history">
           <div className="controls">
-            <Combobox label="Candidate" value={candidate} onValueChange={value => { if (value) { const next = new URLSearchParams(params); next.set("candidate", value); next.delete("equipment"); next.delete("scenario"); setParams(next); } }} options={(selection.data?.ranked ?? []).map(v => ({ value: `${v.candidate}/${v.config_id}`, label: candidateLabel(v.candidate, v.config_id) }))} />
-            <Combobox label="Equipment" value={equipment} onValueChange={value => { if (value) setEquipment(value); }} options={equipmentIds.map(value => ({ value, label: `Equipment ${value}` }))} />
-            <Combobox label="Scenario" value={scenario} onValueChange={value => { if (value) setScenario(value); }} options={scenariosFor.map(value => ({ value, label: scenarioLabel(value) }))} />
+            <Combobox label="Candidate" required value={candidate} onValueChange={value => { if (value) { const next = new URLSearchParams(params); next.set("candidate", value); next.delete("equipment"); next.delete("scenario"); setParams(next); } }} options={(selection.data?.ranked ?? []).map(v => ({ value: `${v.candidate}/${v.config_id}`, label: candidateLabel(v.candidate, v.config_id) }))} />
+            <Combobox label="Equipment" required value={equipment} onValueChange={value => { if (value) setEquipment(value); }} options={equipmentIds.map(value => ({ value, label: `Equipment ${value}` }))} />
+            <Combobox label="Scenario" required value={scenario} onValueChange={value => { if (value) setScenario(value); }} options={scenariosFor.map(value => ({ value, label: scenarioLabel(value) }))} />
           </div>
           {!entries.length && <p className="note">No representative replay is stored for this candidate and partition. Inspect its comparison or select another candidate.</p>}
         </Panel>
@@ -90,7 +90,7 @@ export function WarningReplay() {
         {selected ? (
           <>
             <ReplayExample series={selected} comparison={comparison} horizon={horizon} minLead={minLead} />
-            <details className="disclosure"><summary>Replay source and alert episodes</summary>
+            <details className="disclosure disclosure-plain"><summary>Replay source and alert episodes</summary>
             <p className="note">{candidateLabel(selected.candidate, selected.config_id)} · Equipment {equipment} · Failure at cycle {integer(selected.failure_cycle)}. {selected.representative_reason || "One selected example, not fleet-wide performance."}</p>
             <Panel title="Alert episodes" tight>
               {selected.episodes.length === 0 ? (

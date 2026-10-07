@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
+import { useAnalysis } from "../components/AnalysisProvider";
 import { DecisionDetails, DecisionSummary } from "../components/DecisionSummary";
 import type { CandidateVerdict, ScenarioResult } from "../api/types";
-import { Badge, Button, Callout, Panel, Select, StateBlock, Stat } from "../components/Chrome";
+import { Badge, Button, Callout, IconButton, Panel, Select, StateBlock, Stat } from "../components/Chrome";
 import { ValidationPanel } from "../components/ValidationPanel";
 import { IntervalBar } from "../components/IntervalBar";
 import { ReliabilityPlot } from "../components/ReliabilityPlot";
@@ -12,18 +13,23 @@ import { ScenarioHeatmap } from "../components/ScenarioHeatmap";
 import { candidateKey, candidateLabel, cycles, integer, interval, number, percent, scenarioLabel } from "../format";
 import { useApi } from "../hooks/useApi";
 import { Switch } from "@/registry/components/switch/switch";
+import { AlertTriangle, Check, ChevronRight, GitCompare, X } from "lucide-react";
+import { evidenceApi } from "../api/client";
 
 export function ModelComparison() {
-  const api = useEvidence();
-  const selection = useApi(() => api.selection(), [api]);
-  const final = useApi(() => api.finalEvaluation(), [api]);
-  const calibration = useApi(() => api.calibration(), [api]);
-  const reproducibility = useApi(() => api.reproducibility(), [api]);
-
-  const [params, setParams] = useSearchParams();
-  const location = useLocation();
   const experimentId = useExperimentId();
+  const analysis = useAnalysis();
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [params, setParams] = useSearchParams();
   const partition = params.get("partition") === "holdout" ? "holdout" : "out_of_fold";
+  const api = useEvidence();
+  const comparisonApi = useMemo(() => evidenceApi(experimentId, undefined, partition), [experimentId, partition]);
+  const selection = useApi(() => comparisonApi.selection(), [comparisonApi]);
+  const final = useApi(() => comparisonApi.finalEvaluation(), [comparisonApi]);
+  const calibration = useApi(() => comparisonApi.calibration(), [comparisonApi]);
+  const reproducibility = useApi(() => comparisonApi.reproducibility(), [comparisonApi]);
+
+  const location = useLocation();
   const focus = params.get("candidate");
   const [includeSupplemental, setIncludeSupplemental] = useState(false);
   const [inspected, setInspected] = useState<ScenarioResult[]>([]);
@@ -38,6 +44,7 @@ export function ModelComparison() {
     setParams(next);
   }
 
+  useEffect(() => { setSelectedModels([]); }, [experimentId, partition]);
   const criteria = selection.data?.criteria;
   const verdicts = useMemo(() => selection.data?.ranked ?? [], [selection.data]);
 
@@ -55,6 +62,10 @@ export function ModelComparison() {
   const focusedScenarios = includeSupplemental ? allScenarios : allScenarios.filter(row => row.required);
   const invalidFocus = Boolean(focus && selection.data && !verdicts.some(v => candidateKey(v.candidate, v.config_id) === focus));
   const weakestReplay = replayIndex.data?.series.find(row => row.scenario_id === focused?.worst_scenario_id && candidateKey(row.candidate, row.config_id) === focusKey);
+  const replayCases = focused ? [
+    { scenarioId: focused.worst_scenario_id, label: "Replay weakest detection case" },
+    { scenarioId: focused.worst_burden_scenario_id, label: "Replay highest-burden case" }
+  ].filter((item, index, cases) => index === 0 || !item.scenarioId || item.scenarioId !== cases[0]?.scenarioId) : [];
   const faultQuery = new URLSearchParams({ candidate: focusKey, partition });
   if (weakestReplay) {
     faultQuery.set("equipment", weakestReplay.equipment_id);
@@ -91,8 +102,9 @@ export function ModelComparison() {
             <Panel
               title="Candidate results"
               tight
+              aside={analysis.enabled("compare") && <div className="analysis-selection-actions"><span>{selectedModels.length} / 2 selected</span><Button size="sm" variant="secondary" disabled={selectedModels.length !== 2} onClick={() => analysis.start({ task: "compare", experiment_id: experimentId, partition, candidates: selectedModels })}><GitCompare size={13} aria-hidden="true" />Compare selected</Button>{selectedModels.length > 0 && <IconButton label="Clear selected models" onClick={() => setSelectedModels([])}><X size={16} aria-hidden="true" /></IconButton>}</div>}
             >
-              <div className="table-scroll">
+              <div className="table-scroll" role="region" aria-label="Candidate results table" tabIndex={0}>
                 <table className="candidate-table">
                   <thead>
                     <tr>
@@ -113,12 +125,13 @@ export function ModelComparison() {
                       return (
                         <tr
                           key={key}
-                          className={isFocus ? "row-focus" : undefined}
+                          className={`candidate-row${isFocus ? " row-focus" : ""}${isRecommended ? " row-recommended" : ""}`}
+                          onClick={() => setFocus(key)}
                         >
                           <td>
                             <div className="candidate-cell">
-                              <Button variant="ghost" className="candidate-inspect" onClick={() => setFocus(key)} aria-label={`Inspect ${candidateLabel(verdict.candidate, verdict.config_id)}`} aria-pressed={isFocus}>{candidateLabel(verdict.candidate, verdict.config_id)}</Button>
-                              {isRecommended ? <Badge tone="ok">recommended</Badge> : null}
+                              {analysis.enabled("compare") && <label className="candidate-select" onClick={event => event.stopPropagation()}><input type="checkbox" aria-label={`Select ${candidateLabel(verdict.candidate, verdict.config_id)} for comparison`} checked={selectedModels.includes(key)} disabled={selectedModels.length === 2 && !selectedModels.includes(key)} onChange={event => setSelectedModels(current => event.target.checked ? [...current, key] : current.filter(value => value !== key))} /></label>}
+                              <button type="button" className="candidate-inspect" aria-label={`Inspect ${candidateLabel(verdict.candidate, verdict.config_id)}`} aria-pressed={isFocus}>{candidateLabel(verdict.candidate, verdict.config_id)}<ChevronRight size={14} aria-hidden="true" /></button>
                               {verdict.candidate === "age_baseline" ? <Badge tone="neutral">no sensors</Badge> : null}
                             </div>
                           </td>
@@ -147,11 +160,11 @@ export function ModelComparison() {
                           <td className="num">{percent(verdict.worst_burden_required, 2)}</td>
                           <td>
                             {verdict.qualifies ? (
-                              <Badge tone="ok">pass</Badge>
+                              <Badge tone="ok"><span className="verdict-badge"><Check size={11} strokeWidth={2.8} aria-hidden="true" />pass</span></Badge>
                             ) : verdict.passes_clean ? (
-                              <Badge tone="bad">fault fail</Badge>
+                              <Badge tone="bad"><span className="verdict-badge"><X size={11} strokeWidth={2.8} aria-hidden="true" />fault fail</span></Badge>
                             ) : (
-                              <Badge tone="warn">clean fail</Badge>
+                              <Badge tone="warn"><span className="verdict-badge"><AlertTriangle size={11} strokeWidth={2.6} aria-hidden="true" />clean fail</span></Badge>
                             )}
                           </td>
                         </tr>
@@ -165,7 +178,7 @@ export function ModelComparison() {
 
             {focused ? (
               <div id="fault-results" className="evidence-section">
-                <details className="disclosure" open={faultOpen} onToggle={event => setFaultOpen(event.currentTarget.open)}><summary>Sensor faults · {focused.required_passed} / {focused.required_scenarios} passed</summary>
+                <details className="disclosure disclosure-plain" open={faultOpen} onToggle={event => setFaultOpen(event.currentTarget.open)}><summary>Sensor faults · {focused.required_passed} / {focused.required_scenarios} passed</summary>
                 <Panel
                   title="Lowest detection per sensor"
                   description={includeSupplemental ? "Supplemental cases included." : undefined}
@@ -176,8 +189,8 @@ export function ModelComparison() {
                   <StateBlock loading={scenarios.loading} error={scenarios.error} empty={focusedScenarios.length === 0}>
                     <ScenarioHeatmap results={focusedScenarios} minDetection={criteria.min_detection_fraction} maxBurden={criteria.max_early_alarm_burden} expectedEngines={focused.clean.engines} onInspect={setInspected} />
                   </StateBlock>
-                  {inspected.length > 0 && <section className="scenario-inspection" aria-label="Scenario details"><h3>Scenario details</h3><div className="table-scroll"><table><thead><tr><th>Case</th><th>Detection</th><th>Burden</th><th>Coverage</th><th>Outcome</th></tr></thead><tbody>{inspected.map(r => { const failures = [r.metrics.detection_fraction < criteria.min_detection_fraction ? "Detection below minimum" : "", r.metrics.early_alarm_burden == null ? "Burden unavailable" : r.metrics.early_alarm_burden > criteria.max_early_alarm_burden ? "Burden above maximum" : "", r.metrics.engines !== focused.clean.engines || r.coverage_complete === false ? "Coverage incomplete" : ""].filter(Boolean); return <tr key={r.scenario_id}><td>{r.fault ? scenarioLabel(r.scenario_id) : r.scenario_id}<span className="note comparison-kind">{r.required ? "Required" : "Supplemental"}</span></td><td>{percent(r.metrics.detection_fraction, 1)}</td><td>{percent(r.metrics.early_alarm_burden, 2)}</td><td>{r.metrics.engines}/{r.expected_engines ?? focused.clean.engines}</td><td>{failures.length ? failures.join("; ") : "Meets criteria"}</td></tr>; })}</tbody></table></div><Button variant="ghost" onClick={() => setInspected([])}>Close scenario details</Button></section>}
-                  <div className="actions replay-case-actions">{[[focused.worst_scenario_id, "Replay weakest detection case"], [focused.worst_burden_scenario_id, "Replay highest-burden case"]].map(([scenarioId, label]) => { const entry = replayIndex.data?.series.find(s => s.scenario_id === scenarioId && `${s.candidate}/${s.config_id}` === focusKey); const query = new URLSearchParams({ candidate: focusKey, partition }); if (entry) { query.set("equipment", entry.equipment_id); query.set("scenario", entry.scenario_id); } return entry ? <Link className="button" key={label} to={`${experimentId ? `/experiments/${experimentId}` : ""}/replay?${query}`}>{label}</Link> : <span key={label} className="note">{label}: not stored in this bundle.</span>; })}</div>
+                  {inspected.length > 0 && <section className="scenario-inspection" aria-label="Scenario details"><header className="scenario-inspection-header"><h3>Scenario details</h3><IconButton label="Close scenario details" onClick={() => setInspected([])}><X size={16} aria-hidden="true" /></IconButton></header><div className="table-scroll"><table><thead><tr><th>Case</th><th>Detection</th><th>Burden</th><th>Coverage</th><th>Outcome</th></tr></thead><tbody>{inspected.map(r => { const failures = [r.metrics.detection_fraction < criteria.min_detection_fraction ? "Detection below minimum" : "", r.metrics.early_alarm_burden == null ? "Burden unavailable" : r.metrics.early_alarm_burden > criteria.max_early_alarm_burden ? "Burden above maximum" : "", r.metrics.engines !== focused.clean.engines || r.coverage_complete === false ? "Coverage incomplete" : ""].filter(Boolean); return <tr key={r.scenario_id}><td>{r.fault ? scenarioLabel(r.scenario_id) : r.scenario_id}<span className="note comparison-kind">{r.required ? "Required" : "Supplemental"}</span></td><td>{percent(r.metrics.detection_fraction, 1)}</td><td>{percent(r.metrics.early_alarm_burden, 2)}</td><td>{r.metrics.engines}/{r.expected_engines ?? focused.clean.engines}</td><td>{failures.length ? failures.join("; ") : "Meets criteria"}</td></tr>; })}</tbody></table></div></section>}
+                  <div className="actions replay-case-actions">{replayCases.map(({ scenarioId, label }) => { const entry = replayIndex.data?.series.find(s => s.scenario_id === scenarioId && `${s.candidate}/${s.config_id}` === focusKey); const query = new URLSearchParams({ candidate: focusKey, partition }); if (entry) { query.set("equipment", entry.equipment_id); query.set("scenario", entry.scenario_id); } return entry ? <Link className="button" key={label} title={focused.worst_scenario_id === focused.worst_burden_scenario_id ? "Also the highest-burden case" : undefined} to={`${experimentId ? `/experiments/${experimentId}` : ""}/replay?${query}`}>{label}</Link> : <span key={label} className="note">{label}: not stored in this bundle.</span>; })}</div>
                 </Panel>
                 </details>
               </div>
@@ -226,7 +239,7 @@ export function ModelComparison() {
         </Panel>
       ) : null}
 
-      <details className="technical-details" open={technicalOpen} onToggle={event => setTechnicalOpen(event.currentTarget.open)}>
+      <details className="technical-details disclosure-plain" open={technicalOpen} onToggle={event => setTechnicalOpen(event.currentTarget.open)}>
         <summary>Technical details</summary>
         <div role="group" aria-label="Technical details">
       {focused && criteria && <FailureDetail verdict={focused} minDetection={criteria.min_detection_fraction} scenarios={allScenarios} />}

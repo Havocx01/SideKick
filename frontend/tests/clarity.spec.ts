@@ -45,6 +45,12 @@ test("the walkthrough explains the recorded evidence without starting jobs", asy
 });
 
 test("missing measurements and incomplete coverage are explained", async ({ page }) => {
+  await page.route("**/api/decision?*", async route => {
+    const response = await route.fetch();
+    const report = await response.json();
+    report.qualification_reason = "Required fault cases did not cover all expected histories. Early-alarm time is unavailable on healthy readings.";
+    await route.fulfill({ response, json: report });
+  });
   await page.route("**/api/selection?*", async route => {
     const response = await route.fetch();
     const selection = await response.json();
@@ -56,6 +62,7 @@ test("missing measurements and incomplete coverage are explained", async ({ page
     await route.fulfill({ response, json: selection });
   });
   await page.goto("/comparison?candidate=logistic_regression%2Flr2");
+  await page.getByRole("button", { name: "Result details", exact: true }).click();
   await expect(page.getByTestId("inspected-summary")).toContainText("Unavailable");
   await expect(page.getByTestId("inspected-summary")).toContainText("No required sensor-fault result is available");
   await expect(page.getByTestId("inspected-summary")).toContainText("did not cover all expected histories");
@@ -75,8 +82,6 @@ for (const mode of ["demo", "replay"]) {
     });
     await page.goto("/walkthrough?step=clean&partition=holdout&candidate=missing");
     await expect(page.getByTestId("walkthrough-result")).toContainText("80 / 80");
-    await expect(page.locator(".guide-context")).toContainText("lr2");
-    await expect(page.locator(".guide-context")).toContainText("Development evidence");
     await page.getByRole("link", { name: "Next", exact: true }).click();
     await expect(page.getByTestId("walkthrough-result")).toContainText("41 / 80");
     expect(mutations).toEqual([]);
@@ -88,46 +93,91 @@ test("the inspected result is separate from the recommendation", async ({ page }
   await expect(page.getByTestId("inspected-summary")).toContainText("lr2");
   await expect(page.getByTestId("inspected-summary")).toContainText("41 / 80");
   await expect(page.getByTestId("recommendation-strip")).toContainText("aug3");
-  await expect(page.locator(".guide-context")).toContainText("lr2");
   await expect(page.getByRole("group", { name: "Technical details" })).not.toBeVisible();
   await page.getByRole("button", { name: "Inspect Augmented XGBoost · aug3", exact: true }).click();
   await expect(page.getByTestId("inspected-summary")).toContainText("79 / 80");
-  await expect(page.locator(".guide-context")).toContainText("aug3");
-  await page.getByRole("button", { name: "Did augmented training help?", exact: true }).click();
-  await page.getByRole("link", { name: "Compare configurations", exact: true }).click();
+  await page.getByText("Technical details", { exact: true }).click();
   await expect(page.getByRole("group", { name: "Technical details" })).toBeVisible();
+});
+
+test("candidate rows select from metrics and keep keyboard access", async ({ page }) => {
+  await page.goto("/comparison?candidate=xgboost_augmented%2Faug3");
+  const inspect = page.getByRole("button", { name: "Inspect Logistic regression · lr2", exact: true });
+  const row = page.getByRole("row").filter({ has: inspect });
+  await row.getByRole("cell").nth(3).click();
+  await expect(inspect).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("inspected-summary")).toContainText("41 / 80");
+  const ordinary = page.getByRole("button", { name: "Inspect XGBoost · xgb1", exact: true });
+  await ordinary.focus();
+  await page.keyboard.press("Space");
+  await expect(ordinary).toHaveAttribute("aria-pressed", "true");
+  await expect(ordinary).toBeFocused();
+  await expect(page.getByTestId("inspected-summary")).toContainText("xgb1");
+  await expect(page.getByRole("button", { name: "Analyze result", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Investigate failure", exact: true })).toHaveCount(0);
 });
 
 test("compact results reveal explanations only when requested", async ({ page }) => {
   await page.goto("/comparison?candidate=logistic_regression%2Flr2");
   const result = page.getByTestId("inspected-summary");
-  await expect(result.getByRole("img", { name: "Weakest sensor fault: 41 in time, 24 late, 15 missed, out of 80 histories", exact: true })).toBeVisible();
+  await expect(result.getByRole("img", { name: "Lowest detection: 41 in time, 24 late, 15 missed, out of 80 histories", exact: true })).toBeVisible();
   await expect(result).toContainText("39 fewer timely warnings");
-  await expect(page.locator("#guide-answer")).toBeEmpty();
   await expect(page.getByRole("table", { name: "Worst detection by sensor and fault" })).not.toBeVisible();
   const sizes = await page.evaluate(() => ({ sidebar: document.querySelector('.sidebar')!.getBoundingClientRect().width, header: document.querySelector('.workspace-bar')!.getBoundingClientRect().height }));
   expect(sizes.sidebar).toBeLessThanOrEqual(185);
   expect(sizes.header).toBeLessThanOrEqual(60);
-  const key = result.getByText("What do these numbers mean?", { exact: true });
+  const details = result.getByRole("button", { name: "Result details", exact: true });
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await expect(result.getByRole("table", { name: "Warning breakdown" })).not.toBeVisible();
+  await details.focus();
+  await page.keyboard.press("Enter");
+  await expect(result.getByRole("table", { name: "Warning breakdown" })).toBeVisible();
+  await expect(result.getByRole("row").filter({ hasText: "Late" })).toContainText("24");
+  await expect(result.getByRole("row").filter({ hasText: "Missed" })).toContainText("15");
+  await expect(result.getByLabel("Qualification reason")).toContainText("below the 70.0% minimum");
+  const key = result.getByText("How warnings are counted", { exact: true });
   await key.focus();
   await page.keyboard.press("Enter");
   await expect(result.getByText(/A warning is in time when/)).toBeVisible();
-  await page.getByRole("button", { name: "Why did this model pass or fail?", exact: true }).click();
-  await expect(page.locator("#guide-answer")).toContainText("does not meet development criteria");
   await page.getByRole("button", { name: "Inspect Augmented XGBoost · aug3", exact: true }).click();
-  await expect(page.locator(".guide-context")).toContainText("aug3");
-  await expect(page.locator("#guide-answer")).toBeEmpty();
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await expect(result.getByRole("table", { name: "Warning breakdown" })).not.toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-  await expect(page.getByRole("link", { name: "Jump to Evidence guide" })).toBeVisible();
+});
+
+test("fault replay shortcuts merge only when they open the same case", async ({ page }) => {
+  const selectionRoute = "**/api/selection?*";
+  await page.route(selectionRoute, async route => {
+    const response = await route.fetch();
+    const selection = await response.json();
+    const model = selection.ranked.find((item: { config_id: string }) => item.config_id === "aug3");
+    model.worst_burden_scenario_id = model.worst_scenario_id;
+    await route.fulfill({ response, json: selection });
+  });
+  await page.goto("/comparison?candidate=xgboost_augmented%2Faug3");
+  await page.locator("#fault-results > details > summary").click();
+  const detection = page.getByRole("link", { name: "Replay weakest detection case", exact: true });
+  await expect(detection).toBeVisible();
+  await expect(detection).toHaveAttribute("title", "Also the highest-burden case");
+  await expect(page.getByRole("link", { name: "Replay highest-burden case", exact: true })).toHaveCount(0);
+  await page.unroute(selectionRoute);
+  await page.reload();
+  await page.locator("#fault-results > details > summary").click();
+  await expect(detection).toBeVisible();
+  await expect(detection).not.toHaveAttribute("title", "Also the highest-burden case");
+  await expect(page.getByText("Replay highest-burden case: not stored in this bundle.", { exact: true })).toBeVisible();
 });
 
 test("metric scopes and loss severity stay clear while switching models", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/comparison?candidate=xgboost_augmented%2Faug3");
   const result = page.getByTestId("inspected-summary");
-  await expect(result).toContainText("equipment histories warned in time");
-  await expect(result.locator(".early-alarm").filter({ hasText: "this fault" })).toContainText("0.08%");
+  await expect(result).toContainText(/equipment histories warned in time/i);
+  await result.getByRole("button", { name: "Result details", exact: true }).click();
+  const earlyAlarms = result.getByRole("row").filter({ hasText: "Early alarm time" });
+  await expect(earlyAlarms.getByRole("cell").nth(0)).toHaveText("0.10%");
+  await expect(earlyAlarms.getByRole("cell").nth(1)).toHaveText("0.08%");
   const row = page.getByRole("row").filter({ has: page.getByRole("button", { name: "Inspect Augmented XGBoost · aug3", exact: true }) });
   await expect(row.getByRole("cell").nth(3)).toHaveText("0.23%");
   await expect(page.getByRole("columnheader", { name: "Worst early alarm time", exact: true })).toBeVisible();
@@ -146,8 +196,6 @@ test("metric scopes and loss severity stay clear while switching models", async 
   await expect(result.locator(".warning-loss")).toHaveText("39 fewer timely warnings");
   await expect(result.locator(".weakest-fault")).toContainText("Sensor 8 · Missing readings");
   await expect(page.getByTestId("recommendation-strip")).toContainText("aug3");
-  await expect(page.locator(".guide-context")).toContainText("lr2");
-  await expect(page.locator(".guide-question-label").filter({ hasText: "Did fault training help?" })).toBeVisible();
 
   const inspect = result.getByRole("link", { name: "Inspect fault", exact: true });
   const href = await inspect.getAttribute("href");
@@ -157,6 +205,7 @@ test("metric scopes and loss severity stay clear while switching models", async 
   await inspect.click();
   await expect(page).toHaveURL(target.href);
   await expect(page.getByRole("combobox", { name: "Scenario", exact: true })).toHaveValue(/Sensor 8/);
+  await expect(page.getByRole("button", { name: "Clear selection", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "When the warning appears", exact: true })).toBeVisible();
 });
 
@@ -167,7 +216,6 @@ test("inspect fault falls back to the matrix when the exact replay is unavailabl
   await expect(inspect).toHaveAttribute("href", /comparison\?candidate=logistic_regression%2Flr2&partition=out_of_fold#fault-results$/);
   await inspect.click();
   await expect(page.getByRole("table", { name: "Worst detection by sensor and fault" })).toBeVisible();
-  await expect(page.locator(".guide-context")).toContainText("lr2");
 });
 
 test("replay seeks to fault onset and displays stored warning state rather than score crossings", async ({ page }) => {

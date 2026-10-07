@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app import __version__
 from app.api.deps import _cached_bundle, bundle, settings
 from app.config import EXPERIMENT, Settings
 from app.schemas import (
@@ -43,7 +44,7 @@ def health(config: Settings = Depends(settings)) -> dict:
     return {
         "status": "ok",
         "mode": config.mode,
-        "version": "1.5.0",
+        "version": __version__,
         "can_edit_protocol": config.mode == "full",
         "can_freeze": config.mode == "full",
         "can_validate": config.mode == "full",

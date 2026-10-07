@@ -11,6 +11,7 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))
 from pydantic import BaseModel  # noqa: E402
 
 from app import schemas  # noqa: E402
+from app.assistant import schemas as assistant  # noqa: E402
 
 OUTPUT = REPO_ROOT / "frontend" / "src" / "api" / "types.ts"
 
@@ -22,6 +23,10 @@ HEADER = """\
 
 #: Emitted in dependency-free order; the generator resolves nested models itself.
 ROOTS: list[type[BaseModel]] = [
+    assistant.AnalysisRecord,
+    assistant.AssistantCapabilities,
+    assistant.ConsentState,
+    assistant.BriefUpdate,
     schemas.DatasetRegistration,
     schemas.DatasetConfirmation,
     schemas.ExperimentCreate,

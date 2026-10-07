@@ -1,0 +1,125 @@
+"""Public contract for contextual analysis. Numeric content is resolved by the server."""
+
+from typing import Literal
+
+from pydantic import Field, model_validator
+
+from app.schemas import Partition, Strict
+
+
+class AnalysisRequest(Strict):
+    task: Literal["investigate", "compare", "warning", "brief"]
+    experiment_id: str | None = None
+    partition: Partition = Partition.out_of_fold
+    candidates: list[str] = Field(min_length=1, max_length=2)
+    scenario_id: str | None = Field(default=None, max_length=240)
+    equipment_id: str | None = Field(default=None, max_length=200)
+    cycle: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def exact_context(self):
+        if len(set(self.candidates)) != len(self.candidates):
+            raise ValueError("Choose different model configurations.")
+        if self.task == "compare" and len(self.candidates) != 2:
+            raise ValueError("Choose exactly two models to compare.")
+        if self.task != "compare" and len(self.candidates) != 1:
+            raise ValueError("Choose one model for this analysis.")
+        if self.task == "warning" and (not self.scenario_id or not self.equipment_id):
+            raise ValueError("Choose a recorded history and scenario.")
+        return self
+
+
+class EvidenceReference(Strict):
+    id: str
+    label: str
+    candidate: str
+    partition: Partition
+    scenario_id: str | None = None
+    equipment_id: str | None = None
+    cycle: int | None = None
+    metric: str
+    value: str
+    unit: str
+    display: str = Field(description="Server-formatted value shown to people; never supplied by the provider.")
+    context: str = Field(description="Model, scenario and evaluation context for this reference.")
+    href: str
+
+
+class AnalysisFinding(Strict):
+    id: str
+    title: str
+    detail: str
+    tone: Literal["neutral", "success", "warning", "danger"] = "neutral"
+    source_ids: list[str]
+
+
+class AnalysisAction(Strict):
+    id: str
+    label: str
+    detail: str
+    href: str
+
+
+class AnalysisResult(Strict):
+    title: str
+    summary: str
+    findings: list[AnalysisFinding]
+    sources: list[EvidenceReference]
+    actions: list[AnalysisAction]
+    limitations: list[str]
+    evidence_digest: str
+    interpretation: str | None = Field(default=None, description="Generated interpretation without numbers, links or verdicts.")
+    brief_draft: str | None = None
+    mode: Literal["evidence", "ai"] = "evidence"
+    model: str | None = None
+    prompt_version: str = "sidekick-analysis-v2.2"
+    verification: str = "Evidence references checked"
+    fallback_reason: str | None = None
+
+
+class AnalysisStage(Strict):
+    id: str
+    label: str
+    status: Literal["pending", "running", "completed", "failed"]
+
+
+class AnalysisRecord(Strict):
+    id: str
+    context: AnalysisRequest
+    status: Literal["queued", "running", "completed", "cancelled", "interrupted", "failed"]
+    created_at: float
+    updated_at: float
+    stages: list[AnalysisStage]
+    result: AnalysisResult | None = None
+    error: str | None = None
+    brief_text: str | None = None
+    brief_saved_at: float | None = None
+
+
+class AssistantCapabilities(Strict):
+    tasks: list[str]
+    live_available: bool
+    unlock_available: bool
+    unlocked: bool
+    consent_required: bool
+    consent_granted: bool
+    mode: Literal["full", "demo", "replay"]
+    note: str
+
+
+class ConsentUpdate(Strict):
+    allowed: bool
+
+
+class ConsentState(Strict):
+    experiment_id: str
+    allowed: bool
+    disclosure: str
+
+
+class AssistantAccess(Strict):
+    code: str = Field(min_length=1, max_length=200)
+
+
+class BriefUpdate(Strict):
+    text: str = Field(min_length=1, max_length=12000)

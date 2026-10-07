@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ExperimentProtocol, FaultSpec, FaultScenario, PilotBrief } from "../api/types";
-import { Button, Select } from "./Chrome";
+import { Button, IconButton, Select } from "./Chrome";
+import { Pencil, Trash2 } from "lucide-react";
 import { NumberField } from "@/registry/components/number-field/number-field";
 import { Input } from "@/components/arc/input/input";
 import { Textarea } from "@/components/arc/textarea/textarea";
@@ -48,7 +49,7 @@ export function ProtocolEditor({ value, onChange, sensors, disabled }: { value: 
       <div className="table-scroll"><table><thead><tr><th>Sensor</th><th>Fault</th><th>Onset</th><th>Required</th><th>Actions</th></tr></thead><tbody>{scenarios.map((s, i) => <tr key={i}>
         <td>{s.fault.sensor}</td><td>{s.fault.kind}{s.fault.kind === "drift" ? ` ${s.fault.sign === -1 ? "down" : "up"} ${s.fault.severity_sd} SD` : ""}<span className="note comparison-kind">{s.fault.duration}{s.fault.duration === "transient" ? `, ${s.fault.length} cycles` : ""}</span></td><td>{s.fault.onset_before_failure} cycles out</td>
         <td><label className="scenario-required"><input type="checkbox" aria-label={`Require scenario ${i + 1}: ${s.fault.sensor} ${s.fault.kind}`} disabled={disabled} checked={s.required !== false} onChange={e => onChange({ ...value, scenarios: scenarios.map((entry, index) => index === i ? { ...entry, required: e.target.checked } : entry) })} /></label></td>
-        <td><div className="scenario-actions"><Button variant="ghost" disabled={disabled} onClick={() => { setDraft(s.fault); setRequired(s.required !== false); setEditing(i); }}>Edit case {i + 1}</Button><Button variant="ghost" disabled={disabled} onClick={() => { onChange({ ...value, scenarios: scenarios.filter((_, index) => index !== i) }); setEditing(null); }}>Remove case {i + 1}</Button></div></td>
+        <td><div className="scenario-actions"><IconButton label={`Edit case ${i + 1}`} disabled={disabled} onClick={() => { setDraft(s.fault); setRequired(s.required !== false); setEditing(i); }}><Pencil size={16} aria-hidden="true" /></IconButton><IconButton label={`Remove case ${i + 1}`} disabled={disabled} onClick={() => { onChange({ ...value, scenarios: scenarios.filter((_, index) => index !== i) }); setEditing(null); }}><Trash2 size={16} aria-hidden="true" /></IconButton></div></td>
       </tr>)}</tbody></table></div>
       <section className="fault-builder"><h3>{editing == null ? "Add a fault case" : `Edit fault case ${editing + 1}`}</h3>
         <div className="mapping-roles">

@@ -1,0 +1,17 @@
+import { downloadEvidence, request } from "./client";
+import type { AnalysisRecord, AnalysisRequest, AssistantCapabilities, ConsentState } from "./types";
+
+const base = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+const post = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+const path = (id: string) => `/api/assistant/analyses/${encodeURIComponent(id)}`;
+export const assistant = {
+  capabilities: (experimentId?: string | null) => request<AssistantCapabilities>(`/api/assistant/capabilities${experimentId ? `?experiment_id=${encodeURIComponent(experimentId)}` : ""}`),
+  start: (body: AnalysisRequest) => post<AnalysisRecord>("/api/assistant/analyses", body),
+  get: (id: string) => request<AnalysisRecord>(path(id)),
+  cancel: (id: string) => post<AnalysisRecord>(`${path(id)}/cancel`),
+  consent: (id: string) => request<ConsentState>(`/api/assistant/consent/${encodeURIComponent(id)}`),
+  setConsent: (id: string, allowed: boolean) => post<ConsentState>(`/api/assistant/consent/${encodeURIComponent(id)}`, { allowed }),
+  unlock: (code: string) => post<AssistantCapabilities>("/api/assistant/access", { code }),
+  saveBrief: (id: string, text: string) => post<AnalysisRecord>(`${path(id)}/brief`, { text }),
+  export: (id: string) => downloadEvidence(`${base}${path(id)}/export`, `sidekick-review-${id}.zip`)
+};

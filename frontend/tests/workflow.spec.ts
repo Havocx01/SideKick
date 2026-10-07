@@ -1,13 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-test("candidate, guide, heatmap and replay retain the same context", async ({ page }) => {
+test("candidate, analysis, heatmap and replay retain the same context", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/comparison?candidate=logistic_regression%2Flr2");
-  await expect(page.locator(".guide-context")).toContainText("lr2");
-  await page.getByRole("button", { name: "Why did this model pass or fail?", exact: true }).click();
-  await page.locator("#guide-answer").getByText("Full explanation", { exact: true }).click();
-  await expect(page.locator("#guide-answer")).toContainText("57/64");
+  await page.getByRole("button", { name: "Investigate failure", exact: true }).click();
+  await expect(page.locator(".analysis-context")).toContainText("lr2");
+  await expect(page.getByRole("region", { name: "Finding", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close analysis", exact: true }).click();
   await page.locator("#fault-results > details > summary").click();
   await page.getByRole("button", { name: /Inspect sensor_8, dropout:/ }).click();
   await expect(page.getByRole("region", { name: "Scenario details" })).toContainText("Detection below minimum");
@@ -16,14 +16,52 @@ test("candidate, guide, heatmap and replay retain the same context", async ({ pa
   await page.getByText("Replay source and alert episodes", { exact: true }).click();
   await expect(page.getByText(/verified reconstruction:/i)).toBeVisible();
   await page.getByRole("link", { name: "Model comparison", exact: true }).click();
-  await expect(page.locator(".guide-context")).toContainText("lr2");
+  await expect(page.getByTestId("inspected-summary")).toContainText("lr2");
   await page.getByRole("switch", { name: "Switch to dark theme" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-  await page.getByRole("link", { name: "Jump to Evidence guide" }).click();
-  await expect(page.getByRole("heading", { name: "Evidence guide" })).toBeVisible();
+  await page.getByRole("button", { name: "Investigate failure", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Analysis", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Investigate failure", exact: true })).toBeFocused();
   expect(errors).toEqual([]);
+});
+
+test("comparison, warning explanation and review brief stay grounded in recorded evidence", async ({ page }) => {
+  await page.goto("/comparison?candidate=logistic_regression%2Flr2");
+  await page.getByRole("checkbox", { name: "Select Logistic regression · lr2 for comparison" }).check();
+  await page.getByRole("checkbox", { name: "Select XGBoost · xgb1 for comparison" }).check();
+  await page.getByRole("button", { name: "Compare selected", exact: true }).click();
+  const comparison = page.locator(".analysis-compare");
+  await expect(comparison).toContainText("Meets limits");
+  await expect(comparison).toContainText("Required cases passed");
+  await expect(page.getByRole("region", { name: "Finding", exact: true })).toContainText("Comparison overview");
+  await expect(page.locator(".analysis-source").first()).toContainText("Development");
+  await page.getByRole("button", { name: "Close analysis", exact: true }).click();
+
+  await page.getByRole("button", { name: "Prepare review brief", exact: true }).click();
+  const draft = page.getByRole("textbox", { name: "Edit before saving" });
+  await expect(draft).toHaveValue(/^Engineer review draft/);
+  await expect(draft).toHaveValue(/Proposed next checks/);
+  await draft.fill("Engineer review draft\n\nChecked by the browser test.");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect(page.getByText("Saved as an engineer review draft.", { exact: true })).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export brief", exact: true }).click();
+  expect((await download).suggestedFilename()).toMatch(/^sidekick-review-.+\.zip$/);
+  await page.getByRole("button", { name: "Close analysis", exact: true }).click();
+
+  await page.goto("/replay?candidate=logistic_regression%2Flr2");
+  await page.getByRole("button", { name: "Restart playback", exact: true }).click();
+  const cycle = await page.locator(".playback-cycle").textContent();
+  await page.getByRole("button", { name: "Explain warning", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Finding", exact: true })).toContainText("Recorded warning");
+  const replayLink = page.getByRole("link", { name: "Open warning replay" });
+  const href = await replayLink.getAttribute("href");
+  expect(href).toMatch(/cycle=\d+/);
+  await page.goto(href!);
+  await expect(page.locator(".playback-cycle")).toHaveText(cycle!);
 });
 
 test("a browser sample trains, freezes, validates once and exports a ZIP", async ({ page }) => {
@@ -45,11 +83,11 @@ test("a browser sample trains, freezes, validates once and exports a ZIP", async
   await expect(confirmation).toBeVisible({ timeout: 45_000 });
   await confirmation.check();
   await page.getByRole("button", { name: "Evaluate reserved equipment once", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Inspect final validation", exact: true })).toBeVisible({ timeout: 45_000 });
-  await page.getByRole("button", { name: "Inspect final validation", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Inspect final validation", exact: true })).toBeVisible({ timeout: 45_000 });
+  await page.getByRole("link", { name: "Inspect final validation", exact: true }).click();
   await expect(page).toHaveURL(/partition=holdout/);
-  await expect(page.locator(".guide-context")).toContainText(/final/i);
+  await expect(page.getByTestId("inspected-summary")).toContainText("Final validation");
   await page.reload();
-  await expect(page.getByRole("button", { name: "Inspect final validation", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inspect final validation", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Evaluate reserved equipment once", exact: true })).toHaveCount(0);
 });

@@ -226,7 +226,7 @@ export const Combobox = forwardRef<HTMLInputElement, ComboboxProps>(function Com
           onKeyDown={handleKeyDown}
         />
         <AnimatePresence initial={false}>
-          {selectedOption && !disabled && (
+          {selectedOption && !disabled && !inputProps.required && (
             <motion.button
               type="button"
               className={styles.clear}

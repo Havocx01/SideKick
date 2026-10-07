@@ -60,7 +60,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function downloadEvidence(url: string, filename: string) {
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: { "X-Sidekick-Request": "1" } });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(typeof body?.detail === "string" ? body.detail : `Export failed (${response.status}). Try again.`);
