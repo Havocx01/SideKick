@@ -105,7 +105,7 @@ class AssistantStore:
         with self.connect() as db:
             for id, payload in db.execute("SELECT id,payload FROM analyses WHERE owner=?", (owner,)).fetchall():
                 record = AnalysisRecord.model_validate_json(payload)
-                if record.context.experiment_id == experiment and record.result and record.result.mode == "ai":
+                if record.context.consent_scope == experiment and record.result and record.result.mode == "ai":
                     record.result = None
                     record.brief_text = None
                     record.brief_saved_at = None

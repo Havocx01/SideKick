@@ -1,5 +1,13 @@
 # Sidekick V2 verification
 
+## Read-only AI investigation (7 October 2026)
+
+104 non-integration backend tests passed, including bounded provider tool calls, selected-experiment and model scope, verified claims, private packets, consent/revocation, local mapping review, immutable data, reusable briefs and public storage limits. Cloud calls were mocked; no live provider evaluation or paid request was made.
+
+29 browser checks passed on the final workflow build. The sample training, freeze, one-time validation and ZIP export test also passed during this implementation. New checks cover exact fault citations, reusing an investigation in a brief, applying a mapping draft without confirming failures, and mobile layout/focus in both themes. The walkthrough remains read-only. Desktop analysis and review drafts, plus mobile analysis and data review, were visually inspected in light and dark themes.
+
+TypeScript, the production build and Ruff passed. The existing main-chunk warning and test-library deprecation warnings remain. Live model behavior and field usefulness still require separate evaluation. This implementation has not been pushed or deployed.
+
 ## Comparison UI refinement (7 October 2026)
 
 Five comparison browser regressions passed, covering model switching, keyboard selection, progressive disclosure, metric scope and fault links. TypeScript and the production build passed. Passing and failing results were visually checked, including light and dark themes. Layouts at 390, 768, 1024 and 1440 pixels had no page overflow. The existing main-chunk size warning remains.

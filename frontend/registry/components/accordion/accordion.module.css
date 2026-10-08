@@ -2,16 +2,16 @@
 .item:last-child { border-bottom-color: transparent; }
 .item[data-state="open"] { border-color: var(--border-subtle); background: color-mix(in srgb, var(--fill) 18%, var(--surface)); }
 .item[data-state="open"] .header { border-bottom-color: var(--border-subtle); }
-.item[data-state="open"] .trigger { border-radius: 0; background: color-mix(in srgb, var(--fill) 35%, transparent); }
+.item[data-state="open"] .trigger { border-radius: 0; }
 .header { display: flex; margin: 0; border-bottom: 1px solid transparent; }
 .trigger {
   display: flex; flex: 1; align-items: center; justify-content: space-between;
   min-width: 0; min-height: 44px; gap: var(--space-3); padding: var(--space-3) var(--space-4);
-  border: 0; border-radius: var(--radius-inner); background: transparent;
+  border: 0; border-radius: var(--radius-inner); background: var(--fill);
   font: inherit; font-size: var(--text-sm); font-weight: 500; color: var(--foreground);
   text-align: left; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-out);
 }
-.trigger:hover, .trigger:focus-visible { outline: none; background: var(--fill); }
+.trigger:focus-visible { outline: none; background: var(--fill-strong); }
 .trigger[data-state="open"] { color: var(--accent-strong); }
 .trigger > svg { flex-shrink: 0; color: var(--text-secondary); transition: transform var(--duration-standard) var(--ease-out); }
 .trigger[data-state="open"] > svg { transform: rotate(180deg); color: var(--accent-strong); }

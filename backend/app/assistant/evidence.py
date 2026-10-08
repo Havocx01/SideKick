@@ -114,7 +114,7 @@ def build_analysis(bundle: EvidenceBundle, context: AnalysisRequest) -> Analysis
                 ids, "success" if verdict.qualifies else "danger")
         rows = [r for r in bundle.scenario_results if f"{r.candidate.value}/{r.config_id}" == key
                 and r.partition == context.partition and r.required and r.fault is not None]
-        if context.scenario_id and context.task != "warning" and not any(r.scenario_id == context.scenario_id for r in rows):
+        if context.scenario_id and context.task != "warning" and not (context.task == "brief" and context.equipment_id) and not any(r.scenario_id == context.scenario_id for r in rows):
             raise ValueError("That scenario is not a recorded required case for this model.")
         cases = [("Healthy sensors", "clean", verdict.clean)] + [(r.fault.label(), r.scenario_id, r.metrics) for r in rows]
         for label, scenario, metrics in cases:
@@ -154,7 +154,7 @@ def build_analysis(bundle: EvidenceBundle, context: AnalysisRequest) -> Analysis
             actions.append(AnalysisAction(id=f"a{len(actions)}", label="Inspect fault results", detail=f"Review the recorded fault matrix for {names[key]}.",
                                           href=href(key) + "#fault-results"))
 
-    if context.task == "compare":
+    if context.task == "compare" or (context.task == "brief" and len(context.candidates) == 2):
         first, second = (candidates[k] for k in context.candidates)
         keys = context.candidates
         outcome = {True: "meets", False: "does not meet"}
@@ -189,7 +189,7 @@ def build_analysis(bundle: EvidenceBundle, context: AnalysisRequest) -> Analysis
         limits.append(f"The recorded recommendation is unchanged: {candidateLabel(recommended)}." if recommended
                       else "No model met the recorded criteria; this comparison does not change that outcome.")
 
-    if context.task == "warning":
+    if context.task == "warning" or (context.task == "brief" and context.equipment_id):
         key = context.candidates[0]
         series = next((s for s in bundle.replay_series if f"{s.candidate.value}/{s.config_id}" == key and s.partition == context.partition and s.scenario_id == context.scenario_id and s.equipment_id == context.equipment_id), None)
         primary = "Recorded warning"
@@ -253,12 +253,16 @@ def with_brief(result: AnalysisResult, context: AnalysisRequest) -> AnalysisResu
     cited = []
     for finding in result.findings[:3]:
         cited += [by_id[i] for i in finding.source_ids if i in by_id and by_id[i] not in cited]
+    for claim in result.assessment:
+        cited += [by_id[i] for i in claim.source_ids if i in by_id and by_id[i] not in cited]
     models = list(dict.fromkeys(s.context.split(" · ")[0] for s in result.sources)) or context.candidates
     lines = ["Engineer review draft", "",
              f"Experiment: {context.experiment_id or 'Recorded benchmark'} · {PARTITIONS[context.partition]}",
              f"Model: {', '.join(models)}", ""]
     if result.interpretation:
         lines += ["AI interpretation (verify against the evidence)", result.interpretation, ""]
+    if result.assessment:
+        lines += ["Assessment"] + [f"- {claim.text}" for claim in result.assessment] + [""]
     lines += ["Findings"] + [f"- {f.title}: {f.detail}" for f in result.findings[:3]]
     lines += ["", "Evidence"] + [f"- {s.label}: {s.display} ({s.context})" for s in cited[:6]]
     lines += ["", "Proposed next checks"] + ([f"- {a.label}: {a.detail}" for a in result.actions[:2]] or ["- Agree a next check with the equipment engineer."])

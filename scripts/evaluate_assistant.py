@@ -1,7 +1,7 @@
-"""Small live evaluation of AI interpretation against recorded benchmark evidence.
+"""Small opt-in evaluation of read-only AI investigation against benchmark evidence.
 
 Runs only with SIDEKICK_ASSISTANT_LIVE_EVAL=1 and a server-side OPENAI_API_KEY. Each case
-sends one provider packet; rerun after changing SIDEKICK_ASSISTANT_MODEL or the prompt.
+can make up to eight tool calls plus one structured selection; rerun after changing the model or prompt.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
-from app.assistant.evidence import build_analysis  # noqa: E402
+from app.assistant.investigation import EvidenceTools  # noqa: E402
 from app.assistant.provider import enhance_analysis  # noqa: E402
 from app.assistant.schemas import AnalysisRequest  # noqa: E402
 from app.config import get_settings  # noqa: E402
@@ -52,14 +52,15 @@ async def main() -> int:
     bundle = load_bundle(settings.bundle_path)
     report = []
     for name, context in cases(bundle):
-        evidence = build_analysis(bundle, context)
+        tools = EvidenceTools(bundle, context)
+        evidence = tools.result
         try:
-            result = await asyncio.wait_for(enhance_analysis(evidence, context, settings), settings.assistant_timeout_seconds)
+            result = await asyncio.wait_for(enhance_analysis(evidence, context, settings, tools=tools), settings.assistant_timeout_seconds)
             report.append({"case": name, "verified": True, "findings": [f.id for f in result.findings[:3]],
-                           "interpretation": result.interpretation})
-        except Exception as error:  # Recorded so a reviewer can judge rejection rates.
-            report.append({"case": name, "verified": False, "reason": str(error) or type(error).__name__})
-    print(json.dumps({"model": settings.assistant_model, "prompt_version": evidence.prompt_version, "cases": report}, indent=2))
+                           "claims": [claim.id for claim in result.assessment], "tools": [call.name for call in result.investigation]})
+        except Exception as error:
+            report.append({"case": name, "verified": False, "reason": type(error).__name__})
+    print(json.dumps({"model": settings.assistant_model, "prompt_version": "sidekick-investigation-v3", "cases": report}, indent=2))
     return 0 if all(item["verified"] for item in report) else 1
 
 

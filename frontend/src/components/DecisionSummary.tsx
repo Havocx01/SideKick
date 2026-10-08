@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useApi } from "../hooks/useApi";
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { Badge, Button, IconButton, Panel, StateBlock } from "./Chrome";
-import { Check, ChevronRight, Download, FileText, Star, X } from "lucide-react";
+import { Check, ChevronRight, ClipboardList, Download, FileText, ScanLine, Star, X } from "lucide-react";
 
 export function EvidenceExport({ labels = false }: { labels?: boolean } = {}) {
   const api = useEvidence();
@@ -93,9 +93,9 @@ export function DecisionSummary({ selection, inspected, inspectFaultHref }: { se
           </AccordionItem>
         </Accordion>
         <div className="result-analysis-actions">
-          {analysis.enabled("investigate") && <Button variant="primary" onClick={() => analysis.start({ task: "investigate", experiment_id: id, partition: selection.partition, candidates: [`${focus.candidate}/${focus.config_id}`] })}>{focus.qualifies ? "Analyze result" : "Investigate failure"}</Button>}
+          {analysis.enabled("investigate") && <Button variant="secondary" onClick={() => analysis.start({ task: "investigate", experiment_id: id, partition: selection.partition, candidates: [`${focus.candidate}/${focus.config_id}`] })}><ScanLine size={15} aria-hidden="true" />{focus.qualifies ? "Analyze result" : "Investigate failure"}</Button>}
           {/* <Link className="result-text-link" to={`${id ? `/experiments/${id}` : ""}/replay?${query}`}>Replay model</Link> */}
-          {analysis.enabled("brief") && <Button variant="ghost" onClick={() => analysis.start({ task: "brief", experiment_id: id, partition: selection.partition, candidates: [`${focus.candidate}/${focus.config_id}`] })}>Prepare review brief</Button>}
+          {analysis.enabled("brief") && <Button variant="secondary" onClick={() => analysis.start({ task: "brief", experiment_id: id, partition: selection.partition, candidates: [`${focus.candidate}/${focus.config_id}`] })}><ClipboardList size={15} aria-hidden="true" />Prepare review brief</Button>}
         </div>
         <p className="note decision-note">Test result, not deployment approval.</p>
       </Panel></div>}

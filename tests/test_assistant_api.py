@@ -133,7 +133,7 @@ def test_rejected_ai_output_falls_back_to_recorded_evidence(assistant_app, monke
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
     assistant.settings.openai_api_key = "test-not-a-real-key"
-    async def invalid(result, context, settings):
+    async def invalid(result, context, settings, **kwargs):
         raise ValueError("Cloud interpretation contained an unsupported numeric claim.")
     monkeypatch.setattr(provider, "enhance_analysis", invalid)
     loaded = load_bundle(get_settings().bundle_path)
@@ -153,7 +153,7 @@ def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
     assistant.settings.assistant_live_enabled = True
     assistant.settings.openai_api_key = "test-not-a-real-key"
     calls = []
-    async def slow(result, context, settings):
+    async def slow(result, context, settings, **kwargs):
         calls.append(context)
         await asyncio.sleep(10)
         return result
@@ -258,3 +258,70 @@ def test_revocation_does_not_resurrect_ai_after_reconsent(assistant_app, monkeyp
         assert response.json()["result"]["mode"] == "evidence"
         assert response.headers["cache-control"] == "no-store"
 
+
+
+
+def test_investigation_can_become_a_brief_without_a_second_ai_request(assistant_app):
+    headers = {"X-Sidekick-Request": "1"}
+    with TestClient(assistant_app) as client:
+        original = client.post("/api/assistant/analyses", json=payload(), headers=headers).json()
+        review = client.post(f"/api/assistant/analyses/{original['id']}/review", headers=headers)
+        assert review.status_code == 200, review.text
+        saved = review.json()
+        assert saved["context"]["task"] == "brief" and saved["id"] != original["id"]
+        assert saved["result"]["evidence_digest"] == original["result"]["evidence_digest"]
+        assert saved["result"]["assessment"] == original["result"]["assessment"]
+        assert "Assessment" in saved["result"]["brief_draft"]
+        assert assistant_app.state.assistant.tasks == {}
+        assistant_app.state.assistant.settings.assistant_tasks = ("investigate",)
+        assert client.post(f"/api/assistant/analyses/{original['id']}/review", headers=headers).status_code == 403
+
+
+def test_data_review_api_consent_and_scope(assistant_app, tmp_path):
+    from uuid import uuid4
+    from app.data.synthetic import make_synthetic_dataset
+    from app.experiments.datasets import register
+    from app.experiments.store import Workspace
+    workspace = Workspace(tmp_path / "workspace")
+    assistant_app.state.jobs = SimpleNamespace(workspace=workspace)
+    assistant_app.state.assistant.settings.assistant_tasks += ("data",)
+    id = str(uuid4())
+    path = workspace.directory("datasets", id) / "data.csv"
+    path.parent.mkdir(parents=True)
+    make_synthetic_dataset().frame.to_csv(path, index=False)
+    dataset = register(workspace, path, id, "private.csv")
+    before = workspace.get("datasets", id)
+    headers = {"X-Sidekick-Request": "1"}
+    with TestClient(assistant_app) as client:
+        caps = client.get("/api/assistant/capabilities", params={"dataset_id": id}).json()
+        assert caps["consent_required"] and not caps["consent_granted"]
+        response = client.post("/api/assistant/analyses", json={"task": "data", "dataset_id": id, "mapping": dataset.mapping.model_dump()}, headers=headers)
+        assert response.status_code == 200, response.text
+        record = response.json()
+        assert record["result"]["suggested_mapping"] and record["result"]["assessment"]
+        assert client.get(f"/api/assistant/analyses/{record['id']}").status_code == 200
+        scope = f"dataset:{id}"
+        assert client.post(f"/api/assistant/consent/{scope}", json={"allowed": True}, headers=headers).status_code == 200
+        assert client.get("/api/assistant/capabilities", params={"dataset_id": id}).json()["consent_granted"]
+        assert client.post(f"/api/assistant/consent/{scope}", json={"allowed": False}, headers=headers).status_code == 200
+        assert workspace.get("datasets", id) == before
+        assert client.post("/api/assistant/analyses", json={"task": "data", "dataset_id": "../../secret"}, headers=headers).status_code == 404
+        assistant_app.state.assistant.settings.mode = "replay"
+        assert client.post("/api/assistant/analyses", json={"task": "data", "dataset_id": id}, headers=headers).status_code == 403
+
+
+def test_public_review_copy_has_the_same_storage_limit_as_analysis(assistant_app, monkeypatch):
+    from app.api import routes_assistant
+    from app.assistant.store import PublicLimitError
+    headers = {"X-Sidekick-Request": "1"}
+    with TestClient(assistant_app) as client:
+        original = client.post("/api/assistant/analyses", json=payload(), headers=headers).json()
+        store = assistant_app.state.assistant.store
+        with store.connect() as db:
+            who = db.execute("SELECT owner FROM analyses WHERE id=?", (original["id"],)).fetchone()[0]
+        assistant_app.state.assistant.settings.mode = "demo"
+        monkeypatch.setattr(routes_assistant, "visitor", lambda *args: who)
+        def exhausted(owner):
+            raise PublicLimitError("Analysis allowance reached.")
+        monkeypatch.setattr(store, "admit_evidence", exhausted)
+        assert client.post(f"/api/assistant/analyses/{original['id']}/review", headers=headers).status_code == 429

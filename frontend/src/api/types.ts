@@ -92,8 +92,11 @@ export interface AnalysisRecord {
 }
 
 export interface AnalysisRequest {
-  task: "investigate" | "compare" | "warning" | "brief";
+  task: "investigate" | "compare" | "warning" | "brief" | "data";
   experiment_id?: string | null;
+  dataset_id?: string | null;
+  mapping?: ColumnMapping | null;
+  complete_histories?: boolean;
   partition?: Partition;
   candidates: string[];
   scenario_id?: string | null;
@@ -117,6 +120,9 @@ export interface AnalysisResult {
   prompt_version?: string;
   verification?: string;
   fallback_reason?: string | null;
+  assessment?: { id: string; text: string; source_ids: string[] }[];
+  investigation?: { name: string; label: string; source_ids: string[] }[];
+  suggested_mapping?: ColumnMapping | null;
 }
 
 export interface AnalysisStage {

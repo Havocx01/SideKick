@@ -5,6 +5,7 @@ import type { ColumnMapping, DatasetRegistration, ExperimentRecord, ExperimentPr
 import { defaultProtocol, PilotBriefEditor, ProtocolEditor } from "../components/ProtocolEditor";
 import { Badge, Button, Field, Panel, Select, StateBlock } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
+import { useAnalysis } from "../components/AnalysisProvider";
 import { ArrowRight, FlaskConical, Layers, Upload } from "lucide-react";
 import { NumberField } from "@/registry/components/number-field/number-field";
 import { integer, percent, scenarioLabel } from "../format";
@@ -117,6 +118,7 @@ export function NewExperiment() {
 }
 
 function ExperimentSetup() {
+  const analysis = useAnalysis();
   const health = useApi(() => api.health(), []);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -365,6 +367,8 @@ function ExperimentSetup() {
               <p className="note">
                 Histories without an observed failure are unsupported.
               </p>
+              <div className="actions">{analysis.enabled("data") && <Button variant="secondary" disabled={busy} onClick={() => analysis.start({ task: "data", dataset_id: data.dataset_id,
+                candidates: [], mapping, complete_histories: complete }, suggestion => { setMapping(suggestion); setError(""); })}>Review data</Button>}
               <Button variant="primary" loading={busy}
                 disabled={
                   !mapping.equipment_id || !mapping.cycle_index || !mapping.sensors.length ||
@@ -374,6 +378,7 @@ function ExperimentSetup() {
               >
                 Validate and confirm mapping
               </Button>
+              </div>
             </Panel>
           )}
           {data.confirmed && data.profile && data.splits && (

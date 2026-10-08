@@ -60,6 +60,12 @@ export function ModelComparison() {
   );
   const allScenarios = scenarios.data ?? [];
   const focusedScenarios = includeSupplemental ? allScenarios : allScenarios.filter(row => row.required);
+  const scenarioId = params.get("scenario");
+  useEffect(() => {
+    if (!scenarioId || !scenarios.data) return;
+    const rows = scenarios.data.filter(row => row.scenario_id === scenarioId && row.partition === partition);
+    if (rows.length) { setInspected(rows); setFaultOpen(true); if (rows.some(row => !row.required)) setIncludeSupplemental(true); }
+  }, [scenarioId, scenarios.data, partition]);
   const invalidFocus = Boolean(focus && selection.data && !verdicts.some(v => candidateKey(v.candidate, v.config_id) === focus));
   const weakestReplay = replayIndex.data?.series.find(row => row.scenario_id === focused?.worst_scenario_id && candidateKey(row.candidate, row.config_id) === focusKey);
   const replayCases = focused ? [

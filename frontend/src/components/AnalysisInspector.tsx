@@ -15,19 +15,20 @@ export function AnalysisInspector() {
   useEffect(() => {
     if (!open) return;
     dialog.current?.showModal();
-    title.current?.focus();
-  }, [open]);
+    title.current?.focus({ preventScroll: true });
+    if (dialog.current) dialog.current.scrollTop = 0;
+  }, [open, context?.task]);
   if (!open || !context) return null;
   const isBrief = context.task === "brief";
   const content = <>
-    <header className="analysis-header"><div>{isBrief ? <FileText size={19} aria-hidden="true" /> : <ScanLine size={19} aria-hidden="true" />}<h2 id="analysis-title" tabIndex={-1} ref={title}>{isBrief ? "Review brief" : "Analysis"}</h2></div><IconButton label="Close analysis" onClick={() => close()}><X size={17} aria-hidden="true" /></IconButton></header>
+    <header className="analysis-header"><div>{isBrief ? <FileText size={19} aria-hidden="true" /> : <ScanLine size={19} aria-hidden="true" />}<h2 id="analysis-title" tabIndex={-1} ref={title}>{isBrief ? "Review brief" : context.task === "data" ? "Data review" : "Analysis"}</h2></div><IconButton label="Close analysis" onClick={() => close()}><X size={17} aria-hidden="true" /></IconButton></header>
     <AnalysisContents key={JSON.stringify(context)} />
   </>;
   return <dialog ref={dialog} className={`analysis-inspector analysis-dialog${isBrief ? " review-dialog" : ""}`} aria-labelledby="analysis-title" onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}><div className="analysis-dialog-inner">{content}</div></dialog>;
 }
 
 function AnalysisContents() {
-  const { context, record, capabilities, consent, error, pending, retry, cancel, setConsent, unlock, close, saveBrief } = useAnalysis();
+  const { context, record, capabilities, consent, error, pending, retry, cancel, setConsent, unlock, close, saveBrief, applyMapping, prepareReview, enabled } = useAnalysis();
   const [elapsed, setElapsed] = useState(0);
   const [operationError, setOperationError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,25 +56,29 @@ function AnalysisContents() {
   }
   function follow() { close(false); requestAnimationFrame(() => document.getElementById("main-content")?.focus()); }
   const scopeLabel = context.partition === "holdout" ? "Final validation" : "Development";
+  const consentLabel = context.task === "data" ? "dataset" : "experiment";
   return <div className="analysis-body">
     <div className="analysis-meta">
-    <div className="analysis-context">{context.candidates.map(key => <strong key={key}>{candidateLabel(...key.split("/") as [string, string])}</strong>)}<span>{scopeLabel}{context.equipment_id ? ` · History ${context.equipment_id}` : ""}{context.cycle != null ? ` · Cycle ${context.cycle}` : ""}</span></div>
-    {capabilities && <details className="analysis-access"><summary><span className="analysis-mode"><ShieldCheck size={13} aria-hidden="true" />{result?.mode === "ai" ? "AI interpretation" : "Evidence analysis"}</span><span>Settings</span></summary>
+    <div className="analysis-context">{context.task === "data" ? <strong>Current column mapping</strong> : context.candidates.map(key => <strong key={key}>{candidateLabel(...key.split("/") as [string, string])}</strong>)}<span>{context.task === "data" ? "Draft data checks" : scopeLabel}{context.equipment_id ? ` · History ${context.equipment_id}` : ""}{context.cycle != null ? ` · Cycle ${context.cycle}` : ""}</span></div>
+    {capabilities && <details className="analysis-access"><summary><span className="analysis-mode"><ShieldCheck size={13} aria-hidden="true" />{result?.mode === "ai" ? "AI investigation" : "Evidence analysis"}</span><span>Settings</span></summary>
       <p>{capabilities.note}</p>
       {capabilities.unlock_available && !capabilities.unlocked && <form onSubmit={event => { event.preventDefault(); void act(async () => { await unlock(code); setCode(""); }); }}><label htmlFor="presenter-code">Presenter access code</label><input id="presenter-code" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} required maxLength={200} /><Button size="sm" variant="secondary" type="submit" loading={busy}>Unlock live AI</Button></form>}
-      {consent && <div className="analysis-consent"><h3>Cloud analysis for this experiment</h3><p>{consent.disclosure}</p><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(() => setConsent(!consent.allowed))}>{consent.allowed ? "Turn off cloud analysis" : "Allow cloud analysis"}</Button><span className="note">{consent.allowed ? "Allowed for this experiment." : "Off. Analysis stays on this server."}</span></div>}
+      {consent && <div className="analysis-consent"><h3>Cloud analysis for this {consentLabel}</h3><p>{consent.disclosure}</p><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(() => setConsent(!consent.allowed))}>{consent.allowed ? "Turn off cloud analysis" : "Allow cloud analysis"}</Button><span className="note">{consent.allowed ? `Allowed for this ${consentLabel}.` : "Off. Analysis stays on this server."}</span></div>}
       {capabilities.live_available && !running && <Button size="sm" variant="secondary" onClick={retry}>Run with AI</Button>}
     </details>}
     </div>
-    {consent && !consent.allowed && <p className="analysis-local-note">Cloud analysis is off. Enable it in Settings.</p>}
+    {consent && !consent.allowed && <p className="analysis-local-note">Cloud analysis is off. {context.task === "data" ? "Showing local checks." : "Showing recorded evidence."}</p>}
     {(running || !result && record) && <section className="analysis-progress" aria-label="Analysis progress" aria-live="polite"><div className="analysis-progress-head"><strong>{running ? context.task === "brief" ? "Preparing review brief" : "Analyzing evidence" : record?.status === "cancelled" ? "Analysis cancelled" : record?.status === "interrupted" ? "Analysis interrupted" : "Analysis stopped"}</strong><span>{elapsed}s</span></div>{record?.stages.map(stage => <div className={`analysis-task ${stage.status}`} key={stage.id}>{stage.status === "completed" ? <Check size={14} /> : stage.status === "running" ? <LoaderCircle className="analysis-spinner" size={14} /> : stage.status === "failed" ? <CircleAlert size={14} /> : <Circle size={14} />}<span>{stage.label}</span><span className="analysis-task-state">{stage.status}</span></div>)}{running ? <Button variant="ghost" size="sm" onClick={() => void cancel()}>Cancel analysis</Button> : <Button variant="secondary" size="sm" onClick={retry}>Try again</Button>}</section>}
     {(error || record?.error || operationError) && <div className="analysis-error" role="alert"><CircleAlert size={16} /><p>{operationError || error || record?.error}</p>{error && <Button size="sm" variant="ghost" onClick={retry}>Try again</Button>}</div>}
     {!running && !record && !error && <Button variant="secondary" onClick={retry}>Run analysis</Button>}
     {result && <>
       {context.task === "brief" && record ? <div className="review-workspace">
         <section className="analysis-brief" aria-label="Review draft"><div className="review-editor-heading"><h3>Review draft</h3><span>{saved ? "Saved" : "Editable draft"}</span></div><label htmlFor="analysis-review">Edit before saving</label><textarea id="analysis-review" value={draft} maxLength={12000} rows={18} onChange={event => { edited.current = true; setDraft(event.target.value); setSaved(false); }} /><div className="review-save-row"><div className="analysis-brief-actions"><Button loading={busy} disabled={!draft.trim() || saved} onClick={() => void act(async () => { await saveBrief(draft); setSaved(true); })}>{saved ? "Saved" : "Save draft"}</Button><Button variant="secondary" disabled={!saved || busy} loading={busy} onClick={() => void act(() => assistant.export(record.id))}><Download size={16} aria-hidden="true" />Export brief</Button></div><p className="note" role="status">{saved ? "Saved as an engineer review draft." : "Save your edits to include them in the export."}</p></div></section>
-        <aside className="review-reference" aria-label="Brief references"><h3>Supporting evidence</h3><details><summary>Findings · {result.findings.length}</summary>{result.findings.map(finding => <Finding key={finding.id} finding={finding} />)}{result.interpretation && <Interpretation result={result} />}</details><details><summary>Sources · {result.sources.length}</summary><EvidenceSources sources={result.sources} follow={follow} /></details><NextChecks result={result} follow={follow} /><ResultLimits result={result} /></aside>
+        <aside className="review-reference" aria-label="Brief references"><h3>Supporting evidence</h3><Assessment result={result} follow={follow} /><details><summary>Findings · {result.findings.length}</summary>{result.findings.map(finding => <Finding key={finding.id} finding={finding} />)}{result.interpretation && <Interpretation result={result} />}</details><details><summary>Sources · {result.sources.length}</summary><EvidenceSources sources={result.sources} follow={follow} /></details><NextChecks result={result} follow={follow} /><ResultLimits result={result} /></aside>
       </div> : <ResultContent result={result} follow={follow} candidates={context.candidates} task={context.task} />}
+      {!running && record?.status === "completed" && context.task === "data" && result.suggested_mapping && <section className="analysis-mapping" aria-label="Suggested mapping"><h3>Suggested column roles</h3><dl><div><dt>Equipment</dt><dd>{result.suggested_mapping.equipment_id}</dd></div><div><dt>Cycle</dt><dd>{result.suggested_mapping.cycle_index}</dd></div><div><dt>Failure</dt><dd>{result.suggested_mapping.failure_cycle || "Requires your confirmation"}</dd></div><div><dt>Sensors</dt><dd>{result.suggested_mapping.sensors.join(", ")}</dd></div></dl><Button variant="secondary" disabled={busy} onClick={applyMapping}>Use draft mapping</Button><p className="note">Review the roles before confirming.</p></section>}
+      {!running && record?.status === "completed" && context.task !== "data" && context.task !== "brief" && enabled("brief") && <div className="analysis-brief-actions"><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(prepareReview)}><FileText size={15} aria-hidden="true" />Add to review brief</Button></div>}
+      {result.investigation?.length ? <details className="analysis-queries"><summary>Investigation · {result.investigation.length} checks</summary><ol className="investigation-log">{result.investigation.map((call, index) => <li key={`${index}-${call.name}`}>{call.label}<span>{call.source_ids.length ? `${call.source_ids.length} references` : "Case lookup"}</span></li>)}</ol></details> : null}
       <details className="analysis-audit"><summary>Analysis record</summary><div className="analysis-tool-chips" aria-label="Completed stages">{record?.stages.filter(s => s.status === "completed").map(s => <span key={s.id}><Check size={12} />{s.label}</span>)}</div><details className="analysis-queries"><summary>{queries(result).length} evidence queries</summary><div className="analysis-tool-chips">{queries(result).map(query => <span key={query}><Database size={12} />{query}</span>)}</div></details><p>{result.verification}</p><p>{result.model ? `Model: ${result.model} · Prompt ${result.prompt_version}` : `Generated from recorded evidence · Prompt ${result.prompt_version}`}</p><p>Evidence: <code>{result.evidence_digest.slice(0, 16)}</code></p>{result.fallback_reason && <p>{result.fallback_reason}</p>}</details>
     </>}
   </div>;
@@ -93,15 +98,24 @@ function ComparisonTable({ result, candidates }: { result: AnalysisResult; candi
 function ResultContent({ result, follow, candidates, task }: { result: AnalysisResult; follow: () => void; candidates: string[]; task: string }) {
   return <div className="analysis-layout">
     <div className="analysis-main">
-    <section className="analysis-findings" aria-label="Finding"><h3>{task === "compare" ? "Comparison" : "Result"}</h3>{result.findings.length ? result.findings.slice(0, 3).map(finding => <Finding key={finding.id} finding={finding} />) : <p>{result.summary}</p>}
+    <Assessment result={result} follow={follow} />
+    <section className="analysis-findings" aria-label="Finding"><h3>{task === "compare" ? "Comparison" : task === "data" ? "Data checks" : "Recorded result"}</h3>{result.findings[0] ? <Finding finding={result.findings[0]} /> : <p>{result.summary}</p>}
       {task === "compare" && candidates.length === 2 && <ComparisonTable result={result} candidates={candidates} />}
       {result.interpretation && <Interpretation result={result} />}
-      {result.findings.length > 3 && <details><summary>{result.findings.length - 3} more findings</summary>{result.findings.slice(3).map(finding => <Finding key={finding.id} finding={finding} />)}</details>}</section>
+      {result.findings.length > 1 && <details><summary>{result.findings.length - 1} more findings</summary>{result.findings.slice(1).map(finding => <Finding key={finding.id} finding={finding} />)}</details>}</section>
     <NextChecks result={result} follow={follow} />
     <ResultLimits result={result} />
     </div>
     <section className="analysis-evidence" aria-label="Evidence"><h3>Evidence <span>{result.sources.length}</span></h3><EvidenceSources sources={result.sources} follow={follow} /></section>
   </div>;
+}
+function Assessment({ result, follow }: { result: AnalysisResult; follow: () => void }) {
+  if (!result.assessment?.length) return null;
+  const citation = (source: EvidenceReference) => <Link key={source.id} to={source.href} onClick={follow}>{source.label}: {source.display}<ArrowUpRight size={12} aria-hidden="true" /></Link>;
+  return <section className="analysis-assessment" aria-label="Assessment"><h3>Assessment</h3>{result.assessment.map(claim => {
+    const sources = claim.source_ids.map(id => result.sources.find(source => source.id === id)).filter((source): source is EvidenceReference => Boolean(source));
+    return <article key={claim.id}><p>{claim.text}</p><div className="assessment-citations">{sources.slice(0, 2).map(citation)}</div>{sources.length > 2 && <details><summary>{sources.length - 2} more references</summary><div className="assessment-citations">{sources.slice(2).map(citation)}</div></details>}</article>;
+  })}</section>;
 }
 function Interpretation({ result }: { result: AnalysisResult }) {
   return <div className="analysis-interpretation"><span className="analysis-generated"><Sparkles size={12} aria-hidden="true" />AI interpretation · verify against evidence</span><p>{result.interpretation}</p></div>;
