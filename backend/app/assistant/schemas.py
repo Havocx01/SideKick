@@ -124,6 +124,8 @@ class AnalysisRecord(Strict):
     error: str | None = None
     brief_text: str | None = None
     brief_saved_at: float | None = None
+    cache_fingerprint: str | None = None
+    reused: bool = False
 
 
 class AssistantCapabilities(Strict):
@@ -152,4 +154,5 @@ class AssistantAccess(Strict):
 
 
 class BriefUpdate(Strict):
-    text: str = Field(min_length=1, max_length=12000)
+    text: str = Field(max_length=12000)
+    draft_only: bool = False

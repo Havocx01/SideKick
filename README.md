@@ -40,6 +40,8 @@ $env:SIDEKICK_MODE = 'full'
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep the terminal open. After setup, only the last two commands are needed. Press Ctrl+C to stop.
 
+The Windows API command loads `.env` from the repository folder if it exists. Restart the server after changing it. PowerShell environment variables override `.env`; clear an old key with `Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue` before starting.
+
 On macOS or Linux:
 
 ```bash
@@ -74,9 +76,11 @@ AI uses read-only tools to inspect recorded model metrics, fault cases and warni
 
 Use **Review data** during CSV setup to check the current mapping and blockers. **Use draft mapping** edits column roles only; failure confirmation and training remain your actions. In an investigation, **Add to review brief** reuses the same evidence for an editable, exportable draft.
 
+Completed analyses and review drafts are saved on the server. Reopening them or switching between analysis and a brief reuses the result for the same model and evidence. Draft edits save automatically; **Rerun with AI** starts a fresh request. Changing data, model, mapping or evaluation context uses separate results.
+
 Uploaded datasets and experiments each require explicit, revocable cloud consent. Only derived checks, column types, missing-value fractions, pseudonymous aliases and recorded metrics leave the server. Raw rows, column names, equipment IDs and file paths are excluded. `store=False` does not remove the provider's possible abuse-monitoring retention.
 
-On a hosted demo, set `SIDEKICK_ASSISTANT_PRESENTER_CODE` as a server secret to enable private presenter access. Public visitors receive evidence-only analysis. Live analysis allows one request at a time, with defaults of ten requests per browser session and 25 per day, including local use. Each investigation can use up to eight read-only tool calls and one final selection, with a 45-second timeout. Free hosting can lose its local usage history on redeployment, so these limits are not a monthly billing cap. Replay mode never calls the provider. Set `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` to disable cloud calls everywhere. `SIDEKICK_ASSISTANT_TASKS` (default `investigate,compare,warning,brief,data`) controls the workflows.
+On a hosted demo, set `SIDEKICK_ASSISTANT_PRESENTER_CODE` as a server secret to enable private presenter access. Public visitors receive evidence-only analysis. Sidekick has no session, daily or hourly analysis allowance. Live analysis runs one request at a time. Each investigation can use up to eight read-only tool calls and one final selection, with a 45-second timeout. Replay mode never calls the provider. Set `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` to disable cloud calls everywhere. `SIDEKICK_ASSISTANT_TASKS` (default `investigate,compare,warning,brief,data`) controls the workflows.
 
 Routine tests use mocked provider responses. After changing the model or prompt, run the small live evaluation with `SIDEKICK_ASSISTANT_LIVE_EVAL=1` and a server-side key: `python scripts/evaluate_assistant.py`. It reports which cases passed verification and does not print the key.
 

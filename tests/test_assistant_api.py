@@ -2,8 +2,10 @@
 import asyncio
 import io
 import json
+import time
 import zipfile
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -11,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes_assistant import router
 from app.assistant.service import AssistantService
-from app.assistant.schemas import AnalysisRequest
+from app.assistant.schemas import AnalysisRecord, AnalysisRequest
 from app.assistant.store import AssistantStore
 from app.evidence.bundle import load_bundle
 from app.config import get_settings
@@ -21,7 +23,7 @@ from app.config import get_settings
 def assistant_app(local_settings):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
         assistant_live_enabled=False, openai_api_key="", assistant_model="test", assistant_presenter_code="",
-        assistant_timeout_seconds=0.02, assistant_session_limit=10, assistant_daily_limit=25,
+        assistant_timeout_seconds=0.02,
         assistant_tasks=("investigate", "compare", "warning", "brief"))
     app = FastAPI()
     app.state.assistant = AssistantService(settings)
@@ -31,6 +33,89 @@ def assistant_app(local_settings):
 
 def payload():
     return {"task": "investigate", "candidates": ["logistic_regression/lr1"]}
+
+
+def test_reopening_and_switching_to_a_brief_reuses_saved_evidence(assistant_app):
+    headers = {"X-Sidekick-Request": "1"}
+    with TestClient(assistant_app) as client:
+        original = client.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()
+        reopened = client.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()
+        assert reopened["id"] == original["id"] and reopened["reused"]
+        brief = client.post("/api/assistant/analyses?reuse=true", json={**payload(), "task": "brief"}, headers=headers).json()
+        assert brief["id"] == original["id"] and brief["context"]["task"] == "brief"
+        assert brief["result"]["assessment"] == original["result"]["assessment"]
+        assert brief["result"]["brief_draft"].startswith("Engineer review draft")
+        path = f"/api/assistant/analyses/{brief['id']}/brief"
+        assert client.post(path, headers=headers, json={"text": "Unfinished engineer notes", "draft_only": True}).status_code == 200
+        restored = client.post("/api/assistant/analyses?reuse=true", json={**payload(), "task": "brief"}, headers=headers).json()
+        assert restored["brief_text"] == "Unfinished engineer notes" and restored["brief_saved_at"] is None
+        assert client.post(path, headers=headers, json={"text": "Approved draft for export"}).status_code == 200
+        assert client.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()["brief_saved_at"]
+        store = assistant_app.state.assistant.store
+        assistant_app.state.assistant.store = AssistantStore(store.path.parent)
+        assert client.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()["id"] == original["id"]
+        forced = client.post("/api/assistant/analyses", json=payload(), headers=headers).json()
+        assert forced["id"] != original["id"] and not forced["reused"]
+        assert client.post("/api/assistant/analyses?reuse=true", json={**payload(), "candidates": ["logistic_regression/lr2"]}, headers=headers).json()["id"] != forced["id"]
+        with TestClient(assistant_app) as stranger:
+            isolated = stranger.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()
+            assert isolated["id"] != forced["id"] and not isolated["reused"]
+
+
+def test_reuse_shares_live_ai_in_both_directions_without_another_provider_call(assistant_app, monkeypatch):
+    from app.assistant import provider
+    service = assistant_app.state.assistant
+    service.settings.assistant_live_enabled = True
+    service.settings.openai_api_key = "not-a-real-key"
+    calls = []
+
+    async def enhance(result, context, settings, **kwargs):
+        calls.append(context.task)
+        return result.model_copy(update={"mode": "ai", "interpretation": "Inspect the weakest recorded case."})
+
+    monkeypatch.setattr(provider, "enhance_analysis", enhance)
+    loaded = load_bundle(get_settings().bundle_path)
+
+    async def check():
+        for first_task, second_task in [("investigate", "brief"), ("brief", "investigate")]:
+            owner = first_task
+            original = await service.create(loaded, AnalysisRequest(**{**payload(), "task": first_task}), owner, False)
+            await asyncio.gather(*service.tasks.values())
+            reopened = await service.create(loaded, AnalysisRequest(**{**payload(), "task": second_task}), owner, False, reuse=True)
+            assert reopened.id == original.id and reopened.reused and reopened.result.mode == "ai"
+            assert reopened.context.task == second_task and not service.tasks
+            assert reopened.result.interpretation == "Inspect the weakest recorded case."
+            changed = loaded.model_copy(update={"source_digest": "changed-source"})
+            fresh = await service.create(changed, original.context, owner, False, reuse=True)
+            assert fresh.id != original.id and not fresh.reused
+            await asyncio.gather(*service.tasks.values())
+    asyncio.run(check())
+    assert len(calls) == 4
+
+
+def test_reuse_skips_expired_public_results_and_unavailable_cloud_access(assistant_app, monkeypatch):
+    from app.api import routes_assistant
+    service = assistant_app.state.assistant
+    monkeypatch.setattr(routes_assistant, "visitor", lambda *args: "owner")
+    headers = {"X-Sidekick-Request": "1"}
+    with TestClient(assistant_app) as client:
+        first = client.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()
+        record = service.store.get(first["id"], "owner")
+        record.result.mode = "ai"
+        service.store.save(record, "owner")
+        # Access has been disabled; the old cloud text must not return from the cache.
+        off = client.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()
+        assert off["id"] != first["id"] and off["result"]["mode"] == "evidence"
+        service.settings.mode = "demo"
+        record = service.store.get(off["id"], "owner")
+        record.created_at = time.time() - 86401
+        service.store.save(record, "owner")
+        with service.store.connect() as db:
+            db.execute("UPDATE analyses SET public=1 WHERE owner=?", ("owner",))
+        fresh = client.post("/api/assistant/analyses?reuse=true", json=payload(), headers=headers).json()
+        assert fresh["id"] != off["id"] and not fresh["reused"]
+        holdout = client.post("/api/assistant/analyses?reuse=true", json={**payload(), "partition": "holdout"}, headers=headers)
+        assert holdout.status_code == 422  # No automatic holdout scoring or development-result substitution.
 
 
 def test_api_owner_guard_scope_and_safe_export(assistant_app):
@@ -72,24 +157,25 @@ def test_disabled_workflows_are_hidden_and_rejected(assistant_app):
         assert brief.status_code == 403
 
 
-def test_public_evidence_allowance_is_rate_limited(assistant_app, monkeypatch):
-    from app.assistant.store import PublicLimitError
+def seed_public_records(store, record, owner):
+    with store.connect() as db:
+        copies = [record.model_copy(update={"id": str(uuid4())}) for _ in range(300)]
+        db.executemany("INSERT INTO analyses(id,owner,payload,public) VALUES(?,?,?,1)",
+            [(copy.id, owner, copy.model_dump_json()) for copy in copies])
+
+
+def test_public_analysis_has_no_request_allowance(assistant_app, monkeypatch):
+    from app.api import routes_assistant
     service = assistant_app.state.assistant
     monkeypatch.setattr(service.settings, "mode", "demo")
-
-    def exhausted(owner):
-        raise PublicLimitError("Analysis allowance reached. Try again in an hour.")
-
-    monkeypatch.setattr(service.store, "admit_evidence", exhausted)
-
-    @assistant_app.middleware("http")
-    async def demo_session(request, call_next):
-        request.state.demo_token = "default-test-session"
-        return await call_next(request)
+    monkeypatch.setattr(routes_assistant, "visitor", lambda *args: "owner")
     with TestClient(assistant_app) as client:
-        response = client.post("/api/assistant/analyses", json=payload(), headers={"X-Sidekick-Request": "1"})
-    assert response.status_code == 429
-    assert "allowance" in response.json()["detail"]
+        headers = {"X-Sidekick-Request": "1"}
+        first = client.post("/api/assistant/analyses", json=payload(), headers=headers).json()
+        seed_public_records(service.store, AnalysisRecord.model_validate(first), "owner")
+        response = client.post("/api/assistant/analyses", json=payload(), headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "completed"
 
 
 def test_records_from_an_older_contract_are_upgraded_on_startup(assistant_app):
@@ -114,14 +200,8 @@ def test_records_from_an_older_contract_are_upgraded_on_startup(assistant_app):
             assert db.execute("SELECT COUNT(*) FROM analyses WHERE id='broken'").fetchone()[0] == 0
 
 
-def test_atomic_quota_and_access_throttle(tmp_path):
+def test_access_attempts_remain_throttled(tmp_path):
     store = AssistantStore(tmp_path)
-    store.admit("one", 1, 2)
-    with pytest.raises(ValueError):
-        store.admit("one", 1, 2)
-    store.admit("two", 1, 2)
-    with pytest.raises(ValueError):
-        store.admit("three", 1, 2)
     for _ in range(5):
         store.attempt("host")
     with pytest.raises(ValueError):
@@ -147,6 +227,39 @@ def test_rejected_ai_output_falls_back_to_recorded_evidence(assistant_app, monke
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("status,code,expected", [
+    (401, "invalid_api_key", "Replace OPENAI_API_KEY"),
+    (403, "permission_denied", "model permissions"),
+    (429, "insufficient_quota", "API billing"),
+    (429, "rate_limit_exceeded", "Wait a moment"),
+    (404, "model_not_found", "SIDEKICK_ASSISTANT_MODEL"),
+    (500, "server_error", "Try again later"),
+])
+def test_provider_errors_are_actionable_without_leaking_responses(assistant_app, monkeypatch, status, code, expected):
+    import httpx
+    from openai import APIStatusError, AuthenticationError, PermissionDeniedError, RateLimitError
+    from app.assistant import provider
+    assistant = assistant_app.state.assistant
+    assistant.settings.assistant_live_enabled = True
+    assistant.settings.openai_api_key = "not-a-real-key"
+    response = httpx.Response(status, request=httpx.Request("POST", "https://api.openai.com/v1/responses"))
+    kind = {401: AuthenticationError, 403: PermissionDeniedError, 429: RateLimitError}.get(status, APIStatusError)
+    async def fail(*args, **kwargs):
+        raise kind("Sensitive provider response with sk-secret", response=response, body={"code": code})
+    monkeypatch.setattr(provider, "enhance_analysis", fail)
+    loaded = load_bundle(get_settings().bundle_path)
+
+    async def run():
+        record = await assistant.create(loaded, AnalysisRequest(**payload()), "owner", False)
+        await asyncio.gather(*assistant.tasks.values())
+        done = assistant.store.get(record.id, "owner")
+        assert done.status == "completed" and done.result.mode == "evidence"
+        assert expected in done.result.fallback_reason
+        assert "sk-secret" not in done.model_dump_json()
+        assert done.result.assessment and done.result.sources
+    asyncio.run(run())
+
+
 def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
     from app.assistant import provider
     assistant = assistant_app.state.assistant
@@ -163,7 +276,7 @@ def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
 
     async def run():
         record = await assistant.create(loaded, context, "owner", False)
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(asyncio.gather(*assistant.tasks.values()), timeout=1)
         done = assistant.store.get(record.id, "owner")
         assert done.status == "completed"
         assert "timed out" in done.result.fallback_reason
@@ -310,18 +423,44 @@ def test_data_review_api_consent_and_scope(assistant_app, tmp_path):
         assert client.post("/api/assistant/analyses", json={"task": "data", "dataset_id": id}, headers=headers).status_code == 403
 
 
-def test_public_review_copy_has_the_same_storage_limit_as_analysis(assistant_app, monkeypatch):
+def test_public_review_has_no_request_allowance(assistant_app, monkeypatch):
     from app.api import routes_assistant
-    from app.assistant.store import PublicLimitError
     headers = {"X-Sidekick-Request": "1"}
     with TestClient(assistant_app) as client:
         original = client.post("/api/assistant/analyses", json=payload(), headers=headers).json()
         store = assistant_app.state.assistant.store
         with store.connect() as db:
             who = db.execute("SELECT owner FROM analyses WHERE id=?", (original["id"],)).fetchone()[0]
+        seed_public_records(store, AnalysisRecord.model_validate(original), who)
         assistant_app.state.assistant.settings.mode = "demo"
         monkeypatch.setattr(routes_assistant, "visitor", lambda *args: who)
-        def exhausted(owner):
-            raise PublicLimitError("Analysis allowance reached.")
-        monkeypatch.setattr(store, "admit_evidence", exhausted)
-        assert client.post(f"/api/assistant/analyses/{original['id']}/review", headers=headers).status_code == 429
+        response = client.post(f"/api/assistant/analyses/{original['id']}/review", headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["context"]["task"] == "brief"
+
+
+def test_live_analysis_ignores_legacy_usage_and_has_no_session_or_daily_cap(assistant_app, monkeypatch):
+    from app.assistant import provider
+    assistant = assistant_app.state.assistant
+    assistant.settings.assistant_live_enabled = True
+    assistant.settings.openai_api_key = "not-a-real-key"
+    with assistant.store.connect() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS usage(owner TEXT NOT NULL, created REAL NOT NULL)")
+        db.executemany("INSERT INTO usage VALUES(?,?)", [("owner", time.time())] * 30)
+    calls = []
+    async def enhance(result, context, settings, **kwargs):
+        calls.append(context)
+        return result.model_copy(update={"mode": "ai"})
+    monkeypatch.setattr(provider, "enhance_analysis", enhance)
+    loaded = load_bundle(get_settings().bundle_path)
+
+    async def run():
+        for _ in range(27):
+            record = await assistant.create(loaded, AnalysisRequest(**payload()), "owner", False)
+            assert record.status == "running"
+            await asyncio.gather(*assistant.tasks.values())
+            done = assistant.store.get(record.id, "owner")
+            assert done.status == "completed" and done.result.mode == "ai"
+            assert done.result.fallback_reason is None
+    asyncio.run(run())
+    assert len(calls) == 27

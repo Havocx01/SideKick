@@ -9,7 +9,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from app.api.deps import bundle
 from app.api.routes_experiments import check_access
 from app.assistant.exports import export_brief
-from app.assistant.store import PublicLimitError
 from app.assistant.schemas import AnalysisRequest, AnalysisRecord, AssistantAccess, AssistantCapabilities, BriefUpdate, ConsentState, ConsentUpdate
 from app.experiments.demo import owner as demo_owner, public_origin
 
@@ -130,14 +129,12 @@ def capabilities(request: Request, response: Response, experiment_id: str | None
 
 
 @router.post("/analyses", response_model=AnalysisRecord, dependencies=[Depends(guard)])
-async def create(payload: AnalysisRequest, request: Request, response: Response):
+async def create(payload: AnalysisRequest, request: Request, response: Response, reuse: bool = False):
     if payload.task not in service(request).settings.assistant_tasks:
         raise HTTPException(403, "This analysis is not enabled.")
     try:
         loaded, required = load_context(request, payload)
-        return await service(request).create(loaded, payload, visitor(request, response), required)
-    except PublicLimitError as error:
-        raise HTTPException(429, str(error)) from error
+        return await service(request).create(loaded, payload, visitor(request, response), required, reuse=reuse)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
 
@@ -195,8 +192,10 @@ def save_brief(id: str, payload: BriefUpdate, request: Request, response: Respon
     record, who = owned_record(id, request, response)
     if record.status != "completed":
         raise HTTPException(409, "Wait for the analysis to finish before saving a brief.")
+    if not payload.draft_only and not payload.text.strip():
+        raise HTTPException(422, "Add review text before saving for export.")
     record.brief_text = payload.text
-    record.brief_saved_at = time.time()
+    record.brief_saved_at = None if payload.draft_only else time.time()
     record.updated_at = time.time()
     service(request).store.save(record, who)
     return record
@@ -214,16 +213,18 @@ def prepare_review(id: str, request: Request, response: Response):
     if record.context.task == "data":
         raise HTTPException(422, "Review briefs require model results.")
     if service(request).settings.mode == "demo":
-        try:
-            service(request).store.admit_evidence(who)
-        except PublicLimitError as error:
-            raise HTTPException(429, str(error)) from error
+        service(request).store.expire_public()
     context = record.context.model_copy(update={"task": "brief"})
+    if record.cache_fingerprint:
+        saved = service(request).store.latest(who, record.cache_fingerprint)
+        if saved and (saved.context.task == "brief" or saved.brief_text is not None):
+            saved, _ = owned_record(saved.id, request, response)
+            return service(request).restore(saved, context, "Review brief")
     result = with_brief(record.result.model_copy(deep=True), context)
     result.title = "Review brief"
     now = time.time()
     review = AnalysisRecord(id=str(uuid4()), context=context, status="completed", created_at=now, updated_at=now,
-        stages=record.stages, result=result)
+        stages=record.stages, result=result, cache_fingerprint=record.cache_fingerprint)
     service(request).store.save(review, who, public=service(request).settings.mode == "demo")
     return review
 

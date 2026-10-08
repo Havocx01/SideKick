@@ -3,6 +3,13 @@ tool chip, insight card, context card, recommendation card, selection action and
 approval card patterns from Beautiful UI (https://www.beautifului.dev/) to
 Sidekick's design tokens.
 
+AssistantElements.tsx adapts ThinkingState.tsx, ContextCards.tsx and the inline
+SourceChip from StreamingText.tsx. Demo sequences and simulated streaming are
+removed; the components display Sidekick's real job states and cited metrics.
+The StreamingText word reveal plays once after the verified answer is ready,
+with reduced-motion support. It does not simulate backend generation.
+Source: https://github.com/slev12397/beautiful-ui/tree/main/components/primitives
+
 MIT License
 
 Copyright (c) 2026 Shane Levine

@@ -84,7 +84,12 @@ Tasks:
 
     'api' {
         Use-Venv
-        & $py -m uvicorn app.main:app --reload --app-dir (Join-Path $root 'backend')
+        $serverArgs = @('app.main:app', '--reload', '--app-dir', (Join-Path $root 'backend'))
+        $envFile = Join-Path $root '.env'
+        if (Test-Path -LiteralPath $envFile -PathType Leaf) {
+            $serverArgs += @('--env-file', $envFile)
+        }
+        & $py -m uvicorn @serverArgs
     }
 
     'web' { Push-Location (Join-Path $root 'frontend'); try { npm run dev } finally { Pop-Location } }
