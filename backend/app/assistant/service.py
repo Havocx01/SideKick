@@ -25,19 +25,21 @@ class AssistantService:
         return None
 
     async def create(self, loaded, context, owner, consent_required):
-        from app.assistant.evidence import build_analysis
+        from app.assistant.investigation import EvidenceTools
         if self.settings.mode == "demo":
             self.store.admit_evidence(owner)
-        result = build_analysis(loaded, context)
+        tools = loaded if context.task == "data" else EvidenceTools(loaded, context)
+        liveTools = tools.fresh()
+        result = tools.local()
         now = time.time()
         record = AnalysisRecord(id=str(uuid4()), context=context, status="completed", created_at=now, updated_at=now,
             stages=[AnalysisStage(id="evidence", label="Collect evidence", status="completed"),
-                    AnalysisStage(id="explain", label="Explain findings", status="completed"),
+                    AnalysisStage(id="explain", label="Investigate evidence", status="completed"),
                     AnalysisStage(id="verify", label="Verify references", status="completed")], result=result)
-        reason = self.live_reason(owner, context.experiment_id, consent_required)
+        reason = self.live_reason(owner, context.consent_scope, consent_required)
         if not reason and self.tasks:
             reason = "Another live analysis is running. Recorded evidence is ready."
-        if not reason and self.settings.mode == "demo":
+        if not reason:
             try:
                 self.store.admit(owner, self.settings.assistant_session_limit, self.settings.assistant_daily_limit)
             except ValueError as error:
@@ -50,20 +52,20 @@ class AssistantService:
         record.stages[1].status = "running"
         record.stages[2].status = "pending"
         self.store.save(record, owner, public=self.settings.mode == "demo")
-        self.contexts[record.id] = (owner, context.experiment_id, consent_required)
-        self.tasks[record.id] = asyncio.create_task(self._run(record, owner, consent_required))
+        self.contexts[record.id] = (owner, context.consent_scope, consent_required)
+        self.tasks[record.id] = asyncio.create_task(self._run(record, owner, consent_required, liveTools))
         return record
 
-    async def _run(self, record, owner, consent_required):
+    async def _run(self, record, owner, consent_required, tools):
         from app.assistant.provider import enhance_analysis
         try:
-            reason = self.live_reason(owner, record.context.experiment_id, consent_required)
+            reason = self.live_reason(owner, record.context.consent_scope, consent_required)
             if reason:
                 record.result.fallback_reason = reason
             else:
-                result = await asyncio.wait_for(enhance_analysis(record.result, record.context, self.settings),
+                result = await asyncio.wait_for(enhance_analysis(record.result, record.context, self.settings, tools=tools),
                     timeout=self.settings.assistant_timeout_seconds)
-                reason = self.live_reason(owner, record.context.experiment_id, consent_required)
+                reason = self.live_reason(owner, record.context.consent_scope, consent_required)
                 if reason:
                     record.result.fallback_reason = reason
                 else:

@@ -17,13 +17,13 @@ Built for ABB Accelerator 2026, Theme 1, by Adam Qablawi and Kareem Massoud.
 - Detection, alarm burden, coverage and candidate-specific warning replays.
 - Play/Pause and a cycle slider for synchronized playback of stored warning and sensor traces.
 - Matched ordinary/augmented comparisons with exploratory paired bootstrap intervals.
-- Contextual result investigation, two-model comparison and warning explanations.
+- Data review, contextual investigations, model comparison and stored warning explanations.
 - Editable review briefs with linked evidence and separate exports.
 - Frozen local models and an explicit, one-time reserved-equipment evaluation.
 - Equipment pilot agreements and an engineer decision tied to the frozen model's final results.
 - HTML, JSON, CSV and provenance exports. Raw readings and model files are excluded.
 
-No API key is needed for these workflows. Optional AI prioritizes verified findings. This is a validation workbench, not a deployment approval system or live monitor.
+No API key is needed for these workflows. Optional AI investigates the selected evidence. This is a validation workbench, not a deployment approval system or live monitor.
 
 ## Run locally
 
@@ -70,9 +70,13 @@ CSVs need at least 25 complete equipment histories, integer cycle indices, numer
 
 Set `OPENAI_API_KEY` in the server environment before starting Sidekick. The default model is `gpt-4.1-mini-2025-04-14`; override it with `SIDEKICK_ASSISTANT_MODEL`. Never put a key in frontend code or commit it.
 
-AI ranks recorded findings and suggested checks and adds a short interpretation, labelled as generated text. Sidekick rejects interpretations containing numbers, links, unknown references, physical-cause or deployment claims, or verdicts that contradict the recorded qualification; the recorded evidence analysis is then shown instead. AI cannot invent metrics, change results, train models or approve deployment. If it is unavailable, evidence analysis still works. Uploaded experiments require explicit, revocable consent before derived metrics are sent to OpenAI. Raw CSV rows, identifying labels and file paths are excluded. `store=False` does not remove the provider's possible abuse-monitoring retention.
+AI uses read-only tools to inspect recorded model metrics, fault cases and warning events. It chooses evidence-backed assessments and a next check. Every displayed claim, number and link comes from Sidekick's verified evidence; the model cannot change results, launch training or approve deployment. Without live AI, the same tools follow a fixed investigation sequence.
 
-On a hosted demo, set `SIDEKICK_ASSISTANT_PRESENTER_CODE` as a server secret to enable private presenter access. Public visitors receive evidence-only analysis. Live analysis allows one request at a time, with defaults of ten requests per presenter session and 25 per day. Free hosting can lose its local usage history on redeployment, so these limits are not a monthly billing cap. Replay mode never calls the provider. Set `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` to disable cloud calls everywhere. `SIDEKICK_ASSISTANT_TASKS` (default `investigate,compare,warning,brief`) controls which analysis workflows are offered.
+Use **Review data** during CSV setup to check the current mapping and blockers. **Use draft mapping** edits column roles only; failure confirmation and training remain your actions. In an investigation, **Add to review brief** reuses the same evidence for an editable, exportable draft.
+
+Uploaded datasets and experiments each require explicit, revocable cloud consent. Only derived checks, column types, missing-value fractions, pseudonymous aliases and recorded metrics leave the server. Raw rows, column names, equipment IDs and file paths are excluded. `store=False` does not remove the provider's possible abuse-monitoring retention.
+
+On a hosted demo, set `SIDEKICK_ASSISTANT_PRESENTER_CODE` as a server secret to enable private presenter access. Public visitors receive evidence-only analysis. Live analysis allows one request at a time, with defaults of ten requests per browser session and 25 per day, including local use. Each investigation can use up to eight read-only tool calls and one final selection, with a 45-second timeout. Free hosting can lose its local usage history on redeployment, so these limits are not a monthly billing cap. Replay mode never calls the provider. Set `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` to disable cloud calls everywhere. `SIDEKICK_ASSISTANT_TASKS` (default `investigate,compare,warning,brief,data`) controls the workflows.
 
 Routine tests use mocked provider responses. After changing the model or prompt, run the small live evaluation with `SIDEKICK_ASSISTANT_LIVE_EVAL=1` and a server-side key: `python scripts/evaluate_assistant.py`. It reports which cases passed verification and does not print the key.
 

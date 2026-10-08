@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useLocation } from "react-router-dom";
 import { assistant } from "../api/assistant";
 import { ApiError } from "../api/client";
-import type { AnalysisRecord, AnalysisRequest, AssistantCapabilities, ConsentState } from "../api/types";
+import type { AnalysisRecord, AnalysisRequest, AssistantCapabilities, ColumnMapping, ConsentState } from "../api/types";
 
 export function analysisError(error: unknown) {
   return error instanceof ApiError ? error.detail || error.message : error instanceof Error ? error.message : "Analysis unavailable. Try again.";
@@ -16,7 +16,9 @@ interface AnalysisState {
   consent: ConsentState | null;
   error: string;
   pending: boolean;
-  start: (context: AnalysisRequest) => void;
+  start: (context: AnalysisRequest, applyMapping?: (mapping: ColumnMapping) => void) => void;
+  applyMapping: () => void;
+  prepareReview: () => Promise<void>;
   retry: () => void;
   close: (restoreFocus?: boolean) => void;
   cancel: () => Promise<void>;
@@ -50,17 +52,19 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   }, []);
   const recordRef = useRef<AnalysisRecord | null>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const mappingReceiver = useRef<((mapping: ColumnMapping) => void) | undefined>(undefined);
   const updateRecord = (value: AnalysisRecord | null) => { recordRef.current = value; setRecord(value); };
   const close = useCallback((restoreFocus = true) => {
     generation.current += 1;
     const previous = recordRef.current;
     if (previous && isActive(previous)) void assistant.cancel(previous.id).catch(() => undefined);
     setOpen(false); setPending(false); updateRecord(null); setContext(null); setError("");
+    mappingReceiver.current = undefined;
     if (restoreFocus) requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); });
   }, []);
   // A replay cycle is captured by the action. Playback does not invalidate it.
   const params = new URLSearchParams(location.search);
-  const scope = [location.pathname, ...["candidate", "partition", "equipment", "scenario", "step"].map(key => params.get(key))].join("|");
+  const scope = [location.pathname, ...["candidate", "partition", "equipment", "scenario", "step", "dataset"].map(key => params.get(key))].join("|");
   useEffect(() => { close(false); }, [scope, close]);
   useEffect(() => () => { generation.current += 1; const current = recordRef.current; if (current && isActive(current)) void assistant.cancel(current.id).catch(() => undefined); }, []);
 
@@ -71,11 +75,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     if (rememberOpener) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setContext(next); setOpen(true); setError(""); setPending(true); updateRecord(null); setCapabilities(null); updateConsent(null);
     try {
-      const caps = await assistant.capabilities(next.experiment_id);
+      const caps = await assistant.capabilities(next.experiment_id, next.dataset_id);
       if (token !== generation.current) return;
       setCapabilities(caps);
-      if (caps.consent_required && next.experiment_id) {
-        const state = await assistant.consent(next.experiment_id);
+      const consentScope = next.dataset_id ? `dataset:${next.dataset_id}` : next.experiment_id;
+      if (caps.consent_required && consentScope) {
+        const state = await assistant.consent(consentScope);
         if (token !== generation.current) return;
         updateConsent(state);
       }
@@ -103,21 +108,22 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     catch (failure) { if (token === generation.current) setError(analysisError(failure)); }
   }
   async function setConsent(allowed: boolean) {
-    if (!context?.experiment_id) return;
+    const consentScope = context?.dataset_id ? `dataset:${context.dataset_id}` : context?.experiment_id;
+    if (!context || !consentScope) return;
     const token = ++generation.current;
     const current = recordRef.current;
     if (current && isActive(current)) await assistant.cancel(current.id);
-    const state = await assistant.setConsent(context.experiment_id, allowed);
+    const state = await assistant.setConsent(consentScope, allowed);
     if (token !== generation.current) return;
     updateConsent(state);
     updateRecord(null);
-    const caps = await assistant.capabilities(context.experiment_id);
+    const caps = await assistant.capabilities(context.experiment_id, context.dataset_id);
     if (token === generation.current) setCapabilities(caps);
   }
   async function unlock(code: string) {
     const token = generation.current;
     await assistant.unlock(code);
-    const caps = await assistant.capabilities(context?.experiment_id);
+    const caps = await assistant.capabilities(context?.experiment_id, context?.dataset_id);
     if (token === generation.current) setCapabilities(caps);
   }
   async function saveBrief(text: string) {
@@ -127,5 +133,17 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     const next = await assistant.saveBrief(current.id, text);
     if (token === generation.current) updateRecord(next);
   }
-  return <AnalysisContext.Provider value={{ open, context, record, capabilities, consent, error, pending, start: next => void run(next, true), retry: () => { if (context) void run(context, false); }, close, cancel, setConsent, unlock, saveBrief, enabled: task => tasks.includes(task) }}>{children}</AnalysisContext.Provider>;
+  async function prepareReview() {
+    const current = recordRef.current;
+    if (!current || isActive(current)) return;
+    const token = ++generation.current;
+    const next = await assistant.prepareReview(current.id);
+    if (token === generation.current) { setContext(next.context); updateRecord(next); }
+  }
+  function applyMapping() {
+    const mapping = recordRef.current?.result?.suggested_mapping;
+    if (!mapping || !mappingReceiver.current || context?.task !== "data") return;
+    mappingReceiver.current(mapping); close();
+  }
+  return <AnalysisContext.Provider value={{ open, context, record, capabilities, consent, error, pending, start: (next, receiver) => { mappingReceiver.current = receiver; void run(next, true); }, applyMapping, prepareReview, retry: () => { if (context) void run(context, false); }, close, cancel, setConsent, unlock, saveBrief, enabled: task => tasks.includes(task) }}>{children}</AnalysisContext.Provider>;
 }

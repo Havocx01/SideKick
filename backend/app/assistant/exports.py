@@ -28,18 +28,22 @@ def export_brief(record):
         rows.append(("History", context.equipment_id))
     if context.cycle is not None:
         rows.append(("Cycle", str(context.cycle)))
+    if context.dataset_id:
+        rows.append(("Dataset", context.dataset_id))
     sections = ""
     if result:
-        rows += [("Mode", "AI interpretation" if result.mode == "ai" else "Recorded evidence analysis"), ("Provider model", result.model or "None"),
+        rows += [("Mode", "AI investigation" if result.mode == "ai" else "Recorded evidence analysis"), ("Provider model", result.model or "None"),
                  ("Prompt version", result.prompt_version), ("Evidence digest", result.evidence_digest), ("Verification", result.verification)]
         if result.fallback_reason:
             rows.append(("Fallback", result.fallback_reason))
         findings = "".join(f"<li><strong>{e(f.title)}</strong>: {e(f.detail)}</li>" for f in result.findings)
-        sources = "".join(f"<li>{e(s.label)}: {e(s.display)} <small>({e(s.context)}; metric {e(s.metric)}, unit {e(s.unit)})</small></li>" for s in result.sources)
+        sources = "".join(f'<li id="{e(s.id)}">{e(s.label)}: {e(s.display)} <small>({e(s.context)}; reference {e(s.id)}, metric {e(s.metric)}, unit {e(s.unit)})</small></li>' for s in result.sources)
         actions = "".join(f"<li><strong>{e(a.label)}</strong>: {e(a.detail)}</li>" for a in result.actions)
         limits = "".join(f"<li>{e(item)}</li>" for item in result.limitations)
         interpretation = f"<h2>AI interpretation</h2><p class=note>Generated text. Verify it against the evidence below.</p><p>{e(result.interpretation)}</p>" if result.interpretation else ""
-        sections = f"{interpretation}<h2>Findings</h2><ul>{findings}</ul><h2>Evidence</h2><ul>{sources}</ul><h2>Proposed next checks</h2><ul>{actions or '<li>Agree a next check with the equipment engineer.</li>'}</ul><h2>Limitations</h2><ul>{limits}</ul>"
+        assessment = "".join(f"<li>{e(claim.text)} <small>[{e(', '.join(claim.source_ids))}]</small></li>" for claim in result.assessment)
+        trace = "".join(f"<li>{e(call.label)} <small>[{e(', '.join(call.source_ids))}]</small></li>" for call in result.investigation)
+        sections = f"{interpretation}<h2>Assessment</h2><ul>{assessment}</ul><h2>Findings</h2><ul>{findings}</ul><h2>Evidence</h2><ul>{sources}</ul><h2>Proposed next checks</h2><ul>{actions or '<li>Agree a next check with the equipment engineer.</li>'}</ul><h2>Limitations</h2><ul>{limits}</ul><h2>Investigation record</h2><ul>{trace}</ul>"
     meta = "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in rows)
     document = (f'<!doctype html><html lang="en"><meta charset="utf-8"><title>{title}</title>'
                 '<style>body{font:16px/1.6 system-ui;max-width:850px;margin:40px auto;padding:24px}pre{white-space:pre-wrap;font:inherit}'

@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
 
             cleanupTask = asyncio.create_task(expireResults())
     app.state.assistant = AssistantService(settings)
-    logger.info("Contextual evidence analysis ready; cloud prioritization is optional")
+    logger.info("Read-only evidence investigation ready; live AI is optional")
     # Warm the bundle so a cold start pays the parse cost before the first request.
     try:
         from app.api.deps import _cached_bundle
