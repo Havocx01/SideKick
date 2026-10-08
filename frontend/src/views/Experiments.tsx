@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, experiments } from "../api/client";
 import type { ColumnMapping, DatasetRegistration, ExperimentRecord, ExperimentProtocol, PilotBrief } from "../api/types";
@@ -6,8 +6,11 @@ import { defaultProtocol, PilotBriefEditor, ProtocolEditor } from "../components
 import { Badge, Button, Field, Panel, Select, StateBlock } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
 import { useAnalysis } from "../components/AnalysisProvider";
-import { ArrowRight, FlaskConical, Layers, Upload } from "lucide-react";
+import { AlertCircle, ArrowRight, Check, Circle, Clock3, FlaskConical, Layers, LoaderCircle, Upload } from "lucide-react";
 import { NumberField } from "@/registry/components/number-field/number-field";
+import { Progress as ArcProgress } from "@/components/arc/progress/progress";
+import { CsvAttachment } from "../components/CsvAttachment";
+import { observeTraining } from "../components/TrainingNotifications";
 import { integer, percent } from "../format";
 
 export const activeJob = (status: string) => ["queued", "running", "cancelling"].includes(status);
@@ -17,6 +20,19 @@ function errorMessage(error: unknown) {
   return "Something went wrong. Try again.";
 }
 const duration = (seconds: number) => `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+
+function minimumUploadDisplay(signal: AbortSignal) {
+  return new Promise<void>(resolve => {
+    function finish() {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    }
+    const timer = window.setTimeout(finish, 3000);
+    signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
+  });
+}
 
 function TrainingOnly({ children, upload = false }: { children: ReactNode; upload?: boolean }) {
   const health = useApi(() => api.health(), []);
@@ -129,11 +145,16 @@ function ExperimentSetup() {
   const [error, setError] = useState("");
   const [detection, setDetection] = useState(70);
   const [csvText, setCsvText] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [uploadState, setUploadState] = useState<"uploading" | "ready" | "error">("ready");
+  const uploadController = useRef<AbortController | null>(null);
+  const csvInput = useRef<HTMLInputElement>(null);
   const [burden, setBurden] = useState(10);
   const [protocol, setProtocol] = useState<ExperimentProtocol>(defaultProtocol([]));
   const [pilotBrief, setPilotBrief] = useState<PilotBrief>({ data_classification: "unverified" });
   const datasetId = params.get("dataset");
   const isSample = params.get("source") === "sample";
+  useEffect(() => () => uploadController.current?.abort(), []);
   function receive(value: DatasetRegistration) {
     setData(value);
     setComplete(value.complete_histories ?? false);
@@ -166,21 +187,44 @@ function ExperimentSetup() {
     };
   }, [datasetId]);
   async function prepare(file?: File) {
+    if (file) setAttachment(file);
     if (file && file.size > 10 * 1024 * 1024) {
       setError("CSV files must be 10 MB or smaller.");
+      setUploadState("error");
       return;
     }
+    const controller = file ? new AbortController() : null;
+    uploadController.current = controller;
+    if (file) setUploadState("uploading");
     setBusy(true);
     setError("");
+    const minimumDisplay = controller ? minimumUploadDisplay(controller.signal) : undefined;
     try {
-      const value = file ? await experiments.upload(file) : await experiments.sample();
+      const value = file ? await experiments.upload(file, controller!.signal) : await experiments.sample();
+      await minimumDisplay;
+      if (controller?.signal.aborted) return;
+      if (file) setUploadState("ready");
       receive(value);
       setParams({ source: file ? "upload" : "sample", dataset: value.dataset_id }, { replace: true });
     } catch (e) {
+      await minimumDisplay;
+      if (controller?.signal.aborted) return;
+      if (file) setUploadState("error");
       setError(errorMessage(e));
     } finally {
-      setBusy(false);
+      if (uploadController.current === controller) {
+        uploadController.current = null;
+        setBusy(false);
+      }
     }
+  }
+  function removeAttachment() {
+    uploadController.current?.abort();
+    uploadController.current = null;
+    setAttachment(null); setUploadState("ready"); setError(""); setBusy(false);
+    setData(null); setMapping(null); setComplete(false);
+    setParams({ source: "upload" }, { replace: true });
+    requestAnimationFrame(() => csvInput.current?.focus());
   }
   async function confirm() {
     if (!data || !mapping) return;
@@ -207,6 +251,7 @@ function ExperimentSetup() {
         max_early_alarm_burden: burden / 100
         , ...(health.data?.can_edit_protocol ? { protocol: { ...protocol, min_detection_fraction: detection / 100, max_early_alarm_burden: burden / 100 }, pilot_brief: pilotBrief } : {})
       });
+      observeTraining(result, true);
       navigate(`/experiments/${result.experiment_id}`);
     } catch (e) {
       setError(errorMessage(e));
@@ -224,22 +269,25 @@ function ExperimentSetup() {
       options={[...(key === "failure_cycle" ? [{ value: "__none", label: "No failure-cycle column" }] : []), ...(data?.columns ?? []).map(value => ({ value, label: value }))]}
     />
   );
+  const invalidSettings = !Number.isFinite(detection) || !Number.isFinite(burden) || detection < 0 || detection > 100 || burden < 0 || burden > 100
+    || Boolean(health.data?.can_edit_protocol && (!protocol.scenarios?.some(s => s.required !== false)
+      || !((protocol.min_useful_lead ?? 10) < (protocol.horizon_cycles ?? 30) && (protocol.horizon_cycles ?? 30) < (protocol.transition_band_end ?? 45))));
   return (
-    <>
+    <div className="experiment-setup">
       <header className="page-head">
         <h1>{isSample ? "Run a sample experiment" : "Use your equipment histories"}</h1>
       </header>
       <ol className="setup-steps" aria-label="Data setup steps">
         {["Choose data", "Confirm mapping", "Train models"].map((step, index) => <li key={step} aria-current={index === (!data ? 0 : data.confirmed ? 2 : 1) ? "step" : undefined}><span className="step-number">{index + 1}</span>{step}</li>)}
       </ol>
-      {error && (
+      {error && !(attachment && uploadState === "error" && !data) && (
         <div className="state error" role="alert">
           {error} <Link to="/experiments">View your experiments</Link>
           {" · "}
           <Link to="/comparison">Explore recorded benchmark</Link>
         </div>
       )}
-      {busy && <p role="status">Preparing your request. Please wait…</p>}
+      {busy && uploadState !== "uploading" && <p role="status">Preparing your request. Please wait…</p>}
       {!data && (isSample ? (
         <Panel title="Generate a practice dataset">
           <p>
@@ -255,10 +303,11 @@ function ExperimentSetup() {
           <Panel title="Upload CSV">
             <div className="csv-upload-layout">
               <div className="csv-upload-main">
-                <label className="csv-file-picker">
-                  <Upload size={24} strokeWidth={1.75} aria-hidden="true" />
+                {attachment ? <CsvAttachment name={attachment.name} size={attachment.size} state={uploadState} error={error} onRemove={removeAttachment} onRetry={attachment.size <= 10 * 1024 * 1024 ? () => void prepare(attachment) : undefined} /> : <label className="csv-file-picker">
+                  <span className="csv-attachment-media"><Upload size={20} strokeWidth={1.75} aria-hidden="true" /></span>
                   <span><strong>Choose a CSV file</strong><small>CSV · Up to 10 MB</small></span>
                   <input
+                    ref={csvInput}
                     type="file"
                     accept=".csv,text/csv"
                     aria-label="CSV file (up to 10 MB)"
@@ -269,7 +318,7 @@ function ExperimentSetup() {
                       if (file) void prepare(file);
                     }}
                   />
-                </label>
+                </label>}
                 <details className="csv-paste disclosure-plain">
                   <summary>Paste CSV instead</summary>
                   <Field label="CSV contents">
@@ -292,37 +341,20 @@ function ExperimentSetup() {
       ))}
       {data && (
         <>
-          <Panel
-            title={data.name}
+          {!data.confirmed && <Panel
+            title={data.source === "upload" ? "Review attached CSV" : data.name}
             aside={
               <Badge tone={data.source === "synthetic" ? "warn" : "info"}>
                 {data.source === "synthetic" ? "Synthetic demonstration" : "Uploaded data"}
               </Badge>
             }
           >
-            <p>
+            {data.source === "upload" && <CsvAttachment name={data.name} size={attachment?.name === data.name ? attachment.size : undefined} state="ready" disabled={busy} onRemove={removeAttachment} />}
+            <p className={data.source === "upload" ? "csv-attached-summary" : undefined}>
               {data.row_count.toLocaleString()} readings across {data.columns.length} columns.
             </p>
-            <details open={!data.confirmed}>
-              <summary>Preview the first {data.preview.length} rows</summary>
-              <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    {data.columns.map((c) => (<th key={c}>{c}</th>))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.preview.map((row, i) => (
-                    <tr key={i}>
-                      {data.columns.map((c) => (<td key={c} title={String(row[c] ?? "missing")}>{row[c] === null ? "missing" : typeof row[c] === "number" ? row[c].toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(row[c])}</td>))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            </details>
-          </Panel>
+            <DatasetPreview data={data} />
+          </Panel>}
           {!data.confirmed && mapping && (
             <Panel
               title="Confirm what each column means"
@@ -383,9 +415,13 @@ function ExperimentSetup() {
           )}
           {data.confirmed && data.profile && data.splits && (
             <>
-              <Panel title="Data checked: review the equipment split">
+              <Panel title="Data ready" description={`${data.name} · ${data.row_count.toLocaleString()} readings · ${data.mapping?.sensors.length ?? 0} sensors`}
+                aside={<Badge tone={data.source === "synthetic" ? "warn" : "info"}>{data.source === "synthetic" ? "Synthetic demonstration" : "Uploaded data"}</Badge>}>
                 <div className="split-overview"><div><strong>{data.splits.development.length}</strong><span>Development · {data.splits.folds.length} folds</span></div><div><strong>{data.splits.holdout.length}</strong><span>Reserved · Unscored</span></div></div>
-                <details>
+                {data.profile.findings?.some(finding => finding.severity !== "info") && <ul className="setup-data-warnings">{data.profile.findings.filter(finding => finding.severity !== "info").map(finding => <li key={finding.code}>{finding.message}</li>)}</ul>}
+                <details className="setup-data-inspection disclosure-plain"><summary>Inspect data and equipment split</summary>
+                <DatasetPreview data={data} />
+                <details className="disclosure-plain">
                   <summary>Inspect equipment assignments</summary>
                   <p>Equipment stays separate across training and evaluation.</p>
                   <p>Reserved: {data.splits.holdout.join(", ")}</p>
@@ -406,36 +442,42 @@ function ExperimentSetup() {
                     {data.profile.findings?.map((f) => (<li key={f.code}>{f.message}</li>))}
                   </ul>
                 </details>
-                <details><summary>Dataset identifiers</summary><p className="note">
+                <details className="disclosure-plain"><summary>Dataset identifiers</summary><p className="note">
                   Dataset fingerprint: <code>{data.profile.data_hash}</code>.{" "}
                   {health.data?.mode === "demo"
                     ? "The hosted sample has a fixed mapping. Use the local app for your own data."
                     : "This confirmed copy is fixed; upload another copy to change its mapping."}
                 </p></details>
+                </details>
               </Panel>
               <Panel
-                title="Define the experiment protocol"
+                title="Review the test"
                 description="Demonstration defaults. Adjust to your equipment."
               >
+                <dl className="setup-test-summary">
+                  <div><dt>Warning window</dt><dd>{protocol.min_useful_lead ?? 10}–{protocol.horizon_cycles ?? 30} <span>cycles before failure</span></dd></div>
+                  {health.data?.can_edit_protocol && <div><dt>Required faults</dt><dd>{protocol.scenarios?.filter(s => s.required !== false).length ?? 0} <span>sensor tests</span></dd></div>}
+                  <div><dt>Minimum timely warnings</dt><dd>{detection}%</dd></div>
+                  <div><dt>Max. early-alarm time</dt><dd>{burden}%</dd></div>
+                </dl>
+                <div className="experiment-protocol-sections">
+                <section className="setup-advanced" aria-label="Adjust test settings"><h3>Adjust test settings</h3>
                 <div className="mapping-roles">
                   <NumberField label="Minimum warned in time" value={detection} onValueChange={setDetection} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
                   <NumberField label="Maximum early-alarm time" value={burden} onValueChange={setBurden} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
                 </div>
-                <div className="experiment-protocol-sections">
-                {health.data?.can_edit_protocol ? <><ProtocolEditor value={protocol} onChange={setProtocol} sensors={data.mapping?.sensors ?? []} disabled={busy} /><PilotBriefEditor value={pilotBrief} onChange={setPilotBrief} disabled={busy} /></> : <p>Useful warnings: 10 to 30 cycles before failure. Early-alarm burden: time in alarm more than 45 cycles before failure.</p>}
-                <details><summary>Training settings</summary><p className="note">
+                {health.data?.can_edit_protocol ? <ProtocolEditor value={protocol} onChange={setProtocol} sensors={data.mapping?.sensors ?? []} disabled={busy} /> : <p className="note">Useful warnings: 10 to 30 cycles before failure. Early-alarm burden: time in alarm more than 45 cycles before failure.</p>}
+                <p className="note setup-training-note">
                   Fixed for this version: five equipment folds, {health.data?.sample_configurations ?? 10} candidate
                   configurations and a 20-cycle feature window. Final validation is a separate, explicit local action.
-                </p></details>
+                </p>
+                </section>
+                {health.data?.can_edit_protocol && <PilotBriefEditor value={pilotBrief} onChange={setPilotBrief} disabled={busy} />}
                 </div>
+                {invalidSettings && <p className="setup-settings-error" role="alert">Check the test limits and warning-window order in Adjust test settings.</p>}
                 <div className="experiment-start-actions">
                 <Button variant="primary" loading={busy}
-                  disabled={
-                    !Number.isFinite(detection) || !Number.isFinite(burden) || detection < 0 || detection > 100 ||
-                    burden < 0 ||
-                    burden > 100
-                    || (health.data?.can_edit_protocol && (!protocol.scenarios?.some(s => s.required !== false) || !((protocol.min_useful_lead ?? 10) < (protocol.horizon_cycles ?? 30) && (protocol.horizon_cycles ?? 30) < (protocol.transition_band_end ?? 45))))
-                  }
+                  disabled={invalidSettings}
                   onClick={start}
                 >
                   Train and challenge models
@@ -449,8 +491,16 @@ function ExperimentSetup() {
           )}
         </>
       )}
-    </>
+    </div>
   );
+}
+
+function DatasetPreview({ data }: { data: DatasetRegistration }) {
+  return <details className="disclosure-plain"><summary>Preview the first {data.preview.length} rows</summary>
+    <div className="table-scroll"><table><thead><tr>{data.columns.map(column => <th key={column}>{column}</th>)}</tr></thead>
+      <tbody>{data.preview.map((row, index) => <tr key={index}>{data.columns.map(column => <td key={column} title={String(row[column] ?? "missing")}>{row[column] === null ? "missing" : typeof row[column] === "number" ? row[column].toLocaleString(undefined, { maximumFractionDigits: 3 }) : String(row[column])}</td>)}</tr>)}</tbody>
+    </table></div>
+  </details>;
 }
 
 export function ExperimentHistory() {
@@ -542,6 +592,7 @@ function Progress() {
   const navigate = useNavigate();
   const [record, setRecord] = useState<ExperimentRecord | null>(null);
   const [error, setError] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
   useEffect(() => {
     if (!experimentId) return;
     const id = experimentId;
@@ -551,6 +602,7 @@ function Progress() {
         const record = await experiments.get(id);
         if (!alive) return;
         setRecord(record);
+        observeTraining(record);
         setError("");
         if (record.status === "completed") navigate(`/experiments/${id}/comparison`, { replace: true });
       } catch (error) {
@@ -566,18 +618,30 @@ function Progress() {
   }, [experimentId, navigate]);
   async function cancel() {
     if (!experimentId) return;
+    setCancelBusy(true);
     try {
       setRecord(await experiments.cancel(experimentId));
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      setCancelBusy(false);
     }
   }
-  const stages = ["validating", "training", "selecting thresholds", "testing faults", "preparing results"];
+  const stages = record?.job_kind === "freeze"
+    ? [["validating", "Validate data"], ["refitting selected model", "Refit selected model"], ["preparing frozen model", "Prepare frozen model"]]
+    : record?.job_kind === "validation"
+      ? [["validating", "Validate data"], ["testing reserved equipment", "Test reserved equipment"]]
+      : [["validating", "Validate data"], ["training", "Train models"], ["selecting thresholds", "Set thresholds"], ["testing faults", "Test sensor faults"], ["preparing results", "Prepare results"]];
+  const currentStage = stages.findIndex(([stage]) => stage === record?.stage);
+  const hasTotal = Boolean(record?.total_work && record.total_work > 0);
+  const workCount = record?.completed_work ?? 0;
+  const workText = hasTotal ? `${workCount} / ${record?.total_work} ${record?.work_unit || "work items completed"}`
+    : workCount > 0 ? `${workCount} ${record?.work_unit || "work items completed"}`
+      : record?.work_unit || (record?.status === "queued" ? "Waiting to start" : "Work count unavailable for this stage.");
   return (
-    <>
+    <div className="experiment-progress">
       <header className="page-head">
         <h1>{record?.name ?? "Local experiment"}</h1>
-        <p>Runs continue if you refresh.</p>
       </header>
       {error && (
         <div role="alert" className="state error">
@@ -588,30 +652,37 @@ function Progress() {
       {record && (
         <Panel
           title={
-            activeJob(record.status) ? "Experiment in progress" : `Experiment ${record.status.replaceAll("_", " ")}`
+            record.status === "queued" ? "Experiment queued" : record.status === "cancelling" ? "Cancelling experiment"
+              : activeJob(record.status) ? "Experiment in progress" : `Experiment ${record.status.replaceAll("_", " ")}`
           }
           aside={<Badge>{record.source === "synthetic" ? "Synthetic data" : "Uploaded data"}</Badge>}
         >
-          <p className="elapsed">{duration(record.elapsed_seconds ?? 0)} elapsed</p>
-          <ol className="job-stages">
-            {stages.map((stage) => (
-              <li key={stage} aria-current={record.stage === stage ? "step" : undefined} className={stages.indexOf(stage) < stages.indexOf(record.stage ?? "") ? "stage-complete" : undefined}>
-                {stage}
-              </li>
-            ))}
+          <div className="run-timing"><Clock3 size={16} aria-hidden="true" /><span className="elapsed">{duration(record.elapsed_seconds ?? 0)}</span><span>elapsed</span></div>
+          <ol className="job-stages" aria-label="Experiment stages">
+            {stages.map(([stage, label], index) => {
+              const current = index === currentStage;
+              const done = index < currentStage;
+              const running = current && record.status === "running";
+              const stopped = current && !activeJob(record.status);
+              const failed = stopped && record.status !== "cancelled";
+              return <li key={stage} aria-current={current ? "step" : undefined} className={done ? "stage-complete" : stopped ? "stage-stopped" : undefined}>
+                <span className="job-stage-mark" aria-hidden="true">{done ? <Check size={20} /> : running ? <LoaderCircle className="run-spinner" size={20} /> : failed ? <AlertCircle size={20} /> : current ? <Clock3 size={20} /> : <Circle size={12} />}</span>
+                <span>{label}</span><span className="sr-only">{done ? "Completed" : current ? running ? "In progress" : record.status.replaceAll("_", " ") : "Not started"}</span>
+              </li>;
+            })}
           </ol>
-          <p role="status">
-            {record.completed_work ?? 0}
-            {record.total_work ? ` / ${record.total_work}` : ""}{" "}
-            {record.work_unit || "completed work items in this stage"}
-          </p>
+          {currentStage === -1 && record.stage && record.status !== "queued" && <p className="note run-unlisted-stage">Current stage: {record.stage}</p>}
+          <div className="run-work-progress" role="status" aria-live="polite">
+            {hasTotal ? <ArcProgress label={`Current stage: ${workText}`} value={workCount} max={record.total_work!} /> : <p className="note">{workText}</p>}
+          </div>
           {record.error && (
             <p className="state error" role="alert">
               {record.error}
             </p>
           )}
+          <div className="run-actions">
           {activeJob(record.status) ? (
-            <Button variant="secondary" disabled={record.status === "cancelling"} onClick={cancel}>
+            <Button variant="secondary" loading={cancelBusy} disabled={record.status === "cancelling"} onClick={cancel}>
               {record.status === "cancelling" ? "Cancelling…" : "Cancel experiment"}
             </Button>
           ) : (
@@ -622,11 +693,14 @@ function Progress() {
               Set up another run with this dataset
             </Link>
           )}
-          <details><summary>Run identifiers</summary><p className="note">
-            Experiment {record.experiment_id} · configuration {record.config_fingerprint}
-          </p></details>
+          {activeJob(record.status) && <p className="note">Runs continue if you refresh.</p>}
+          </div>
+          <details className="run-identifiers disclosure-plain"><summary>Run identifiers</summary><dl>
+            <div><dt>Experiment</dt><dd><code>{record.experiment_id}</code></dd></div>
+            <div><dt>Configuration</dt><dd><code>{record.config_fingerprint}</code></dd></div>
+          </dl></details>
         </Panel>
       )}
-    </>
+    </div>
   );
 }

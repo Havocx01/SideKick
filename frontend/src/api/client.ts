@@ -196,9 +196,10 @@ export const experiments = {
   validate: (id: string) => post<ValidationRecord>(`/api/experiments/${id}/validation`, { untouched_confirmed: true }),
   validation: (id: string) => request<OperationState<ValidationRecord>>(`/api/experiments/${id}/validation`),
   sample: () => post<DatasetRegistration>("/api/datasets/sample"),
-  upload: (file: File) =>
+  upload: (file: File, signal?: AbortSignal) =>
     request<DatasetRegistration>("/api/datasets/upload", {
       method: "POST",
+      signal,
       body: file,
       headers: { "Content-Type": "text/csv", "X-Filename": encodeURIComponent(file.name) }
     }),

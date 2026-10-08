@@ -1,0 +1,46 @@
+.viewport {
+  position: fixed;
+  right: var(--space-6);
+  bottom: max(var(--space-6), env(safe-area-inset-bottom));
+  z-index: 100;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-3);
+  width: 380px;
+  max-width: calc(100% - var(--space-8));
+  pointer-events: none;
+}
+
+.toast {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--foreground);
+  padding: var(--space-4);
+  box-shadow: var(--popover-shadow);
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateX(var(--toast-swipe-movement-x, 0px));
+  transition: transform var(--duration-standard) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
+}
+.toast[data-starting-style], .toast[data-ending-style] { opacity: 0; transform: translateY(var(--space-3)); }
+.toast[data-ending-style][data-swipe-direction="right"] { transform: translateX(100%); }
+.toast[data-limited] { display: none; }
+.content { display: grid; grid-template-columns: 20px minmax(0, 1fr) 32px; align-items: start; gap: var(--space-3); }
+.icon { color: var(--success); margin-top: var(--space-1); }
+.text { min-width: 0; }
+.title { font-size: var(--text-base); font-weight: 500; }
+.description { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--text-secondary); overflow-wrap: anywhere; }
+.action { display: inline-flex; align-items: center; min-height: 32px; margin-top: var(--space-2); padding-inline: var(--space-3); background: var(--fill); border-radius: var(--radius-control); color: var(--foreground); font-weight: 500; }
+.close { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 0; border-radius: var(--radius-control); padding: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.action:hover, .action:focus-visible, .close:hover, .close:focus-visible { background: var(--fill-strong); color: var(--foreground); text-decoration: none; outline: none; }
+@media (max-width: 600px) {
+  .viewport { right: var(--space-4); bottom: max(var(--space-4), env(safe-area-inset-bottom)); }
+  .content { grid-template-columns: 20px minmax(0, 1fr) 44px; }
+  .close { width: 44px; height: 44px; }
+  .action { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; }
+  .toast[data-starting-style], .toast[data-ending-style] { transform: none; }
+}
