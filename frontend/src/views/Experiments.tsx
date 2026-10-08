@@ -238,50 +238,56 @@ function ExperimentSetup() {
         </div>
       )}
       {busy && <p role="status">Preparing your request. Please wait…</p>}
-      {!data && (
-        <Panel title={isSample ? "Generate a practice dataset" : "Choose a CSV"}>
-          {isSample ? (
-            <>
-              <p>
-                {health.data?.sample_equipment ?? 60} simulated histories. Practice data, not field validation.{" "}
-                {health.data?.mode === "demo" &&
-                  "10 development histories; 20 reserved."}
-              </p>
-              <Button variant="primary" loading={busy} onClick={() => prepare()}>
-                Generate sample data
-              </Button>
-            </>
-          ) : (
-            <>
-              <p>
-                At least 25 complete failure histories. 20 will be reserved.
-              </p>
-              <Field label="CSV file (up to 10 MB)">
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) void prepare(file);
-                  }}
-                />
-              </Field>
-              <p className="note">
-                UTF-8 · Unique headers · Integer cycles · Observed failures
-              </p>
-              <details className="csv-paste">
-                <summary>Paste CSV instead</summary>
-                <Field label="CSV contents">
-                  <textarea value={csvText} disabled={busy} onChange={event => setCsvText(event.target.value)} rows={8} placeholder={"equipment_id,cycle,sensor_1,failure_cycle\nengine_1,1,0.52,120"} />
-                </Field>
-                <Button disabled={busy || !csvText.trim()} loading={busy} onClick={() => prepare(new File([csvText], "pasted-histories.csv", { type: "text/csv" }))}>Use pasted CSV</Button>
-              </details>
-            </>
-          )}
+      {!data && (isSample ? (
+        <Panel title="Generate a practice dataset">
+          <p>
+            {health.data?.sample_equipment ?? 60} simulated histories. Practice data, not field validation.{" "}
+            {health.data?.mode === "demo" && "10 development histories; 20 reserved."}
+          </p>
+          <Button variant="primary" loading={busy} onClick={() => prepare()}>
+            Generate sample data
+          </Button>
         </Panel>
-      )}
+      ) : (
+        <div className="csv-upload">
+          <Panel title="Upload CSV">
+            <div className="csv-upload-layout">
+              <div className="csv-upload-main">
+                <label className="csv-file-picker">
+                  <Upload size={24} strokeWidth={1.75} aria-hidden="true" />
+                  <span><strong>Choose a CSV file</strong><small>CSV · Up to 10 MB</small></span>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    aria-label="CSV file (up to 10 MB)"
+                    disabled={busy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) void prepare(file);
+                    }}
+                  />
+                </label>
+                <details className="csv-paste disclosure-plain">
+                  <summary>Paste CSV instead</summary>
+                  <Field label="CSV contents">
+                    <textarea value={csvText} disabled={busy} onChange={event => setCsvText(event.target.value)} rows={8} placeholder={"equipment_id,cycle,sensor_1,failure_cycle\nengine_1,1,0.52,120"} />
+                  </Field>
+                  <Button disabled={busy || !csvText.trim()} loading={busy} onClick={() => prepare(new File([csvText], "pasted-histories.csv", { type: "text/csv" }))}>Use pasted CSV</Button>
+                </details>
+              </div>
+              <aside className="csv-upload-requirements" aria-labelledby="csv-requirements-title">
+                <h3 id="csv-requirements-title">Data requirements</h3>
+                <dl>
+                  <div><dt>Complete failure histories</dt><dd>25 minimum</dd></div>
+                  <div><dt>Reserved for validation</dt><dd>20 histories</dd></div>
+                </dl>
+                <p className="note">UTF-8 · Unique headers<br />Whole-number cycles · Observed failures</p>
+              </aside>
+            </div>
+          </Panel>
+        </div>
+      ))}
       {data && (
         <>
           <Panel

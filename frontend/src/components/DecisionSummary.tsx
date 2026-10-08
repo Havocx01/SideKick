@@ -11,7 +11,7 @@ import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { Badge, Button, IconButton, Panel, StateBlock } from "./Chrome";
 import { Check, ChevronRight, Download, FileText, Star, X } from "lucide-react";
 
-export function EvidenceExport() {
+export function EvidenceExport({ labels = false }: { labels?: boolean } = {}) {
   const api = useEvidence();
   const id = useExperimentId();
   const [busy, setBusy] = useState(false);
@@ -31,8 +31,9 @@ export function EvidenceExport() {
   return (
     <div className="evidence-export">
       <div className="export-actions">
-        <a className="action-icon" href={api.reportUrl} target="_blank" rel="noopener noreferrer" aria-label="Open report" title="Open report"><FileText size={17} aria-hidden="true" /></a>
-        <IconButton label="Export ZIP" loading={busy} onClick={download}><Download size={17} aria-hidden="true" /></IconButton>
+        <a className={labels ? "button" : "action-icon"} href={api.reportUrl} target="_blank" rel="noopener noreferrer" aria-label="Open report" title="Open report"><FileText size={17} aria-hidden="true" />{labels && "Open report"}</a>
+        {labels ? <Button variant="secondary" loading={busy} onClick={download}><Download size={17} aria-hidden="true" />Download evidence</Button>
+          : <IconButton label="Export ZIP" loading={busy} onClick={download}><Download size={17} aria-hidden="true" /></IconButton>}
       </div>
       {error && <p className="state error" role="alert">{error}</p>}
     </div>
