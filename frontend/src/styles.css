@@ -491,7 +491,16 @@ details > p, details ul { margin-top: var(--space-3); }
 .validation-status { margin-bottom: var(--space-5); }
 .validation-status > span { display: inline-flex; gap: var(--space-2); align-items: center; }
 .scenario-required { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
-.pilot-brief-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--space-6); margin: var(--space-6) 0; }
+.experiment-protocol-sections { display: grid; gap: var(--space-4); }
+.experiment-protocol-sections > details { margin: 0; }
+.pilot-brief-fields { display: grid; gap: var(--space-6); margin: 0 0 var(--space-6); }
+.pilot-brief-identity, .pilot-brief-review { display: grid; gap: var(--space-6); align-items: start; min-width: 0; }
+.pilot-brief-identity { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+.pilot-brief-review { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pilot-brief-fields > div { min-width: 0; }
+.experiment-start-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3) var(--space-4); margin-top: var(--space-6); }
+.experiment-start-actions .note { margin: 0; }
+@media (max-width: 800px) { .pilot-brief-identity, .pilot-brief-review { grid-template-columns: minmax(0, 1fr); } }
 .paired-comparisons { margin-top: var(--space-6); }
 .replay-case-actions { margin-top: var(--space-6); margin-bottom: 0; }
 
@@ -500,6 +509,8 @@ details > p, details ul { margin-top: var(--space-3); }
 .decision-detail > p, .decision-detail > ul { max-width: 64ch; margin-top: var(--space-3); }
 .panel-body > p, .scope-note { max-width: 64ch; }
 .recommendation-strip { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-5); flex-wrap: wrap; padding: var(--space-4) var(--space-5); margin-bottom: var(--space-4); border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); font-size: var(--text-sm); }
+.recommendation-strip:not(.none) { border-color: color-mix(in oklab, var(--recommendation) 28%, var(--border)); border-inline-start: 3px solid var(--recommendation); padding-inline-start: calc(var(--space-5) - 2px); background: color-mix(in oklab, var(--recommendation) 3%, var(--surface)); }
+.recommendation-strip:not(.none) .recommendation-name { font-size: var(--text-lg); }
 .recommendation-text { flex: 1 1 260px; min-width: 0; display: grid; justify-items: start; gap: var(--space-1); }
 .recommendation-label { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); font-weight: 500; color: var(--recommendation); }
 .recommendation-strip.none .recommendation-label { color: var(--warn); }
