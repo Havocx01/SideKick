@@ -8,7 +8,7 @@ import { useApi } from "../hooks/useApi";
 import { useAnalysis } from "../components/AnalysisProvider";
 import { ArrowRight, FlaskConical, Layers, Upload } from "lucide-react";
 import { NumberField } from "@/registry/components/number-field/number-field";
-import { integer, percent, scenarioLabel } from "../format";
+import { integer, percent } from "../format";
 
 export const activeJob = (status: string) => ["queued", "running", "cancelling"].includes(status);
 function errorMessage(error: unknown) {
@@ -59,7 +59,7 @@ export function Start() {
           <p className="hero-footnote">5 steps · Recorded results</p>
         </div>
         <div className="benchmark-preview">
-          <div className="preview-heading"><h2>Warnings in time</h2><Badge>Recorded NASA</Badge></div>
+          <div className="preview-heading"><h2>Warnings in time</h2><Badge>Recorded NASA Benchmark</Badge></div>
           <div className="preview-subtitle">Logistic regression · lr2</div>
           <StateBlock loading={selection.loading} error={selection.error}>
             {example ? (
@@ -74,10 +74,10 @@ export function Start() {
                     <div className="benchmark-track fault" aria-hidden="true"><span style={{ width: percent(example.worst_detection_required) }} /></div>
                   </div>
                 </div>
-                <div className="preview-explanation">
+                {/* <div className="preview-explanation">
                   <details><summary>What was tested?</summary><p>{scenarioLabel(example.worst_scenario_id ?? "")}. Warnings active 10–30 cycles before failure. Simulated NASA data, not ABB field validation.</p></details>
                   <Link to="/comparison?candidate=logistic_regression%2Flr2">Inspect the evidence <ArrowRight size={16} aria-hidden="true" /></Link>
-                </div>
+                </div> */}
               </>
             ) : <p className="note">Open the recorded comparison to inspect the available candidates and fault tests.</p>}
           </StateBlock>

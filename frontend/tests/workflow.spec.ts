@@ -8,7 +8,7 @@ test("candidate, analysis, heatmap and replay retain the same context", async ({
   await expect(page.locator(".analysis-context")).toContainText("lr2");
   await expect(page.getByRole("region", { name: "Finding", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close analysis", exact: true }).click();
-  await page.locator("#fault-results > details > summary").click();
+  await expect(page.getByRole("heading", { name: "Sensor faults", exact: true })).toBeVisible();
   await page.getByRole("button", { name: /Inspect sensor_8, dropout:/ }).click();
   await expect(page.getByRole("region", { name: "Scenario details" })).toContainText("Detection below minimum");
   await page.getByRole("link", { name: "Replay weakest detection case", exact: true }).click();
@@ -36,7 +36,8 @@ test("comparison, warning explanation and review brief stay grounded in recorded
   const comparison = page.locator(".analysis-compare");
   await expect(comparison).toContainText("Meets limits");
   await expect(comparison).toContainText("Required cases passed");
-  await expect(page.getByRole("region", { name: "Finding", exact: true })).toContainText("Comparison overview");
+  await expect(page.getByRole("region", { name: "Assessment", exact: true })).toContainText("Only one selected model meets every recorded test limit");
+  await page.getByText("Evidence and test details", { exact: true }).click();
   await expect(page.locator(".analysis-source").first()).toContainText("Development");
   await page.getByRole("button", { name: "Close analysis", exact: true }).click();
 
@@ -56,7 +57,7 @@ test("comparison, warning explanation and review brief stay grounded in recorded
   await page.getByRole("button", { name: "Restart playback", exact: true }).click();
   const cycle = await page.locator(".playback-cycle").textContent();
   await page.getByRole("button", { name: "Explain warning", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Finding", exact: true })).toContainText("Recorded warning");
+  await expect(page.getByRole("region", { name: "Assessment", exact: true })).toContainText(/stored warning/i);
   const replayLink = page.getByRole("link", { name: "Open warning replay" });
   const href = await replayLink.getAttribute("href");
   expect(href).toMatch(/cycle=\d+/);

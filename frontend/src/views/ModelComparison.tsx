@@ -34,7 +34,6 @@ export function ModelComparison() {
   const [includeSupplemental, setIncludeSupplemental] = useState(false);
   const [inspected, setInspected] = useState<ScenarioResult[]>([]);
   const [technicalOpen, setTechnicalOpen] = useState(false);
-  const [faultOpen, setFaultOpen] = useState(false);
   const replayIndex = useApi(() => api.replayIndex(), [api]);
   useEffect(() => { setIncludeSupplemental(false); setInspected([]); }, [focus, partition]);
   function setFocus(key: string) {
@@ -64,7 +63,7 @@ export function ModelComparison() {
   useEffect(() => {
     if (!scenarioId || !scenarios.data) return;
     const rows = scenarios.data.filter(row => row.scenario_id === scenarioId && row.partition === partition);
-    if (rows.length) { setInspected(rows); setFaultOpen(true); if (rows.some(row => !row.required)) setIncludeSupplemental(true); }
+    if (rows.length) { setInspected(rows); if (rows.some(row => !row.required)) setIncludeSupplemental(true); }
   }, [scenarioId, scenarios.data, partition]);
   const invalidFocus = Boolean(focus && selection.data && !verdicts.some(v => candidateKey(v.candidate, v.config_id) === focus));
   const weakestReplay = replayIndex.data?.series.find(row => row.scenario_id === focused?.worst_scenario_id && candidateKey(row.candidate, row.config_id) === focusKey);
@@ -80,9 +79,8 @@ export function ModelComparison() {
   const evidenceBase = experimentId ? `/experiments/${experimentId}` : "";
   const inspectFaultHref = weakestReplay ? `${evidenceBase}/replay?${faultQuery}` : `${evidenceBase}/comparison?${faultQuery}#fault-results`;
   useEffect(() => {
-    if (location.hash === "#fault-results") setFaultOpen(true);
-    if (location.hash === "#fault-results" && faultOpen && selection.data) document.getElementById("fault-results")?.scrollIntoView();
-  }, [location.hash, faultOpen, selection.data, scenarios.data]);
+    if (location.hash === "#fault-results" && selection.data) document.getElementById("fault-results")?.scrollIntoView();
+  }, [location.hash, selection.data, scenarios.data]);
 
   useEffect(() => {
     if (location.hash === "#augmentation") setTechnicalOpen(true);
@@ -184,10 +182,10 @@ export function ModelComparison() {
 
             {focused ? (
               <div id="fault-results" className="evidence-section">
-                <details className="disclosure disclosure-plain" open={faultOpen} onToggle={event => setFaultOpen(event.currentTarget.open)}><summary>Sensor faults · {focused.required_passed} / {focused.required_scenarios} passed</summary>
                 <Panel
-                  title="Lowest detection per sensor"
-                  description={includeSupplemental ? "Supplemental cases included." : undefined}
+                  title="Sensor faults"
+                  description={includeSupplemental ? "Lowest detection per sensor. Supplemental cases included." : "Lowest detection per sensor."}
+                  aside={<span className="note">{focused.required_passed} / {focused.required_scenarios} required cases passed</span>}
                 >
                   {allScenarios.some(row => !row.required) && (
                     <div className="matrix-options"><Switch label="Include supplemental cases" checked={includeSupplemental} onCheckedChange={setIncludeSupplemental} /></div>
@@ -198,7 +196,6 @@ export function ModelComparison() {
                   {inspected.length > 0 && <section className="scenario-inspection" aria-label="Scenario details"><header className="scenario-inspection-header"><h3>Scenario details</h3><IconButton label="Close scenario details" onClick={() => setInspected([])}><X size={16} aria-hidden="true" /></IconButton></header><div className="table-scroll"><table><thead><tr><th>Case</th><th>Detection</th><th>Burden</th><th>Coverage</th><th>Outcome</th></tr></thead><tbody>{inspected.map(r => { const failures = [r.metrics.detection_fraction < criteria.min_detection_fraction ? "Detection below minimum" : "", r.metrics.early_alarm_burden == null ? "Burden unavailable" : r.metrics.early_alarm_burden > criteria.max_early_alarm_burden ? "Burden above maximum" : "", r.metrics.engines !== focused.clean.engines || r.coverage_complete === false ? "Coverage incomplete" : ""].filter(Boolean); return <tr key={r.scenario_id}><td>{r.fault ? scenarioLabel(r.scenario_id) : r.scenario_id}<span className="note comparison-kind">{r.required ? "Required" : "Supplemental"}</span></td><td>{percent(r.metrics.detection_fraction, 1)}</td><td>{percent(r.metrics.early_alarm_burden, 2)}</td><td>{r.metrics.engines}/{r.expected_engines ?? focused.clean.engines}</td><td>{failures.length ? failures.join("; ") : "Meets criteria"}</td></tr>; })}</tbody></table></div></section>}
                   <div className="actions replay-case-actions">{replayCases.map(({ scenarioId, label }) => { const entry = replayIndex.data?.series.find(s => s.scenario_id === scenarioId && `${s.candidate}/${s.config_id}` === focusKey); const query = new URLSearchParams({ candidate: focusKey, partition }); if (entry) { query.set("equipment", entry.equipment_id); query.set("scenario", entry.scenario_id); } return entry ? <Link className="button" key={label} title={focused.worst_scenario_id === focused.worst_burden_scenario_id ? "Also the highest-burden case" : undefined} to={`${experimentId ? `/experiments/${experimentId}` : ""}/replay?${query}`}>{label}</Link> : <span key={label} className="note">{label}: not stored in this bundle.</span>; })}</div>
                 </Panel>
-                </details>
               </div>
             ) : null}
           </>

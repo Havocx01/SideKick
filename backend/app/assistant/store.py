@@ -1,4 +1,4 @@
-"""SQLite metadata for analysis jobs, consent and atomic usage limits."""
+"""SQLite metadata for analysis jobs, consent and presenter access."""
 import json
 import sqlite3
 import time
@@ -7,10 +7,6 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.assistant.schemas import AnalysisRecord
-
-
-class PublicLimitError(ValueError):
-    pass
 
 class AssistantStore:
     def __init__(self, root: Path):
@@ -21,7 +17,6 @@ class AssistantStore:
                 CREATE TABLE IF NOT EXISTS analyses(id TEXT PRIMARY KEY, owner TEXT NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS consent(owner TEXT, experiment TEXT, allowed INTEGER, PRIMARY KEY(owner,experiment));
                 CREATE TABLE IF NOT EXISTS sessions(owner TEXT PRIMARY KEY, unlocked_until REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS usage(owner TEXT NOT NULL, created REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS attempts(address TEXT NOT NULL, created REAL NOT NULL);
             ''')
             if "public" not in {row[1] for row in db.execute("PRAGMA table_info(analyses)")}:
@@ -66,6 +61,18 @@ class AssistantStore:
             raise KeyError(id)
         return AnalysisRecord.model_validate_json(row[0])
 
+    def latest(self, owner: str, fingerprint: str) -> AnalysisRecord | None:
+        """Only reuse complete, unexpired results for this visitor and evidence."""
+        with self.connect() as db:
+            row = db.execute('''SELECT payload FROM analyses WHERE owner=?
+                AND json_extract(payload,'$.cache_fingerprint')=?
+                AND json_extract(payload,'$.status')='completed'
+                AND json_type(payload,'$.result')='object'
+                AND (public=0 OR json_extract(payload,'$.created_at') >= ?)
+                ORDER BY json_extract(payload,'$.created_at') DESC LIMIT 1''',
+                (owner, fingerprint, time.time() - 86400)).fetchone()
+        return AnalysisRecord.model_validate_json(row[0]) if row else None
+
     def consent(self, owner: str, experiment: str) -> bool:
         with self.connect() as db:
             row = db.execute("SELECT allowed FROM consent WHERE owner=? AND experiment=?", (owner, experiment)).fetchone()
@@ -92,14 +99,6 @@ class AssistantStore:
                 raise ValueError("Too many access attempts. Try again in 15 minutes.")
             db.execute("INSERT INTO attempts VALUES(?,?)", (address, time.time()))
 
-    def admit(self, owner: str, session_limit: int, daily_limit: int):
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            daily = db.execute("SELECT COUNT(*) FROM usage WHERE created > ?", (time.time() - 86400,)).fetchone()[0]
-            personal = db.execute("SELECT COUNT(*) FROM usage WHERE owner=?", (owner,)).fetchone()[0]
-            if daily >= daily_limit or personal >= session_limit:
-                raise ValueError("Live analysis allowance reached. Recorded evidence is still available.")
-            db.execute("INSERT INTO usage VALUES(?,?)", (owner, time.time()))
     def revoke_results(self, owner: str, experiment: str):
         """Discard cloud interpretations so opting in later never resurrects old output."""
         with self.connect() as db:
@@ -114,13 +113,7 @@ class AssistantStore:
                     db.execute("UPDATE analyses SET payload=? WHERE id=?", (record.model_dump_json(), id))
 
 
-    def admit_evidence(self, owner: str):
-        """Bound public deterministic work and expire public analysis records."""
-        now = time.time()
+    def expire_public(self):
+        """Expire public analysis records without limiting new requests."""
         with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            db.execute("DELETE FROM analyses WHERE public=1 AND json_extract(payload,'$.created_at') < ?", (now - 86400,))
-            total, personal = db.execute("SELECT COUNT(*),SUM(owner=?) FROM analyses WHERE public=1 AND json_extract(payload,'$.created_at') > ?", (owner, now - 3600)).fetchone()
-            if total >= 300 or (personal or 0) >= 30:
-                raise PublicLimitError("Analysis allowance reached. Try again in an hour.")
-
+            db.execute("DELETE FROM analyses WHERE public=1 AND json_extract(payload,'$.created_at') < ?", (time.time() - 86400,))

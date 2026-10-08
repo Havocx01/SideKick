@@ -459,7 +459,7 @@ details > p, details ul { margin-top: var(--space-3); }
 .chart .axis line, .chart .axis path { stroke: var(--border-strong); }
 .chart .gridline { stroke: var(--border-subtle); }
 .chart-scroll { overflow-x: auto; padding-block: var(--space-3); max-width: 100%; }
-.replay-chart { width: 100%; max-width: 1000px; margin-inline: auto; }
+.replay-chart { width: 100%; max-width: 1000px; margin-inline: auto; margin-bottom: 15px}
 .chart-scroll:focus-visible, .table-scroll:focus-visible { background: var(--surface-muted); border-radius: var(--radius-inner); }
 .chart-scroll .chart { min-width: 680px; }
 .legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: var(--text-xs); color: var(--text-secondary); margin-top: var(--space-3); }
@@ -509,11 +509,11 @@ details > p, details ul { margin-top: var(--space-3); }
 .model-result .panel-head { padding-bottom: var(--space-3); }
 .model-result .panel-head h2 { font-size: var(--text-lg); font-weight: 500; }
 .model-result .panel-body { padding-top: 0; }
-.model-result .result-analysis-actions { gap: var(--space-2); }
+.model-result .result-analysis-actions { justify-content: center; gap: var(--space-2); padding-inline: var(--space-4); }
 .verdict-badge { display: inline-flex; align-items: center; gap: 4px; }
 .recommendation-badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2); border: 1px solid color-mix(in oklab, var(--recommendation) 25%, var(--border)); border-radius: var(--radius-pill); background: color-mix(in oklab, var(--recommendation) 8%, var(--surface)); color: var(--recommendation); font-size: var(--text-xs); font-weight: 500; line-height: 1.25; white-space: nowrap; }
 .candidate-row.row-recommended td:first-child { box-shadow: inset 3px 0 0 var(--recommendation); }
-.decision-note { margin: var(--space-3) 0 0; }
+.model-result .decision-note { max-width: none; margin: var(--space-3) var(--space-4) 0; text-align: center; }
 .result-analysis-actions .button svg, .decision-footer svg { flex-shrink: 0; }
 .qualification { margin-top: 0; font-size: var(--text-sm); }
 .qualification.passes strong { color: var(--success); }
@@ -599,11 +599,10 @@ details > p, details ul { margin-top: var(--space-3); }
 .metric-definitions summary:hover, .technical-details > summary:hover { color: var(--accent-strong); }
 .metric-definitions p { max-width: 65ch; }
 /* Reserve the same header geometry in both states; only the content expands. */
-:is(.main, .analysis-body) details:not(.analysis-access, .disclosure-plain) { border: 1px solid transparent; border-radius: var(--radius-inner); padding: 0 var(--space-4); }
-:is(.main, .analysis-body) details:not(.analysis-access, .disclosure-plain) > summary { margin: 0 calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); min-height: 44px; border-radius: var(--radius-inner); border-bottom: 1px solid transparent; background: var(--fill); }
-:is(.main, .analysis-body) details[open]:not(.analysis-access, .disclosure-plain) { background: color-mix(in srgb, var(--fill) 18%, var(--surface)); border-color: var(--border-subtle); padding-bottom: var(--space-4); }
-:is(.main, .analysis-body) details[open]:not(.analysis-access, .disclosure-plain) > summary { margin-bottom: var(--space-4); border-radius: var(--radius-inner) var(--radius-inner) 0 0; border-bottom-color: var(--border-subtle); }
-:is(.main, .analysis-body) details:not(.analysis-access, .disclosure-plain) > summary:focus-visible { background: var(--fill-strong); }
+:is(.main, .analysis-body) details:not(.disclosure-plain) { border: 1px solid transparent; border-radius: var(--radius-inner); padding: 0 var(--space-4); }
+:is(.main, .analysis-body) details:not(.disclosure-plain) > summary { margin: 0 calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); min-height: 44px; border-radius: var(--radius-inner); border-bottom: 1px solid transparent; }
+:is(.main, .analysis-body) details[open]:not(.disclosure-plain) { background: color-mix(in srgb, var(--fill) 18%, var(--surface)); border-color: var(--border-subtle); padding-bottom: var(--space-4); }
+:is(.main, .analysis-body) details[open]:not(.disclosure-plain) > summary { margin-bottom: var(--space-4); border-radius: var(--radius-inner) var(--radius-inner) 0 0; border-bottom-color: var(--border-subtle); background: color-mix(in srgb, var(--fill) 35%, transparent); }
 .metric-definition-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); margin: var(--space-5) 0 0; }
 .metric-definition-grid dt { color: var(--foreground); font-weight: 500; margin-bottom: var(--space-2); }
 .metric-definition-grid dd { margin: 0; line-height: 1.6; }

@@ -161,14 +161,14 @@ test("fault replay shortcuts merge only when they open the same case", async ({ 
     await route.fulfill({ response, json: selection });
   });
   await page.goto("/comparison?candidate=xgboost_augmented%2Faug3");
-  await page.locator("#fault-results > details > summary").click();
+  await expect(page.getByRole("table", { name: "Worst detection by sensor and fault" })).toBeVisible();
   const detection = page.getByRole("link", { name: "Replay weakest detection case", exact: true });
   await expect(detection).toBeVisible();
   await expect(detection).toHaveAttribute("title", "Also the highest-burden case");
   await expect(page.getByRole("link", { name: "Replay highest-burden case", exact: true })).toHaveCount(0);
   await page.unroute(selectionRoute);
   await page.reload();
-  await page.locator("#fault-results > details > summary").click();
+  await expect(page.getByRole("table", { name: "Worst detection by sensor and fault" })).toBeVisible();
   await expect(detection).toBeVisible();
   await expect(detection).not.toHaveAttribute("title", "Also the highest-burden case");
   await expect(page.getByText("Replay highest-burden case: not stored in this bundle.", { exact: true })).toBeVisible();

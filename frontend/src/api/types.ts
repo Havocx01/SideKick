@@ -70,6 +70,12 @@ export interface AnalysisAction {
   href: string;
 }
 
+export interface AnalysisClaim {
+  id: string;
+  text: string;
+  source_ids: string[];
+}
+
 export interface AnalysisFinding {
   id: string;
   title: string;
@@ -89,6 +95,8 @@ export interface AnalysisRecord {
   error?: string | null;
   brief_text?: string | null;
   brief_saved_at?: number | null;
+  cache_fingerprint?: string | null;
+  reused?: boolean;
 }
 
 export interface AnalysisRequest {
@@ -98,7 +106,7 @@ export interface AnalysisRequest {
   mapping?: ColumnMapping | null;
   complete_histories?: boolean;
   partition?: Partition;
-  candidates: string[];
+  candidates?: string[];
   scenario_id?: string | null;
   equipment_id?: string | null;
   cycle?: number | null;
@@ -120,8 +128,8 @@ export interface AnalysisResult {
   prompt_version?: string;
   verification?: string;
   fallback_reason?: string | null;
-  assessment?: { id: string; text: string; source_ids: string[] }[];
-  investigation?: { name: string; label: string; source_ids: string[] }[];
+  assessment?: AnalysisClaim[];
+  investigation?: InvestigationCall[];
   suggested_mapping?: ColumnMapping | null;
 }
 
@@ -144,6 +152,7 @@ export interface AssistantCapabilities {
 
 export interface BriefUpdate {
   text: string;
+  draft_only?: boolean;
 }
 
 export interface CalibrationReport {
@@ -411,6 +420,12 @@ export interface GuideAnswer {
   answer: string;
   link: string;
   link_label: string;
+}
+
+export interface InvestigationCall {
+  name: string;
+  label: string;
+  source_ids?: string[];
 }
 
 export interface NumericClaim {
