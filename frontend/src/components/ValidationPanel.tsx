@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Check, CircleAlert } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api, ApiError, experiments, type OperationState } from "../api/client";
 import type { CandidateVerdict, FrozenModelRecord, ValidationRecord } from "../api/types";
@@ -47,6 +48,13 @@ export function ValidationPanel({ experimentId, qualifies, recommendation, onCom
     finally { setBusy(false); }
   }
   const exposed = validation?.record?.exposure_started_at != null;
+  const locked = frozen?.record?.status === "completed";
+  const validated = validation?.record?.status === "completed";
+  const freezeStatus = !frozen ? "Loading" : locked ? "Locked" : frozen.record?.status ?? "Not locked";
+  const validationStatus = !validation ? "Loading" : validated ? "Complete" : exposed && !active(validation.record?.status) ? "Histories exposed" : validation.record?.status ?? "Not scored";
+  const [frozenCandidate, frozenConfig] = frozen?.record?.candidate.split("/") ?? [];
+  const modelLabel = frozenCandidate ? candidateLabel(frozenCandidate, frozenConfig) : recommendation ? candidateLabel(recommendation.candidate, recommendation.config_id) : null;
+  const errors = [...new Set([error, frozen?.record?.error, validation?.record?.error].filter(Boolean))];
   const viewingFinal = location.pathname.endsWith("/comparison") && params.get("partition") === "holdout";
   async function cancelJob(id: string) {
     setBusy(true); setError("");
@@ -54,19 +62,48 @@ export function ValidationPanel({ experimentId, qualifies, recommendation, onCom
     catch (e) { setError(e instanceof Error ? e.message : "Could not cancel this job."); }
     finally { setBusy(false); }
   }
-  return <Panel title="Freeze and validate" description="Lock the recommended model, then check it once on histories kept out of model selection." aside={!location.pathname.endsWith("/pilot") && !exposed ? <Link to={`/experiments/${experimentId}/pilot`}>Agree an equipment pilot</Link> : undefined}>
-    <p className="note">{recommendation ? `Model to freeze: ${candidateLabel(recommendation.candidate, recommendation.config_id)}. This is the recommendation, regardless of the model being inspected above.` : "No development recommendation is available to freeze."}</p><div className="validation-status">
-      <span>Frozen model <Badge>{frozen?.record?.status ?? "not frozen"}</Badge></span>
-      <span>Reserved validation <Badge>{validation?.record?.status ?? "not scored"}</Badge></span>
+  return <div className="validation-panel"><Panel title="Freeze and validate" description="A one-time check on histories kept out of model selection.">
+    <div className="validation-overview">
+      <div className="validation-model">
+        <h3>{locked ? "Frozen model" : "Recommended model"}</h3>
+        <p>{modelLabel ?? "No recommendation available"}</p>
+        <span className="note">{locked ? "Locked for this final check." : !modelLabel ? "No candidate met the development criteria." : "Uses the recommendation, even when inspecting another model."}</span>
+      </div>
+      <ol className="validation-steps" aria-label="Validation steps">
+        <li aria-current={!locked && qualifies ? "step" : undefined}>
+          <div className="validation-step-heading"><span className="validation-step-number" aria-hidden="true">{locked ? <Check size={16} /> : "1"}</span><h3>Lock model</h3><Badge tone={locked ? "ok" : active(frozen?.record?.status) ? "info" : frozen?.record?.status === "failed" ? "bad" : "neutral"}>{freezeStatus}</Badge></div>
+          <p>Refit on development histories; lock the model, threshold, protocol and source version.</p>
+        </li>
+        <li aria-current={locked && !validated && (!exposed || active(validation?.record?.status)) ? "step" : undefined}>
+          <div className="validation-step-heading"><span className="validation-step-number" aria-hidden="true">{validated ? <Check size={16} /> : "2"}</span><h3>Validate reserved histories</h3><Badge tone={validated ? "ok" : active(validation?.record?.status) ? "info" : exposed ? "warn" : validation?.record?.status === "failed" ? "bad" : "neutral"}>{validationStatus}</Badge></div>
+          <p>Score the locked model once on histories it has not used for model selection.</p>
+        </li>
+      </ol>
     </div>
-    {error && <p className="state error" role="alert">{error}</p>}
-    {frozen?.record?.error && <p className="state error" role="alert">{frozen.record.error}</p>}
-    {validation?.record?.error && <p className="state error" role="alert">{validation.record.error}</p>}
-    {running?.job ? <div role="status"><p>{running.job.stage}. {Math.floor(running.job.elapsed_seconds ?? 0)} seconds elapsed. {running.job.total_work != null ? `${running.job.completed_work}/${running.job.total_work} ${running.job.work_unit}.` : ""}</p><Button disabled={busy || running.job.status === "cancelling"} onClick={() => cancelJob(running.job!.experiment_id)}>Cancel job</Button></div> : frozen?.record?.status !== "completed" ? <><Button variant="primary" loading={busy} disabled={!qualifies || !frozen} onClick={() => launch("freeze")}>Freeze recommendation</Button><p className="note">{qualifies ? "Refits the recommendation on development histories and locks the model, threshold, protocol and source version." : "No candidate met the development criteria. There is no model to freeze."}</p></> : validation?.record?.status === "completed" ? <><p>Final validation is complete. The reserved histories are now exposed.</p>{!viewingFinal && <Link className="button" to={`/experiments/${experimentId}/comparison?partition=holdout`}>Inspect final validation</Link>}</> : exposed ? <p className="note">Scoring started, so these histories are exposed. This attempt cannot be repeated. Use fresh equipment histories for another final evaluation.</p> : <>
-      <label className="confirmation"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} />I confirm the reserved histories were not used to choose models, thresholds or fault rules.</label>
-      <Button variant="primary" loading={busy} disabled={!confirmed || !validation} onClick={() => launch("validation")}>Evaluate reserved equipment once</Button>
-      <p className="note">Known exposed histories are blocked. Cancelled or interrupted scoring still exposes the histories. NASA and synthetic results do not establish field performance.</p>
-    </>}
-    {frozen?.record?.artifact_digest && <details className="decision-detail"><summary>Frozen model identifiers</summary><p className="mono">Model {frozen.record.candidate}<br />Artifact {frozen.record.artifact_digest}</p></details>}
-  </Panel>;
+    {errors.length > 0 && <div className="validation-error" role="alert">
+      <CircleAlert size={18} aria-hidden="true" />
+      <div><h3>Validation needs attention</h3>{errors.map(message => <p key={message}>{message}</p>)}</div>
+      {error && <Button variant="secondary" size="sm" onClick={() => { setError(""); setRevision(n => n + 1); }}>Refresh validation status</Button>}
+    </div>}
+    <div className="validation-action">
+      {running ? <div className="validation-running" role="status">
+        <p>{running.job ? <>{running.job.stage}. {Math.floor(running.job.elapsed_seconds ?? 0)} seconds elapsed.{running.job.total_work != null ? ` ${running.job.completed_work ?? 0}/${running.job.total_work} ${running.job.work_unit ?? "completed"}.` : ""}</> : "Waiting for job status."}</p>
+        {running.job && <Button disabled={busy || running.job.status === "cancelling"} onClick={() => cancelJob(running.job!.experiment_id)}>Cancel job</Button>}
+      </div> : !locked ? <>
+        <Button variant="primary" loading={busy} disabled={!qualifies || !recommendation || !frozen || !validation} onClick={() => launch("freeze")}>Freeze recommendation</Button>
+      </> : validated ? <>
+        <p className="note">Final validation complete. These histories have now been exposed.</p>
+        {!viewingFinal && <Link className="button" to={`/experiments/${experimentId}/comparison?partition=holdout`}>Inspect final validation</Link>}
+      </> : exposed ? <p className="note">These histories have been exposed and cannot be scored again. Use fresh equipment histories for another final evaluation.</p> : <>
+        <label className="confirmation"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} />I confirm the reserved histories were not used to choose models, thresholds or fault rules.</label>
+        <Button variant="primary" loading={busy} disabled={!confirmed || !validation} onClick={() => launch("validation")}>Evaluate reserved equipment once</Button>
+        <p className="note">Scoring exposes these histories, even if cancelled or interrupted. Previously exposed histories are blocked.</p>
+      </>}
+    </div>
+    <div className="validation-footer">
+      <p className="note">Test evidence, not deployment approval. NASA and synthetic results do not establish field performance.</p>
+      {!location.pathname.endsWith("/pilot") && !exposed && <Link to={`/experiments/${experimentId}/pilot`}>Agree an equipment pilot</Link>}
+    </div>
+    {frozen?.record?.artifact_digest && <details className="decision-detail disclosure-plain validation-identifiers"><summary>Frozen model identifiers</summary><dl><div><dt>Model</dt><dd><code>{frozen.record.candidate}</code></dd></div><div><dt>Artifact</dt><dd><code>{frozen.record.artifact_digest}</code></dd></div></dl></details>}
+  </Panel></div>;
 }

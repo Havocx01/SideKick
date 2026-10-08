@@ -68,7 +68,7 @@ test("comparison, warning explanation and review brief stay grounded in recorded
 test("a browser sample trains, freezes, validates once and exports a ZIP", async ({ page }) => {
   await page.goto("/new?source=sample");
   await page.getByRole("button", { name: "Generate sample data" }).click();
-  await expect(page.getByRole("heading", { name: "Define the experiment protocol" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review the test" })).toBeVisible();
   await page.getByText("Pilot brief (optional)", { exact: true }).click();
   await page.getByRole("textbox", { name: "Equipment family" }).fill("Simulated pilot workflow");
   await page.getByRole("button", { name: "Train and challenge models" }).click();

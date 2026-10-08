@@ -7,6 +7,8 @@ import { useExperimentId } from "../hooks/useEvidence";
 import { AnalysisProvider } from "./AnalysisProvider";
 import { AnalysisInspector } from "./AnalysisInspector";
 import { ThemeToggle } from "./ThemeToggle";
+import { Toaster } from "@/components/ui/toast";
+import { TrainingNotifications } from "./TrainingNotifications";
 
 export function Layout() {
   return <AnalysisProvider><Workspace /></AnalysisProvider>;
@@ -60,6 +62,8 @@ function Workspace() {
 
   return (
     <div className="shell">
+      <TrainingNotifications enabled={Boolean(health.data?.can_train)} />
+      <Toaster />
       <a className="skip-link" href="#main-content">Skip to content</a>
       <aside className="sidebar">
         <Link to="/" className="brand" aria-label="Sidekick overview">

@@ -140,7 +140,7 @@
   .analysis-body summary, .analysis-next a { min-height: 44px; }
 }
 @media (max-width: 600px) { .analysis-inspector { --text-xs: .875rem; --text-sm: .9375rem; --text-base: 1rem; } .analysis-dialog { top: 3dvh; width: calc(100% - 2 * var(--space-3)); max-height: 94dvh; } .analysis-header { padding-inline: var(--space-4); } .analysis-body { padding-inline: var(--space-4); } .analysis-brief textarea { min-height: 300px; padding: var(--space-4); } .analysis-selection-actions > span { width: 100%; } }
-@media (prefers-reduced-motion: reduce) { .analysis-spinner, .analysis-dialog[open] { animation: none; }  }
+@media (prefers-reduced-motion: reduce) { .analysis-dialog[open] { animation: none; } .analysis-spinner { animation-duration: 2.4s; } }
 .analysis-assessment article { padding-block: var(--space-2); }
 .analysis-assessment article:first-of-type { padding-top: 0; }
 .analysis-assessment article p { margin: 0; }
