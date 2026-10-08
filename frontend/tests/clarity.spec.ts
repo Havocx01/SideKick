@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+// These checks exercise the unassisted workflow. Spotlight behavior has its own tests.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.guide.dismissed", "true"));
+});
+
 test("the walkthrough explains the recorded evidence without starting jobs", async ({ page }) => {
   const mutations: string[] = [];
   page.on("request", request => { if (request.method() === "POST") mutations.push(request.url()); });
@@ -37,7 +42,7 @@ test("the walkthrough explains the recorded evidence without starting jobs", asy
   await expect(page.getByTestId("walkthrough-result")).toContainText("79 / 80");
   await page.getByRole("link", { name: "Next", exact: true }).click();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export ZIP", exact: true }).click();
+  await page.getByRole("button", { name: "Download evidence", exact: true }).click();
   expect((await download).suggestedFilename()).toMatch(/\.zip$/);
   expect(mutations).toEqual([]);
   await page.getByRole("link", { name: "Restart walkthrough", exact: true }).click();
@@ -239,7 +244,7 @@ test("replay seeks to fault onset and displays stored warning state rather than 
   await expect(state).toContainText("Faulted Warning active");
   await expect(page.getByRole("img", { name: "Score over time for 16", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Replay from start", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Jump to fault", exact: true }).click();
+  await page.getByRole("button", { name: "Fault begins", exact: true }).click();
   await expect(page.getByRole("slider", { name: "Replay cycle" })).toHaveAttribute("aria-valuenow", "1");
   await expect(state).toContainText("60 cycles before failure");
   await page.getByRole("button", { name: "Restart playback", exact: true }).click();

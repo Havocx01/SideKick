@@ -1,8 +1,11 @@
 import type { AlertMetrics, CandidateVerdict, AcceptanceCriteria } from "../api/types";
 import { Link } from "react-router-dom";
+import { motion, useReducedMotion } from "motion/react";
+import { motionTokens } from "@/registry/motion-tokens";
 import { integer, percent, scenarioLabel, scenarioSummary } from "../format";
 
-export function WarningCounts({ metrics, label, fault = false, compact = false }: { metrics: AlertMetrics; label: string; fault?: boolean; compact?: boolean }) {
+export function WarningCounts({ metrics, label, fault = false, compact = false, animated = false }: { metrics: AlertMetrics; label: string; fault?: boolean; compact?: boolean; animated?: boolean }) {
+  const reduced = useReducedMotion();
   const outcomes = [
     { label: "In time", value: metrics.detected, tone: "in-time" },
     { label: "Late", value: metrics.late, tone: "late" },
@@ -12,7 +15,12 @@ export function WarningCounts({ metrics, label, fault = false, compact = false }
     <h3>{label}</h3>
     <p className="warning-count"><strong>{integer(metrics.detected)} / {integer(metrics.engines)}</strong>{!compact && <span>equipment histories warned in time</span>}</p>
     <div className="outcome-bar" role="img" aria-label={`${label}: ${metrics.detected} in time, ${metrics.late} late, ${metrics.missed} missed, out of ${metrics.engines} histories`}>
-      {(compact ? [{ label: "In time", value: metrics.detected, tone: "in-time" }, { label: "Not in time", value: metrics.late + metrics.missed, tone: "not-in-time" }] : outcomes).filter(item => item.value > 0).map(item => <span key={item.tone} className={item.tone} style={{ width: `${metrics.engines > 0 ? item.value / metrics.engines * 100 : 0}%` }} />)}
+      {(compact ? [{ label: "In time", value: metrics.detected, tone: "in-time" }, { label: "Not in time", value: metrics.late + metrics.missed, tone: "not-in-time" }] : outcomes).filter(item => animated || item.value > 0).map(item => {
+        const width = `${metrics.engines > 0 ? item.value / metrics.engines * 100 : 0}%`;
+        return animated ? <motion.span key={item.tone} className={item.tone} initial={false} animate={{ width }}
+          transition={reduced ? { duration: 0 } : { duration: motionTokens.duration.standard, ease: motionTokens.ease.enter }} />
+          : <span key={item.tone} className={item.tone} style={{ width }} />;
+      })}
     </div>
     {!compact && <>
       <dl className="outcome-key">{outcomes.map(item => <div key={item.tone}><dt><i className={item.tone} aria-hidden="true" />{item.label}</dt><dd>{integer(item.value)}</dd></div>)}</dl>
