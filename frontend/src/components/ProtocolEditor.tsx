@@ -72,12 +72,16 @@ export function ProtocolEditor({ value, onChange, sensors, disabled }: { value: 
 }
 
 export function PilotBriefEditor({ value, onChange, disabled }: { value: PilotBrief; onChange: (value: PilotBrief) => void; disabled: boolean }) {
-  return <details className="decision-detail"><summary>Pilot brief (optional)</summary><div className="pilot-brief-fields">
-    <Input label="Equipment family" value={value.equipment_family ?? ""} maxLength={200} disabled={disabled} onChange={e => onChange({ ...value, equipment_family: e.target.value })} />
-    <Input label="Reviewing engineer" value={value.reviewing_engineer ?? ""} maxLength={200} disabled={disabled} onChange={e => onChange({ ...value, reviewing_engineer: e.target.value })} />
+  return <details className="decision-detail pilot-brief"><summary>Pilot brief (optional)</summary><div className="pilot-brief-fields">
+    <div className="pilot-brief-identity">
+    <Input label="Equipment family" placeholder="e.g. Conveyor motors" value={value.equipment_family ?? ""} maxLength={200} disabled={disabled} onChange={e => onChange({ ...value, equipment_family: e.target.value })} />
+    <Input label="Reviewing engineer" placeholder="Name or team" value={value.reviewing_engineer ?? ""} maxLength={200} disabled={disabled} onChange={e => onChange({ ...value, reviewing_engineer: e.target.value })} />
     <Select label="Data classification" value={value.data_classification ?? "unverified"} disabled={disabled} options={[{ value: "simulated", label: "Simulated benchmark" }, { value: "field", label: "Field records (user declared)" }, { value: "unverified", label: "Unverified" }]} onValueChange={data_classification => onChange({ ...value, data_classification: data_classification as PilotBrief["data_classification"] })} />
-    <Textarea label="Current review procedure" value={value.current_procedure ?? ""} maxLength={2000} rows={3} disabled={disabled} onChange={e => onChange({ ...value, current_procedure: e.target.value })} />
-    <Textarea label="Decision this review supports" value={value.intended_decision ?? ""} maxLength={2000} rows={3} disabled={disabled} onChange={e => onChange({ ...value, intended_decision: e.target.value })} />
-    <Input label="Proposed success measure" value={value.success_measure ?? ""} maxLength={1000} disabled={disabled} onChange={e => onChange({ ...value, success_measure: e.target.value })} />
+    </div>
+    <div className="pilot-brief-review">
+    <Textarea label="Current review procedure" placeholder="How warnings are reviewed today" value={value.current_procedure ?? ""} maxLength={2000} rows={3} disabled={disabled} onChange={e => onChange({ ...value, current_procedure: e.target.value })} />
+    <Textarea label="Decision this review supports" placeholder="What should this pilot help you decide?" value={value.intended_decision ?? ""} maxLength={2000} rows={3} disabled={disabled} onChange={e => onChange({ ...value, intended_decision: e.target.value })} />
+    </div>
+    <Input label="Proposed success measure" placeholder="e.g. Timely warnings on at least 90% of histories" value={value.success_measure ?? ""} maxLength={1000} disabled={disabled} onChange={e => onChange({ ...value, success_measure: e.target.value })} />
   </div><p className="note">Field validation needs actual equipment records and an agreed review decision. This brief records intentions, not measured benefits.</p></details>;
 }

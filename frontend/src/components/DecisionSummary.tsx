@@ -55,7 +55,7 @@ export function DecisionSummary({ selection, inspected, inspectFaultHref }: { se
     <>
       <section className={`recommendation-strip${chosen ? "" : " none"}`} data-testid="recommendation-strip" aria-label="Recommendation">
         <div className="recommendation-text">
-          <span className="recommendation-label">{chosen && <Star size={12} fill="currentColor" aria-hidden="true" />}{chosen ? "Recommended model" : "No recommendation"}</span>
+          <span className="recommendation-label">{chosen && <Star size={16} fill="currentColor" aria-hidden="true" />}{chosen ? "Recommended model" : "No recommendation"}</span>
           <span className="recommendation-name">{chosen ? candidateLabel(chosen.candidate, chosen.config_id) : `No model meets ${stage} criteria.`}</span>
         </div>
         {chosen && (focus?.candidate !== chosen.candidate || focus.config_id !== chosen.config_id) &&

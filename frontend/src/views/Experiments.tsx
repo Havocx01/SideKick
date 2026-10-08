@@ -421,11 +421,14 @@ function ExperimentSetup() {
                   <NumberField label="Minimum warned in time" value={detection} onValueChange={setDetection} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
                   <NumberField label="Maximum early-alarm time" value={burden} onValueChange={setBurden} min={0} max={100} suffix="%" disabled={busy} limitHint={false} />
                 </div>
+                <div className="experiment-protocol-sections">
                 {health.data?.can_edit_protocol ? <><ProtocolEditor value={protocol} onChange={setProtocol} sensors={data.mapping?.sensors ?? []} disabled={busy} /><PilotBriefEditor value={pilotBrief} onChange={setPilotBrief} disabled={busy} /></> : <p>Useful warnings: 10 to 30 cycles before failure. Early-alarm burden: time in alarm more than 45 cycles before failure.</p>}
                 <details><summary>Training settings</summary><p className="note">
                   Fixed for this version: five equipment folds, {health.data?.sample_configurations ?? 10} candidate
                   configurations and a 20-cycle feature window. Final validation is a separate, explicit local action.
                 </p></details>
+                </div>
+                <div className="experiment-start-actions">
                 <Button variant="primary" loading={busy}
                   disabled={
                     !Number.isFinite(detection) || !Number.isFinite(burden) || detection < 0 || detection > 100 ||
@@ -440,6 +443,7 @@ function ExperimentSetup() {
                 <p className="note">
                   One run at a time · 15-minute limit
                 </p>
+                </div>
               </Panel>
             </>
           )}
