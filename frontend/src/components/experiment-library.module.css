@@ -31,17 +31,21 @@
 .folderButton:disabled { cursor: default; }
 .folderButton[aria-current] { background: var(--accent-subtle); color: var(--accent); font-weight: 500; }
 .folderButton[aria-current] .folderCount { color: inherit; }
-.folderRow { display: flex; align-items: center; gap: var(--space-1); min-width: 0; border-radius: var(--radius-inner); }
+.folderRow { position: relative; display: flex; align-items: center; min-width: 0; border-radius: var(--radius-inner); transition: background-color var(--duration-fast) var(--ease-standard); }
 .folderRow:hover, .folderRow:focus-within { background: var(--fill); }
-.folderRow > .iconButton { margin-right: var(--space-1); }
+.folderRow > .iconButton { position: absolute; right: var(--space-1); width: 36px; }
+.folderRow .folderCount { min-width: var(--space-8); text-align: right; transition: opacity var(--duration-fast) var(--ease-standard); }
+.folderRow:hover .folderCount, .folderRow:focus-within .folderCount, .folderRow:has(> .iconButton[data-popup-open]) .folderCount { opacity: 0; }
+.folderRow:has(> .iconButton[data-popup-open]):not([data-active]) { background: var(--fill); }
 @media (hover: hover) and (pointer: fine) {
-  .folderRow > .iconButton { opacity: 0; }
-  .folderRow:hover > .iconButton, .folderRow:focus-within > .iconButton, .folderRow > .iconButton[data-popup-open] { opacity: 1; }
+  .folderRow > .iconButton { opacity: 0; pointer-events: none; transition: opacity var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+  .folderRow:hover > .iconButton, .folderRow:focus-within > .iconButton, .folderRow > .iconButton[data-popup-open] { opacity: 1; pointer-events: auto; }
 }
-.folderRow > .folderButton { min-width: 0; }
+.folderRow > .folderButton { min-width: 0; flex: 1; background: transparent; }
 .folderRow .folderButton > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .folderRow[data-active] { background: var(--accent-subtle); border-radius: var(--radius-inner); }
 .folderRow[data-active] > .folderButton { background: transparent; }
+@media (hover: none), (pointer: coarse) { .folderRow .folderCount { visibility: hidden; } }
 .customFolders { display: grid; gap: var(--space-1); padding-bottom: var(--space-2); }
 .archiveButton { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle); border-radius: 0 0 var(--radius-inner) var(--radius-inner); }
 .controls { grid-area: controls; min-width: 0; }
@@ -117,7 +121,7 @@
 .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .row[draggable="true"] { cursor: grab; }
 .itemContent { display: flex; align-items: flex-start; min-width: 0; gap: var(--space-3); padding-block: var(--space-2); }
-.fileIcon { flex-shrink: 0; color: var(--text-secondary); margin-top: 2px; }
+.fileIcon { display: flex; align-items: center; flex-shrink: 0; height: 24px; color: var(--text-secondary); }
 .fileText { flex: 1; min-width: 0; }
 .itemLink { display: flex; align-items: center; min-height: 24px; color: var(--foreground); min-width: 0; text-decoration: none; }
 .itemLink:hover { color: var(--foreground); text-decoration: none; }
@@ -125,6 +129,12 @@
 .meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin-top: var(--space-1); font-size: var(--text-xs); color: var(--text-secondary); }
 .meta span, .meta time { overflow-wrap: anywhere; }
 .rowStatus { white-space: nowrap; }
+/* Align controls with the name line; metadata can wrap without moving them. */
+@media (min-width: 769px) {
+  .row { align-items: start; }
+  .row > :is(.kindCol, .dateCol, .rowStatus, .rowActions) { display: flex; align-items: center; min-height: 44px; }
+  .row .nameSlot, .row .itemLink, .row .fileIcon { min-height: 28px; }
+}
 .iconButton { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; flex: 0 0 auto; border: 0; border-radius: var(--radius-control); color: var(--text-secondary); background: transparent; cursor: pointer; }
 .iconButton:hover, .iconButton:focus-visible, .iconButton[data-popup-open] { color: var(--foreground); background: var(--fill-strong); }
 .iconButton:disabled { cursor: default; opacity: .5; }
@@ -180,7 +190,7 @@
   .kindCol, .listHead .statusCol, .listHead .dateCol { display: none; }
   .rowStatus { grid-column: 2; grid-row: 2; justify-self: start; padding-bottom: var(--space-2); }
   .rowActions { grid-column: 3; grid-row: 1; }
-  .fileIcon { margin-top: var(--space-3); }
+  .fileIcon { margin-top: 10px; }
   .row > .iconButton, .iconButton { min-width: 44px; min-height: 44px; }
   .menu [role="menuitem"] { min-height: 44px; }
   .inlineName input, .nameAction { min-height: 44px; }
