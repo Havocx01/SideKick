@@ -110,7 +110,7 @@ function ComparisonTable({ result, candidates }: { result: AnalysisResult; candi
 function ResultContent({ result, follow, candidates, task, reused }: { result: AnalysisResult; follow: () => void; candidates: string[]; task: string; reused: boolean }) {
   const hasAssessment = Boolean(result.assessment?.length);
   const inspected = result.findings.find(finding => finding.id.startsWith("inspected-"));
-  const dataIssue = task === "data" && hasAssessment ? result.findings.find(finding => finding.tone === "danger" || finding.tone === "warning") : undefined;
+  const dataIssue = task === "data" && hasAssessment ? result.findings.find(finding => (finding.tone === "danger" || finding.tone === "warning") && !result.assessment?.some(claim => claim.text.includes(finding.detail))) : undefined;
   const warning = task === "warning" ? result.findings.find(finding => finding.source_ids.some(id => result.sources.some(source => source.id === id && source.metric === "alert_active"))) : undefined;
   const inspectedSources = inspected ? sourcesFor(result, inspected.source_ids) : [];
   const inspectedScenario = inspectedSources.find(source => source.scenario_id)?.scenario_id ?? undefined;
@@ -121,7 +121,7 @@ function ResultContent({ result, follow, candidates, task, reused }: { result: A
       {hasAssessment ? <Assessment result={result} reused={reused} /> : <><h3>{task === "compare" ? "Comparison" : task === "data" ? "Data checks" : "Conclusion"}</h3>{result.findings[0] ? <Finding finding={result.findings[0]} /> : <p>{result.summary}</p>}</>}
       {task === "investigate" && inspected && inspectedScenario !== weakestDetection(result, primary)?.scenario_id && <ExaminedCase finding={inspected} sources={inspectedSources} />}
       {dataIssue && <section className="analysis-case" aria-label="Data issue"><Finding finding={dataIssue} /></section>}
-      {warning && <section className="analysis-case" aria-label="Warning timing"><h3>Warning timing</h3><p>{warning.detail}</p></section>}
+      {warning && !hasAssessment && <section className="analysis-case" aria-label="Warning timing"><h3>Warning timing</h3><p>{warning.detail}</p></section>}
       {task === "compare" && candidates.length === 2 && <ComparisonTable result={result} candidates={candidates} />}
       {result.interpretation && <Interpretation result={result} />}
     </section>
@@ -228,7 +228,7 @@ function EvidenceDetails({ result }: { result: AnalysisResult }) {
 }
 function NextChecks({ result, follow }: { result: AnalysisResult; follow: () => void }) {
   const action = result.actions[0];
-  const detail = action?.id.startsWith("inspect-") ? "Review late and missed warnings in this case before retesting." : action?.detail;
+  const detail = action?.detail;
   return action ? <section className="analysis-next" aria-label="Next check"><div><h3>Next check</h3><p>{detail}</p></div><Link className="button primary" to={action.href} onClick={follow}>{action.label}<ArrowRight size={14} aria-hidden="true" /></Link></section> : null;
 }
 function ResultLimits({ result }: { result: AnalysisResult }) {

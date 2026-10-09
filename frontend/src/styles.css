@@ -344,6 +344,8 @@ details > p, details ul { margin-top: var(--space-3); }
 .decision-detail p { color: var(--text-secondary); }
 
 /* Overview */
+.overview-workspace { position: relative; isolation: isolate; }
+.overview-workspace > .main { position: relative; z-index: 1; background: transparent; }
 .welcome { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--space-12); align-items: center; padding-block: var(--space-8) var(--space-12); }
 .welcome h1 { font-size: var(--text-4xl); max-width: 14ch; letter-spacing: -.035em; }
 .welcome p { margin: var(--space-5) 0 var(--space-6); font-size: var(--text-lg); color: var(--text-secondary); max-width: 44ch; line-height: 1.45; }
@@ -365,6 +367,7 @@ details > p, details ul { margin-top: var(--space-3); }
 .benchmark-track { height: 8px; background: var(--fill); border-radius: var(--radius-pill); overflow: hidden; }
 .benchmark-track span { display: block; height: 100%; background: var(--accent); border-radius: inherit; transform-origin: left; animation: bar-grow var(--duration-considered) var(--ease-out) both; }
 .benchmark-track.fault span { background: var(--danger); animation-delay: 80ms; }
+.benchmark-track [data-overview-fill] { width: 100%; animation: none; }
 @keyframes bar-grow { from { transform: scaleX(0); } }
 .preview-explanation { margin-top: var(--space-6); }
 .preview-explanation p { font-size: var(--text-sm); margin: 0 0 var(--space-3); }
@@ -445,6 +448,13 @@ details > p, details ul { margin-top: var(--space-3); }
 .finding-dot.warning { background: var(--warning); }
 .finding-dot.blocker { background: var(--danger); }
 .experiment-list { border-radius: var(--radius); background: var(--surface); box-shadow: var(--card-shadow); overflow: hidden; }
+.experiment-setup .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }
+.setup-folder { width: 240px; flex: 0 0 240px; min-width: 0; }
+.setup-folder .note { margin: var(--space-2) 0 0; }
+@media (max-width: 768px) {
+  .experiment-setup .page-head { flex-direction: column; gap: var(--space-4); }
+  .setup-folder { width: 100%; flex-basis: auto; }
+}
 .experiment-list > a { display: flex; justify-content: space-between; align-items: center; gap: var(--space-6); padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border-subtle); color: var(--foreground); text-decoration: none; transition: background-color var(--duration-fast) var(--ease-out); }
 .experiment-list > a:last-child { border-bottom: 0; }
 .experiment-list > a:hover, .experiment-list > a:focus-visible { background: color-mix(in srgb, var(--fill) 45%, transparent); text-decoration: none; }

@@ -340,6 +340,7 @@ export interface EvidenceReference {
 
 export interface ExperimentCreate {
   dataset_id: string;
+  folder_id?: string | null;
   min_detection_fraction?: number;
   max_early_alarm_burden?: number;
   protocol?: ExperimentProtocol | null;
@@ -380,6 +381,28 @@ export interface ExperimentRecord {
   parent_experiment_id?: string | null;
   operation_id?: string | null;
   pilot_brief?: PilotBrief | null;
+}
+
+export interface LibraryFolder { id: string; name: string }
+export interface LibraryItemRef { kind: "run" | "upload"; id: string }
+export interface LibraryItem extends LibraryItemRef {
+  dataset_id: string;
+  display_name: string;
+  original_name: string;
+  source: "synthetic" | "upload";
+  folder_id: string | null;
+  archived: boolean;
+  created_at: number | null;
+  status: string;
+  run_count: number;
+  row_count: number | null;
+}
+export interface LibrarySnapshot { folders: LibraryFolder[]; items: LibraryItem[] }
+export interface LibraryUpdate {
+  items: LibraryItemRef[];
+  action: "rename" | "move" | "archive" | "restore";
+  display_name?: string;
+  folder_id?: string | null;
 }
 
 export interface FaultScenario {

@@ -37,7 +37,7 @@ def test_mapping_review_is_read_only_and_cloud_packet_contains_no_headers(datase
     packet = json.dumps({"intro": tools.intro(), "checks": checks, "mapping": mapping})
     assert "sensor_" not in packet and "equipment_id\": \"column" in packet
     assert "private-factory" not in packet and record.dataset_id not in packet and "/new" not in packet
-    result = tools.finish(["data-validation", "data-mapping"], checks["claims"] + mapping["claims"], None, None)
+    result = tools.finish(["data-validation", "data-mapping"], checks["claims"][:2] + mapping["claims"], None, None)
     assert result.suggested_mapping and result.assessment
     assert workspace.get("datasets", record.dataset_id) == before
     with workspace.connect() as db:
@@ -68,3 +68,28 @@ def test_invalid_roles_are_explained_and_drafts_do_not_change_fingerprint(datase
 def test_data_review_rejects_mixed_model_and_dataset_contexts():
     with pytest.raises(ValueError):
         AnalysisRequest(task="data", dataset_id="dataset", candidates=["xgboost/xgb1"])
+
+
+def test_nonblocking_missing_readings_are_explained_in_assessment(dataset):
+    workspace, record, frame = dataset
+    path = workspace.directory("datasets", record.dataset_id) / "data.csv"
+    frame.loc[frame.index[::10], record.mapping.sensors[0]] = float("nan")
+    frame.to_csv(path, index=False)
+    tools = toolsFor(workspace, AnalysisRequest(task="data", dataset_id=record.dataset_id, mapping=record.mapping))
+    result = tools.local()
+    assert result.findings[0].tone == "success"
+    assert any("missing readings" in claim.text and "training medians" in claim.text for claim in result.assessment)
+    assert "sensor_" not in str(tools.claim_catalog())
+    assert not workspace.get("datasets", record.dataset_id)["confirmed"]
+
+
+def test_live_selection_cannot_hide_readiness_or_a_quality_warning(dataset):
+    workspace, record, frame = dataset
+    path = workspace.directory("datasets", record.dataset_id) / "data.csv"
+    frame.loc[frame.index[::10], record.mapping.sensors[0]] = float("nan")
+    frame.to_csv(path, index=False)
+    tools = toolsFor(workspace, AnalysisRequest(task="data", dataset_id=record.dataset_id, mapping=record.mapping))
+    tools.call("get_dataset_checks", {})
+    packet = tools.call("suggest_column_mapping", {})
+    result = tools.finish(packet["finding_ids"], packet["claims"], None, "test")
+    assert [claim.id for claim in result.assessment] == ["data-readiness", "data-issue-data-missing_values", "mapping-review"]

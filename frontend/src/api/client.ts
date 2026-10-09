@@ -16,7 +16,10 @@ import type {
   DecisionReport,
   FrozenModelRecord,
   ValidationRecord,
-  Partition
+  Partition,
+  LibraryFolder,
+  LibrarySnapshot,
+  LibraryUpdate
 } from "./types";
 
 // Vite proxies /api when no base URL is configured.
@@ -196,12 +199,12 @@ export const experiments = {
   validate: (id: string) => post<ValidationRecord>(`/api/experiments/${id}/validation`, { untouched_confirmed: true }),
   validation: (id: string) => request<OperationState<ValidationRecord>>(`/api/experiments/${id}/validation`),
   sample: () => post<DatasetRegistration>("/api/datasets/sample"),
-  upload: (file: File, signal?: AbortSignal) =>
+  upload: (file: File, signal?: AbortSignal, folderId?: string | null) =>
     request<DatasetRegistration>("/api/datasets/upload", {
       method: "POST",
       signal,
       body: file,
-      headers: { "Content-Type": "text/csv", "X-Filename": encodeURIComponent(file.name) }
+      headers: { "Content-Type": "text/csv", "X-Filename": encodeURIComponent(file.name), ...(folderId ? { "X-Folder-Id": folderId } : {}) }
     }),
   dataset: (id: string) => request<DatasetRegistration>(`/api/datasets/${id}`),
   confirm: (id: string, body: DatasetConfirmation) => post<DatasetRegistration>(`/api/datasets/${id}/confirm`, body),
@@ -209,6 +212,14 @@ export const experiments = {
   list: () => request<ExperimentRecord[]>("/api/experiments"),
   get: (id: string) => request<ExperimentRecord>(`/api/experiments/${id}`),
   cancel: (id: string) => post<ExperimentRecord>(`/api/experiments/${id}/cancel`)
+};
+
+export const library = {
+  get: () => request<LibrarySnapshot>("/api/library"),
+  createFolder: (name: string) => post<LibraryFolder>("/api/library/folders", { name }),
+  renameFolder: (id: string, name: string) => post<LibraryFolder>(`/api/library/folders/${id}/rename`, { name }),
+  removeFolder: (id: string) => post<{ saved: boolean }>(`/api/library/folders/${id}/remove`),
+  update: (body: LibraryUpdate) => post<{ saved: boolean }>("/api/library/items", body)
 };
 
 export const pilots = {

@@ -75,6 +75,28 @@ def test_live_agent_inspects_evidence_and_never_displays_arbitrary_text(monkeypa
     text = " ".join(packets)
     assert "sensor_" not in text and "logistic_regression" not in text and "/comparison" not in text
     assert "Deploy this model" not in result.model_dump_json()
+    assert '"tool_choice": {"type": "function", "name": "get_model_metrics"}' in packets[0]
+
+
+@pytest.mark.parametrize("task", ["compare", "warning"])
+def test_context_tasks_stop_after_the_required_tool_instead_of_repeating_calls(monkeypatch, tools, task):
+    bundle = tools.bundle
+    if task == "compare":
+        context = AnalysisRequest(task="compare", candidates=["logistic_regression/lr2", "xgboost/xgb1"])
+        name, finding, claims = "compare_models", "overview", ["comparison-limits"]
+    else:
+        series = next(s for s in bundle.replay_series if s.partition.value == "out_of_fold" and s.points)
+        context = AnalysisRequest(task="warning", candidates=[f"{series.candidate.value}/{series.config_id}"],
+            scenario_id=series.scenario_id, equipment_id=series.equipment_id, cycle=series.points[0].cycle)
+        name, finding, claims = "get_warning_events", None, ["warning-state"]
+    scoped = EvidenceTools(bundle, context)
+    if finding is None:
+        finding = scoped.result.findings[0].id
+    packets = fakeClient(monkeypatch, scoped, [(name, {}), ("train_model", {})],
+        InvestigationChoices(finding_ids=[finding], claim_ids=claims, action_id=None))
+    result = asyncio.run(investigate(scoped, SETTINGS))
+    assert [call.name for call in result.investigation] == [name]
+    assert f'"name": "{name}"' in packets[0]
 
 
 @pytest.mark.parametrize("name,args", [

@@ -1,9 +1,20 @@
 import hashlib
 import json
+import math
+from decimal import Decimal, ROUND_CEILING
 from urllib.parse import urlencode
 
 from app.assistant.evidence import build_analysis, display, percent, with_brief
 from app.assistant.schemas import AnalysisAction, AnalysisClaim, AnalysisFinding, AnalysisRequest, EvidenceReference, InvestigationCall
+from app.experiments.decision import candidateLabel
+
+
+PROMPT_VERSION = "sidekick-investigation-v4"
+FAULT_CHECKS = {
+    "dropout": "Check missing-reading flags and median imputation, then inspect late and missed warnings before retesting.",
+    "stuck": "Check whether flat readings are flagged and whether the model relies on this channel before retesting.",
+    "drift": "Check channel scaling and sensitivity to gradual offsets before retesting.",
+}
 
 
 TOOL_LABELS = {
@@ -88,6 +99,15 @@ class EvidenceTools:
         self.claims[id] = AnalysisClaim(id=id, text=text, source_ids=sources)
         return id
 
+    def claim_catalog(self):
+        """Selection needs meaning and values, never private names or validation messages."""
+        refs = {source.id: source for source in self.result.sources}
+        return [{"id": claim.id, "kind": claim.id.split("-", 1)[0],
+                 "evidence": [{"metric": refs[id].metric, "value": refs[id].value, "unit": refs[id].unit,
+                               "model": next(alias for alias, key in self.models.items() if key == refs[id].candidate),
+                               "case": next((alias for alias, key in self.cases.items() if key == refs[id].scenario_id), None)}
+                              for id in claim.source_ids]} for claim in self.claims.values()]
+
     def expose(self, findings, claims=None, extra=None):
         self.seenFindings.update(finding.id for finding in findings)
         sourceIds = list(dict.fromkeys([source for finding in findings for source in finding.source_ids]
@@ -127,13 +147,38 @@ class EvidenceTools:
         findings = [finding for finding in self.result.findings if any(source.id in finding.source_ids and source.candidate == key
                     and source.metric in ("qualifies", "coverage_complete") for source in self.result.sources)]
         qualification = next(source for source in self.result.sources if source.candidate == key and source.metric == "qualifies")
-        claimId = self.claim(f"limits-{model}", "The model meets the recorded test limits. Fresh equipment validation is still needed." if verdict.qualifies
-                             else "The model does not meet the recorded test limits. Inspect the failed cases and coverage before further evaluation.", [qualification.id])
+        claimId = self.claim(f"limits-{model}",
+            f"The model meets the recorded test limits: {verdict.required_passed} / {verdict.required_scenarios} required fault cases passed. "
+            "The next check is a locked-model evaluation on fresh reserved histories, not deployment approval." if verdict.qualifies else
+            f"The model does not meet the recorded test limits: {verdict.required_scenarios - verdict.required_passed} of {verdict.required_scenarios} required fault cases did not pass. "
+            "Resolve failed limits or missing coverage before a fresh validation check.",
+            [qualification.id] + [s.id for s in self.result.sources if s.candidate == key and s.metric in ("required_passed", "required_scenarios")])
+        if not verdict.qualifies:
+            healthy = []
+            criteria = self.selection.criteria
+            if verdict.clean.detection_fraction < criteria.min_detection_fraction:
+                healthy.append(f"Healthy detection is {percent(verdict.clean.detection_fraction)} against a {percent(criteria.min_detection_fraction)} minimum.")
+                self.claims[claimId].source_ids += [self.source(key, "clean_detection", verdict.clean.detection_fraction, "fraction"),
+                    self.source(key, "min_detection_fraction", criteria.min_detection_fraction, "fraction")]
+            if verdict.clean.early_alarm_burden is None or verdict.clean.early_alarm_burden > criteria.max_early_alarm_burden:
+                healthy.append("Healthy early-alarm time is unavailable." if verdict.clean.early_alarm_burden is None else
+                    f"Healthy early-alarm time is {percent(verdict.clean.early_alarm_burden)} against a {percent(criteria.max_early_alarm_burden)} maximum.")
+                self.claims[claimId].source_ids += [self.source(key, "clean_early_alarm_burden", verdict.clean.early_alarm_burden, "fraction"),
+                    self.source(key, "max_early_alarm_burden", criteria.max_early_alarm_burden, "fraction")]
+            if healthy:
+                self.claims[claimId].text += " " + " ".join(healthy)
+        if self.context.partition.value == "holdout":
+            self.claims[claimId].text = self.claims[claimId].text.replace(
+                "The next check is a locked-model evaluation on fresh reserved histories, not deployment approval.",
+                "This is recorded final validation. Next, agree a supervised equipment pilot and acceptance criteria; this is not deployment approval.")
+            if not verdict.qualifies:
+                self.claims[claimId].text += " These histories have already been scored; any new validation needs genuinely fresh histories."
         claims = [claimId]
-        rows = self.caseRows(model)
-        if (len(rows) != verdict.required_scenarios and not self.context.scenario_id) or verdict.coverage_complete is False:
+        allRows = [row for row in self.rows if f"{row.candidate.value}/{row.config_id}" == key]
+        if len(allRows) != verdict.required_scenarios or verdict.coverage_complete is False or any(
+                row.coverage_complete is False or row.metrics.engines != (row.expected_engines if row.expected_engines is not None else verdict.clean.engines) for row in allRows):
             refs = [self.source(key, "coverage_complete", verdict.coverage_complete, "boolean"),
-                    self.source(key, "recorded_required_cases", len(rows), "cases")]
+                    self.source(key, "recorded_required_cases", len(allRows), "cases")]
             claims.insert(0, self.claim(f"coverage-{model}", "Required case coverage is incomplete or unconfirmed. Review coverage before using the recorded qualification.", refs))
         criteria = self.selection.criteria
         if verdict.clean.detection_fraction < criteria.min_detection_fraction:
@@ -197,18 +242,31 @@ class EvidenceTools:
                self.source(key, "coverage_complete", row.coverage_complete, "boolean", row.scenario_id, "Coverage complete")]
         claims = []
         if metrics.detection_fraction < criteria.min_detection_fraction:
-            claims.append(self.claim(f"detection-{model}-{case}", "This fault falls below the timely-warning requirement.", ids[:2]))
+            gap = ""
+            if metrics.engines > 0 and math.isclose(metrics.detection_fraction, metrics.detected / metrics.engines, abs_tol=1e-8):
+                target = int((Decimal(str(criteria.min_detection_fraction)) * metrics.engines).to_integral_value(rounding=ROUND_CEILING))
+                gap = f" {target - metrics.detected} more histories would need timely warnings to reach that target."
+            claims.append(self.claim(f"detection-{model}-{case}",
+                f"{row.fault.label()}: {metrics.detected} / {metrics.engines} histories warned in time ({percent(metrics.detection_fraction)}), "
+                f"below the {percent(criteria.min_detection_fraction)} requirement.{gap}", ids[:2] + ids[4:6]))
         if metrics.early_alarm_burden is None or metrics.early_alarm_burden > criteria.max_early_alarm_burden:
-            text = "Early alarm time is unavailable, so this case cannot establish qualification." if metrics.early_alarm_burden is None else "This fault exceeds the early-alarm limit."
+            text = f"{row.fault.label()}: early alarm time is unavailable, so this case cannot establish qualification." if metrics.early_alarm_burden is None else (
+                f"{row.fault.label()}: {percent(metrics.early_alarm_burden)} early-alarm time exceeds the {percent(criteria.max_early_alarm_burden)} limit. "
+                "This measures time in alarm during eligible early cycles, not the probability that a warning is false.")
             claims.append(self.claim(f"burden-{model}-{case}", text, ids[2:4]))
         if row.coverage_complete is False or metrics.engines != (row.expected_engines if row.expected_engines is not None else verdict.clean.engines):
             claims.append(self.claim(f"coverage-{model}-{case}", "Equipment coverage is incomplete or unconfirmed. Review coverage before interpreting this case.", ids[5:]))
         if row.coverage_complete is not False and metrics.engines == verdict.clean.engines and verdict.clean.detected > metrics.detected:
             cleanId = self.source(key, "clean_detected", verdict.clean.detected, "histories", label="Healthy histories warned in time")
             difference = verdict.clean.detected - metrics.detected
-            claims.append(self.claim(f"loss-{model}-{case}", f"The recorded fault case has {difference} fewer timely {'warning' if difference == 1 else 'warnings'} than healthy readings.", [cleanId, ids[4], ids[5]]))
+            claims.append(self.claim(f"loss-{model}-{case}", f"The recorded fault case has {difference} fewer timely {'warning' if difference == 1 else 'warnings'} than healthy readings "
+                f"with {metrics.engines} evaluated histories in each result. This shows sensitivity to the simulated sensor fault, not its physical failure cause.", [cleanId, ids[4], ids[5]]))
         if self.passes(row):
-            claims.append(self.claim(f"passed-{model}-{case}", "This fault case meets the recorded detection and early-alarm limits; evaluated history counts match.", ids[:7]))
+            margin = (metrics.detection_fraction - criteria.min_detection_fraction) * 100
+            claims.append(self.claim(f"passed-{model}-{case}",
+                f"{row.fault.label()}: {percent(metrics.detection_fraction)} warned in time, {margin:.2f} percentage points above the requirement; "
+                f"early-alarm time is {percent(metrics.early_alarm_burden)} against a {percent(criteria.max_early_alarm_burden)} limit. "
+                "Evaluated history counts match; this case alone does not establish performance on fresh equipment.", ids[:7]))
         if row.coverage_complete is None:
             limitation = "Historical fault cases have no explicit coverage flag. Stored history counts are checked; no completeness flag is invented."
             if limitation not in self.result.limitations:
@@ -221,7 +279,8 @@ class EvidenceTools:
         actionId = f"inspect-{model}-{case}"
         if not any(action.id == actionId for action in self.result.actions):
             href = next(source.href for source in self.result.sources if source.id == ids[0])
-            self.result.actions.insert(0, AnalysisAction(id=actionId, label="Inspect this fault", detail=row.fault.label(), href=href))
+            self.result.actions.insert(0, AnalysisAction(id=actionId, label="Inspect this fault",
+                detail=f"{row.fault.label()}. {FAULT_CHECKS[row.fault.kind.value]}", href=href))
         return self.expose([finding], claims, {"metrics": metrics.model_dump(mode="json"), "meets_limits": self.passes(row),
             "fault": {"kind": row.fault.kind.value, "duration": row.fault.duration.value, "onset_before_failure": row.fault.onset_before_failure}})
 
@@ -229,22 +288,54 @@ class EvidenceTools:
         titles = {"Comparison overview", "Healthy sensors: warned in time", "Healthy sensors: early alarm time", "Worst fault early alarm time", "Average fault detection"}
         findings = [finding for finding in self.result.findings if finding.title in titles]
         overview = next(finding for finding in findings if finding.id == "overview")
-        claimId = self.claim("comparison-scope", "Compare the recorded tradeoffs. These differences do not establish statistical superiority or a deployment decision.", overview.source_ids)
-        claims = [claimId]
         first, second = [self.verdicts[key] for key in self.context.candidates]
+        names = [candidateLabel(verdict) for verdict in (first, second)]
         if first.qualifies != second.qualifies:
-            refs = [source.id for source in self.result.sources if source.metric == "qualifies"]
-            claims.insert(0, self.claim("comparison-limits", "Only one selected model meets every recorded test limit. Compare failed cases before choosing a model for fresh validation.", refs))
-        if first.coverage_complete is not False and second.coverage_complete is not False and first.worst_metrics and second.worst_metrics and first.worst_metrics.engines == second.worst_metrics.engines:
+            index = 0 if first.qualifies else 1
+            text = f"Only {names[index]} meets every recorded test limit; {names[1 - index]} does not. Use the qualifying model as the candidate for a fresh validation check, subject to coverage review."
+        elif first.qualifies:
+            text = f"Both {names[0]} and {names[1]} meet the recorded limits. Compare fault detection and early-alarm time before selecting a model for fresh validation."
+        else:
+            text = f"Neither {names[0]} nor {names[1]} meets every recorded limit. Resolve failed tests or missing coverage before fresh validation."
+        if self.context.partition.value == "holdout":
+            text += " These are already-scored final validation histories; repeating their evaluation is not a fresh check."
+        claims = [self.claim("comparison-limits", text, overview.source_ids)]
+        rows = [[row for row in self.rows if f"{row.candidate.value}/{row.config_id}" == key] for key in self.context.candidates]
+        comparable = (bool(rows[0]) and {row.scenario_id for row in rows[0]} == {row.scenario_id for row in rows[1]}
+            and first.required_scenarios == second.required_scenarios
+            and all(len(own) == verdict.required_scenarios and verdict.coverage_complete is not False
+                    and all(row.coverage_complete is not False and row.metrics.engines == verdict.clean.engines
+                            and row.metrics.engines == (row.expected_engines if row.expected_engines is not None else verdict.clean.engines) for row in own)
+                    for own, verdict in zip(rows, (first, second)))
+            and first.clean.engines == second.clean.engines)
+        matched = self.context.partition.value == "out_of_fold" and any(
+            pair.kind == "matched_augmentation" and {pair.first, pair.second} == set(self.context.candidates) for pair in self.bundle.paired_comparisons)
+        scope = ("Matched configuration and seed compare augmented training within these recorded configurations and thresholds." if matched else
+                 "Independently selected configurations do not isolate the benefit of augmented training.")
+        scope += " Differences do not establish statistical superiority or deployment approval."
+        if not comparable:
+            refs = [self.source(key, "recorded_required_cases", len(own), "cases") for key, own in zip(self.context.candidates, rows)]
+            claims.insert(0, self.claim("comparison-coverage", "Fault coverage or evaluated history counts differ or are incomplete. "
+                "Do not treat passed-case totals or detection differences as an improvement; review each model's coverage separately.", refs))
+        if comparable and first.worst_metrics and second.worst_metrics and first.worst_metrics.engines == second.worst_metrics.engines:
             difference = second.worst_metrics.detected - first.worst_metrics.detected
             refs = [self.source(key, "detected", verdict.worst_metrics.detected, "histories", verdict.worst_scenario_id, "Histories warned in time")
                     for key, verdict in zip(self.context.candidates, (first, second)) if verdict.worst_scenario_id]
             if len(refs) == 2:
                 direction = "more" if difference >= 0 else "fewer"
-                text = f"The second selected model retains {abs(difference)} {direction} timely warnings in its own weakest required case. The faults can differ; this is a descriptive comparison."
+                text = f"{names[1]} retains {abs(difference)} {direction} timely warnings than {names[0]} in its own weakest required case "
+                text += f"({second.worst_metrics.detected} / {second.worst_metrics.engines} versus {first.worst_metrics.detected} / {first.worst_metrics.engines}). The faults can differ; this is a descriptive comparison."
+                if difference == 0:
+                    text = f"Both models retain {first.worst_metrics.detected} / {first.worst_metrics.engines} timely warnings in their own weakest required cases. The faults can differ; this is a descriptive comparison."
                 claims.insert(0, self.claim("comparison-warning-counts", text, refs))
-        return self.expose(findings, claims, {"matched_augmentation": any(pair.kind == "matched_augmentation" and {pair.first, pair.second} == set(self.context.candidates)
-                                                                          for pair in self.bundle.paired_comparisons) if self.context.partition.value == "out_of_fold" else False})
+        burdens = [verdict.worst_burden_required for verdict in (first, second)]
+        refs = [self.source(key, "worst_burden_required", burden, "fraction") for key, burden in zip(self.context.candidates, burdens)]
+        alarm = (f"Worst fault early-alarm time is {percent(burdens[0])} for {names[0]} and {percent(burdens[1])} for {names[1]}; lower means less time in alarm during eligible early cycles. "
+                 if comparable and all(burden is not None for burden in burdens) else
+                 "A comparable early-alarm tradeoff is unavailable; do not assume the model with higher detection also raises fewer early alarms. ")
+        scopeRef = self.source(self.context.candidates[0], "matched_augmentation", matched, "boolean", label="Matched augmentation comparison")
+        claims.append(self.claim("comparison-tradeoff", alarm + scope, refs + overview.source_ids + [scopeRef]))
+        return self.expose(findings, claims, {"matched_augmentation": matched, "comparable_coverage": comparable})
 
     def get_warning_events(self):
         metrics = {"alert_active", "remaining_life", "episode_start", "episode_end", "history_outcome", "fault_onset_rul", "replay_count"}
@@ -253,8 +344,15 @@ class EvidenceTools:
         claims = []
         if source:
             active = source.value == "True"
-            claims.append(self.claim("warning-state", "The stored warning is active at this cycle. Its timing, rather than the score alone, determines whether it was useful." if active
-                                     else "The stored warning is inactive at this cycle. A high risk score alone does not establish an active warning.", [source.id]))
+            remaining = next(source for source in self.result.sources if source.metric == "remaining_life")
+            criteria = self.selection.criteria
+            rul = int(remaining.value)
+            phase = ("before the useful warning window; an active warning here is not an in-time detection" if rul > criteria.horizon_cycles else
+                     "within the useful warning window; an active warning here counts toward timely detection" if rul >= criteria.min_useful_lead else
+                     "too late for the minimum useful lead, even if a warning is active")
+            refs = [source.id, remaining.id] + [s.id for s in self.result.sources if s.metric in ("min_useful_lead", "horizon_cycles")]
+            claims.append(self.claim("warning-state", f"At cycle {source.cycle}, the stored warning is {'active' if active else 'inactive'} with {rul} cycles before failure. "
+                f"This is {phase}. The useful window is {criteria.min_useful_lead}–{criteria.horizon_cycles} cycles before failure; the score alone is not the warning state.", refs))
             clean = next((series for series in self.bundle.replay_series if series.partition == self.context.partition and series.fault is None
                 and f"{series.candidate.value}/{series.config_id}" == self.context.candidates[0] and series.equipment_id == self.context.equipment_id), None)
             point = next((point for point in clean.points if point.cycle == source.cycle), None) if clean else None
@@ -272,6 +370,14 @@ class EvidenceTools:
         else:
             refs = [source.id for source in self.result.sources if source.metric == "replay_count"]
             claims.append(self.claim("warning-unavailable", "The selected replay or cycle is unavailable. This history's warning state cannot be reconstructed from these results.", refs))
+        outcome = next((source for source in self.result.sources if source.metric == "history_outcome"), None)
+        if outcome:
+            meaning = {"in time": "at least one stored warning occurred in the useful window", "late": "warnings did not provide the minimum useful lead",
+                       "missed": "no warning was recorded in the useful or late-warning window"}
+            claims.insert(1, self.claim("warning-outcome", f"History outcome: {outcome.value} — {meaning[outcome.value]}. "
+                "This describes the full trace, so it can differ from the warning state at the selected cycle.", [outcome.id]))
+        if not source and not any(action.id == "replay" for action in self.result.actions):
+            self.result.actions = []
         return self.expose(findings, claims)
 
     def finish(self, findingIds, claimIds, actionId, model):
@@ -281,6 +387,20 @@ class EvidenceTools:
             raise ValueError("Choose verified claims from this investigation.")
         if actionId is not None and actionId not in self.seenActions:
             raise ValueError("Choose an available evidence action.")
+        # Critical conclusions cannot be displaced by interesting but secondary metrics.
+        # These are already inspected server claims; never broaden the evidence scope.
+        task = self.context.task
+        if task == "data":
+            issues = [f for f in self.result.findings if f.tone in ("danger", "warning") and f.id != "data-validation"]
+            important = next((f"data-issue-{f.id}" for f in issues if f"data-issue-{f.id}" in self.claims), None)
+            required = ["data-readiness"] + ([important] if important else []) + ["mapping-review"]
+        elif task == "warning" or (task == "brief" and self.context.equipment_id):
+            required = ["warning-unavailable" if "warning-unavailable" in self.claims else "warning-state", "warning-outcome"]
+        elif task == "compare" or (task == "brief" and len(self.context.candidates) == 2):
+            required = ["comparison-coverage", "comparison-limits", "comparison-tradeoff", "comparison-warning-counts"]
+        else:
+            required = ["coverage-model-1", "limits-model-1"]
+        claimIds = list(dict.fromkeys([id for id in required if id in self.claims] + claimIds))[:3]
         findings = {finding.id: finding for finding in self.result.findings}
         self.result.findings = [findings[id] for id in findingIds] + [finding for finding in self.result.findings if finding.id not in findingIds]
         self.result.assessment = [self.claims[id] for id in claimIds]
@@ -296,7 +416,7 @@ class EvidenceTools:
         self.result.interpretation = None
         self.result.mode = "ai" if model else "evidence"
         self.result.model = model
-        self.result.prompt_version = "sidekick-investigation-v3"
+        self.result.prompt_version = PROMPT_VERSION
         self.result.verification = "All assessments resolve to server-verified claims and scoped evidence. AI supplies no numbers, URLs or qualification decisions."
         payload = {"original": self.result.evidence_digest, "sources": [source.model_dump(mode="json") for source in self.result.sources],
                    "assessment": [claim.model_dump() for claim in self.result.assessment], "calls": [call.model_dump() for call in self.calls]}
@@ -305,6 +425,13 @@ class EvidenceTools:
 
     def local(self):
         findingIds, claimIds = [], []
+        if self.context.task == "warning" or (self.context.task == "brief" and self.context.equipment_id):
+            packet = self.call("get_warning_events", {})
+            return self.finish(packet["finding_ids"][:3], packet["claims"][:3],
+                "replay" if any(action.id == "replay" for action in self.result.actions) else None, None)
+        if self.context.task == "compare" or (self.context.task == "brief" and len(self.context.candidates) == 2):
+            packet = self.call("compare_models", {})
+            return self.finish(packet["finding_ids"][:3], packet["claims"][:3], None, None)
         for model in self.models:
             packet = self.call("get_model_metrics", {"model": model})
             findingIds += packet["finding_ids"][:1]
@@ -317,14 +444,6 @@ class EvidenceTools:
                 packet = self.call("inspect_fault_case", {"model": model, "case": cases[0]["case"]})
                 findingIds = packet["finding_ids"][:1] + findingIds
                 claimIds += packet["claims"]
-        if self.context.task == "compare" or (self.context.task == "brief" and len(self.context.candidates) == 2):
-            packet = self.call("compare_models", {})
-            findingIds = packet["finding_ids"][:1] + findingIds
-            claimIds = packet["claims"] + claimIds
-        if self.context.task == "warning" or (self.context.task == "brief" and self.context.equipment_id):
-            packet = self.call("get_warning_events", {})
-            findingIds = packet["finding_ids"][:1] + findingIds
-            claimIds = packet["claims"] + claimIds
-        actionId = "replay" if (self.context.task == "warning" or self.context.equipment_id) and any(action.id == "replay" for action in self.result.actions) else None
+        actionId = next((action.id for action in self.result.actions if action.id.startswith("inspect-")), None)
         result = self.finish(list(dict.fromkeys(findingIds))[:3], list(dict.fromkeys(claimIds))[:3], actionId, None)
         return result

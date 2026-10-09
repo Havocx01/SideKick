@@ -1,0 +1,10 @@
+.number {
+  display: inline-grid;
+  vertical-align: baseline;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.measure, .display { grid-area: 1 / 1; }
+.measure { visibility: hidden; }
+.display { text-align: end; }

@@ -62,6 +62,52 @@ def test_reopening_and_switching_to_a_brief_reuses_saved_evidence(assistant_app)
             assert isolated["id"] != forced["id"] and not isolated["reused"]
 
 
+def test_prompt_upgrade_preserves_drafts_only_for_same_owner_and_evidence(assistant_app):
+    service = assistant_app.state.assistant
+    loaded = load_bundle(get_settings().bundle_path)
+    context = AnalysisRequest(**payload())
+
+    async def check():
+        old = await service.create(loaded, context, "owner", False)
+        old.cache_fingerprint = "sidekick-analysis-v2.2:" + old.cache_fingerprint.partition(":")[2]
+        old.brief_text = "Engineer-written notes"
+        old.brief_saved_at = time.time()
+        service.store.save(old, "owner")
+        updated = await service.create(loaded, context, "owner", False, reuse=True)
+        assert updated.id != old.id and updated.result.prompt_version == "sidekick-investigation-v4"
+        assert updated.brief_text == old.brief_text and updated.brief_saved_at == old.brief_saved_at
+        assert service.store.get(old.id, "owner").brief_text == old.brief_text
+        different = await service.create(loaded.model_copy(update={"source_digest": "different"}), context, "owner", False)
+        assert different.brief_text is None
+        stranger = await service.create(loaded, context, "stranger", False)
+        assert stranger.brief_text is None
+        updated.brief_text = ""
+        updated.updated_at = time.time() + 1
+        service.store.save(updated, "owner")
+        rerun = await service.create(loaded, context, "owner", False)
+        assert rerun.brief_text == ""  # An explicitly cleared draft stays cleared.
+
+    asyncio.run(check())
+
+
+def test_unedited_generated_brief_is_regenerated_when_analysis_is_rerun(assistant_app):
+    service = assistant_app.state.assistant
+    loaded = load_bundle(get_settings().bundle_path)
+    context = AnalysisRequest(**{**payload(), "task": "brief"})
+
+    async def check():
+        old = await service.create(loaded, context, "owner", False)
+        old.brief_text = old.result.brief_draft
+        old.brief_saved_at = time.time()
+        service.store.save(old, "owner")
+        updated = await service.create(loaded, context, "owner", False)
+        assert updated.result.brief_draft
+        assert updated.brief_text is None and updated.brief_saved_at is None
+        assert service.store.get(old.id, "owner").brief_saved_at
+
+    asyncio.run(check())
+
+
 def test_reuse_shares_live_ai_in_both_directions_without_another_provider_call(assistant_app, monkeypatch):
     from app.assistant import provider
     service = assistant_app.state.assistant
@@ -384,7 +430,7 @@ def test_investigation_can_become_a_brief_without_a_second_ai_request(assistant_
         assert saved["context"]["task"] == "brief" and saved["id"] != original["id"]
         assert saved["result"]["evidence_digest"] == original["result"]["evidence_digest"]
         assert saved["result"]["assessment"] == original["result"]["assessment"]
-        assert "Assessment" in saved["result"]["brief_draft"]
+        assert "Review focus" in saved["result"]["brief_draft"]
         assert assistant_app.state.assistant.tasks == {}
         assistant_app.state.assistant.settings.assistant_tasks = ("investigate",)
         assert client.post(f"/api/assistant/analyses/{original['id']}/review", headers=headers).status_code == 403

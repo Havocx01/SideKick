@@ -1,24 +1,24 @@
 import { expect, test } from "@playwright/test";
 
-// These checks exercise the unassisted workflow. Spotlight behavior has its own tests.
+// Explicit entry is tested here; automatic introduction has dedicated tests.
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.guide.dismissed", "true"));
+  await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true"));
 });
 
 test("the walkthrough explains the recorded evidence without starting jobs", async ({ page }) => {
   const mutations: string[] = [];
   page.on("request", request => { if (request.method() === "POST") mutations.push(request.url()); });
   await page.goto("/");
-  await page.getByRole("link", { name: "Start guided walkthrough", exact: true }).click();
+  await page.getByRole("link", { name: "View walkthrough", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Start with healthy sensors", exact: true })).toBeVisible();
   await expect(page.getByTestId("walkthrough-result")).toContainText("80 / 80");
-  await page.getByRole("link", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Now make one sensor fail", exact: true })).toBeVisible();
   await expect(page.getByTestId("walkthrough-result")).toContainText("41 / 80");
   await expect(page.getByTestId("walkthrough-result")).toContainText("24");
   await page.reload();
   await expect(page.getByRole("heading", { name: "Now make one sensor fail", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByText("Playback of stored results", { exact: true })).toBeVisible();
   const slider = page.getByRole("slider", { name: "Replay cycle" });
   const end = await slider.getAttribute("aria-valuenow");
@@ -38,14 +38,14 @@ test("the walkthrough explains the recorded evidence without starting jobs", asy
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(slider).toHaveAttribute("aria-valuenow", end!);
   await expect(page.getByRole("button", { name: "Replay from start", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByTestId("walkthrough-result")).toContainText("79 / 80");
-  await page.getByRole("link", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download evidence", exact: true }).click();
   expect((await download).suggestedFilename()).toMatch(/\.zip$/);
   expect(mutations).toEqual([]);
-  await page.getByRole("link", { name: "Restart walkthrough", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /Start with healthy sensors Warning timing/ }).click();
   await expect(page).toHaveURL(/step=clean/);
 });
 
@@ -87,7 +87,7 @@ for (const mode of ["demo", "replay"]) {
     });
     await page.goto("/walkthrough?step=clean&partition=holdout&candidate=missing");
     await expect(page.getByTestId("walkthrough-result")).toContainText("80 / 80");
-    await page.getByRole("link", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(page.getByTestId("walkthrough-result")).toContainText("41 / 80");
     expect(mutations).toEqual([]);
   });

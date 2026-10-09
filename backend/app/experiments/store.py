@@ -37,6 +37,13 @@ class Workspace:
                     reason TEXT NOT NULL, exposed_at REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS pilot_reviews (
                     experiment_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS library_folders (
+                    id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL,
+                    name_key TEXT NOT NULL, created_at REAL NOT NULL, UNIQUE(owner,name_key));
+                CREATE TABLE IF NOT EXISTS library_items (
+                    owner TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL,
+                    display_name TEXT, folder_id TEXT, archived INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL, PRIMARY KEY(owner,kind,id));
             """)
 
     @contextmanager
@@ -61,24 +68,38 @@ class Workspace:
             raise KeyError(id)
         return json.loads(row[0])
 
-    def save_dataset(self, record: dict):
+    def save_dataset(self, record: dict, *, library_owner="local", folder_id=None):
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             old = conn.execute("SELECT payload FROM datasets WHERE id=?", (record["dataset_id"],)).fetchone()
             if old and json.loads(old[0])["confirmed"]:
                 raise ValueError("This dataset is already confirmed. Upload another copy to change its mapping.")
+            if not old:
+                from app.experiments.library import validate_folder
+                validate_folder(conn, library_owner, folder_id)
+                conn.execute("INSERT INTO library_items (owner,kind,id,folder_id,created_at) VALUES (?,?,?,?,?)",
+                             (library_owner, "upload", record["dataset_id"], folder_id, time.time()))
             conn.execute(
                 "INSERT OR REPLACE INTO datasets VALUES (?,?)",
                 (record["dataset_id"], json.dumps(record, allow_nan=False)),
             )
 
-    def reserve(self, record: dict):
+    def reserve(self, record: dict, *, library_owner="local", folder_id=None, folder_explicit=False):
         try:
             with self.connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                if not folder_explicit:
+                    previous = conn.execute("SELECT folder_id FROM library_items WHERE owner=? AND kind='upload' AND id=?",
+                                            (library_owner, record.get("dataset_id"))).fetchone()
+                    folder_id = previous[0] if previous else None
+                from app.experiments.library import validate_folder
+                validate_folder(conn, library_owner, folder_id)
                 conn.execute(
                     "INSERT INTO experiments VALUES (?,?,?,?)",
                     (record["experiment_id"], record["status"], json.dumps(record), time.time()),
                 )
+                conn.execute("INSERT INTO library_items (owner,kind,id,folder_id,created_at) VALUES (?,?,?,?,?)",
+                             (library_owner, "run", record["experiment_id"], folder_id, record["created_at"]))
         except sqlite3.IntegrityError as exc:
             raise ValueError(
                 "The server is already running an experiment. Try again when it finishes, or explore the recorded benchmark."

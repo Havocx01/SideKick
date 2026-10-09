@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { ReplaySeries } from "../api/types";
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
   horizon?: number;
   minLead?: number;
   cursorCycle?: number;
+  compact?: boolean;
 }
 
 const MARGIN = { top: 26, right: 24, bottom: 46, left: 64 };
@@ -27,20 +29,32 @@ function cycleTicks(maxRul: number, horizon: number, minLead: number) {
   );
 }
 
-function CycleAxis({ x, ticks, y, height }: { x: (rul: number) => number; ticks: number[]; y: number; height: number }) {
+function CycleAxis({ x, ticks, y, height, width = WIDTH, minLead }: { x: (rul: number) => number; ticks: number[]; y: number; height: number; width?: number; minLead?: number }) {
   return (
     <g className="axis">
-      <line x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={y} y2={y} />
+      <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y} y2={y} />
       {ticks.map(tick => (
-        <text key={tick} x={x(tick)} y={y + 16} textAnchor="middle">{tick}</text>
+        <text key={tick} x={x(tick)} y={y + 16 + (width < 500 && tick === minLead ? 10 : 0)} textAnchor="middle">{tick}</text>
       ))}
-      <text x={MARGIN.left + (WIDTH - MARGIN.left - MARGIN.right) / 2} y={height - 6} textAnchor="middle">Cycles before failure</text>
+      <text x={MARGIN.left + (width - MARGIN.left - MARGIN.right) / 2} y={height - 6} textAnchor="middle">Cycles before failure</text>
     </g>
   );
 }
 
-export function ScoreTimeline({ series, comparison, height = 240, horizon = 30, minLead = 10, cursorCycle }: Props) {
-  const plotWidth = WIDTH - MARGIN.left - MARGIN.right;
+export function ScoreTimeline({ series, comparison, height = 240, horizon = 30, minLead = 10, cursorCycle, compact = false }: Props) {
+  const container = useRef<HTMLDivElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState(420);
+  useEffect(() => {
+    if (!compact || !container.current) return;
+    const observer = new ResizeObserver(entries => {
+      const size = entries[0]?.contentRect.width;
+      if (size) setMeasuredWidth(Math.max(280, Math.round(size)));
+    });
+    observer.observe(container.current);
+    return () => observer.disconnect();
+  }, [compact]);
+  const width = compact ? measuredWidth : WIDTH;
+  const plotWidth = width - MARGIN.left - MARGIN.right;
   const plotHeight = height - MARGIN.top - MARGIN.bottom;
 
   const points = series.points;
@@ -72,13 +86,13 @@ export function ScoreTimeline({ series, comparison, height = 240, horizon = 30, 
   });
 
   return (
-    <div className="replay-chart">
+    <div className="replay-chart" ref={container}>
       <div className="chart-scroll" tabIndex={0} aria-label="Scrollable score chart">
         <svg
           className="chart"
-          viewBox={`0 0 ${WIDTH} ${height}`}
+          viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label={`Score over time for ${series.equipment_id}`}
+          aria-label={`Score over time for ${series.equipment_id}${compact ? `; alert threshold ${series.threshold.toFixed(3)}` : ""}`}
         >
           <text x={14} y={MARGIN.top + plotHeight / 2} textAnchor="middle" transform={`rotate(-90 14 ${MARGIN.top + plotHeight / 2})`}>Warning score</text>
           {/* Useful warning window: late enough to be a real signal, early enough to act on. */}
@@ -89,15 +103,15 @@ export function ScoreTimeline({ series, comparison, height = 240, horizon = 30, 
             const value = minScore + fraction * (maxScore - minScore);
             return (
               <g key={fraction}>
-                {fraction > 0 && <line className="gridline" x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={y(value)} y2={y(value)} />}
+                {fraction > 0 && <line className="gridline" x1={MARGIN.left} x2={width - MARGIN.right} y1={y(value)} y2={y(value)} />}
                 <text x={MARGIN.left - 8} y={y(value) + 3.5} textAnchor="end">{tickLabel(value)}</text>
               </g>
             );
           })}
 
           {/* Threshold the alert rule compares against. */}
-          <line x1={MARGIN.left} x2={WIDTH - MARGIN.right} y1={y(series.threshold)} y2={y(series.threshold)} stroke="var(--text-secondary)" strokeWidth={1} strokeDasharray="4 4" />
-          <text className="chart-label" x={MARGIN.left + 6} y={y(series.threshold) - 6}>Alert threshold {series.threshold.toFixed(3)}</text>
+          <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y(series.threshold)} y2={y(series.threshold)} stroke="var(--text-secondary)" strokeWidth={1} strokeDasharray="4 4" />
+          <text className="chart-label" x={MARGIN.left + 6} y={y(series.threshold) - 6}>{compact ? "Threshold" : `Alert threshold ${series.threshold.toFixed(3)}`}</text>
 
           {comparison ? (
             <path d={path(visible(comparison.points))} fill="none" stroke="var(--clean)" strokeWidth={1.75} strokeDasharray="5 3" strokeLinejoin="round" />
@@ -122,7 +136,7 @@ export function ScoreTimeline({ series, comparison, height = 240, horizon = 30, 
             </g>
           )}
 
-          <CycleAxis x={x} ticks={cycleTicks(maxRul, horizon, minLead)} y={MARGIN.top + plotHeight} height={height} />
+          <CycleAxis x={x} ticks={cycleTicks(maxRul, horizon, minLead)} y={MARGIN.top + plotHeight} height={height} width={width} minLead={compact ? minLead : undefined} />
         </svg>
       </div>
       <div className="legend">

@@ -36,7 +36,7 @@ def read_csv(path: Path, equipment_column: str | None = None) -> pd.DataFrame:
     return frame
 
 
-def register(workspace, path: Path, id: str, name: str, source="upload") -> DatasetRegistration:
+def register(workspace, path: Path, id: str, name: str, source="upload", *, library_owner="local", folder_id=None) -> DatasetRegistration:
     frame = read_csv(path)
     try:
         mapping = infer_mapping(frame)
@@ -51,7 +51,7 @@ def register(workspace, path: Path, id: str, name: str, source="upload") -> Data
         row_count=len(frame),
         mapping=mapping,
     )
-    workspace.save_dataset(record.model_dump(mode="json"))
+    workspace.save_dataset(record.model_dump(mode="json"), library_owner=library_owner, folder_id=folder_id)
     return record
 
 
@@ -100,7 +100,7 @@ def confirm(workspace, id: str, request: DatasetConfirmation) -> DatasetRegistra
     return record
 
 
-def sample(workspace, *, hosted: bool = False) -> DatasetRegistration:
+def sample(workspace, *, hosted: bool = False, library_owner="local") -> DatasetRegistration:
     id = str(uuid4())
     directory = workspace.directory("datasets", id)
     directory.mkdir(parents=True)
@@ -109,7 +109,7 @@ def sample(workspace, *, hosted: bool = False) -> DatasetRegistration:
     path = directory / "data.csv"
     dataset.frame[["equipment_id", "cycle", *sensors, "failure_cycle"]].to_csv(path, index=False)
     name = "Hosted sample: 30 histories, 3 sensors" if hosted else "Synthetic equipment sample"
-    register(workspace, path, id, name, "synthetic")
+    register(workspace, path, id, name, "synthetic", library_owner=library_owner)
     return confirm(
         workspace,
         id,

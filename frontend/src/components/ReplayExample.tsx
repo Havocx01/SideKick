@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { useIsPresent, useReducedMotion } from "motion/react";
 import { useSearchParams } from "react-router-dom";
 import type { ReplaySeries } from "../api/types";
 import { useAnalysis } from "./AnalysisProvider";
@@ -20,6 +20,7 @@ export function ReplayExample(props: ReplayExampleProps) {
 
 function Player({ series, comparison, horizon, minLead, guided = false }: ReplayExampleProps) {
   const reduced = useReducedMotion();
+  const present = useIsPresent();
   const analysis = useAnalysis();
   const experimentId = useExperimentId();
   const last = Math.max(0, series.points.length - 1);
@@ -29,6 +30,7 @@ function Player({ series, comparison, horizon, minLead, guided = false }: Replay
   const [index, setIndex] = useState(requestedIndex >= 0 ? requestedIndex : last);
   useEffect(() => { if (requestedIndex >= 0) { setPlaying(false); setIndex(requestedIndex); } }, [requestedIndex]);
   const [playing, setPlaying] = useState(false);
+  useEffect(() => { if (!present) setPlaying(false); }, [present]);
   const point = series.points[index];
   const original = comparison?.points.find(p => p.cycle === point?.cycle);
   const faultIndex = series.fault && series.fault_onset_rul != null && (series.points[0]?.rul ?? -1) >= series.fault_onset_rul
@@ -58,13 +60,18 @@ function Player({ series, comparison, horizon, minLead, guided = false }: Replay
   if (!point) return <p className="state">This history has no stored cycles to replay.</p>;
   const outcome = outcomeLabel(series.outcome);
   const cleanOutcome = comparison ? outcomeLabel(comparison.outcome) : null;
+  const warningState = (alert: boolean) => guided ? (alert ? "Warning on" : "Warning off") : (alert ? "Warning active" : "Warning inactive");
   const window = point.rul >= minLead && point.rul <= horizon ? "Useful window" : point.rul > horizon ? "Before window" : "After window";
+  const historyResults = <dl className="replay-outcomes" aria-label="Whole-history results">
+    {cleanOutcome && <div><dt>Original · Whole history</dt><dd><Badge tone={cleanOutcome.tone}>{cleanOutcome.text}</Badge></dd></div>}
+    <div><dt>{series.fault ? "Faulted" : "Original"} · Whole history</dt><dd><Badge tone={outcome.tone}>{outcome.text}</Badge></dd></div>
+  </dl>;
+  const sensorReadings = series.fault && <Panel title={`What happened to ${series.fault.sensor}`} description={`Fault starts ${series.fault_onset_rul ?? "an unrecorded number of"} cycles before failure · ${series.fault.duration === "persistent" ? "Persistent" : "Temporary"}`}>
+    <SensorTrace series={series} cursorCycle={point.cycle} />
+  </Panel>;
   return <>
     <Panel title="When the warning appears" description="Playback of stored results" aside={!guided && analysis.enabled("warning") && <Button variant="secondary" onClick={() => { setPlaying(false); analysis.start({ task: "warning", experiment_id: experimentId, partition: series.partition, candidates: [`${series.candidate}/${series.config_id}`], equipment_id: series.equipment_id, scenario_id: series.scenario_id, cycle: point.cycle }); }}>Explain warning</Button>}>
-      <dl className="replay-outcomes" aria-label="Whole-history results">
-        {cleanOutcome && <div><dt>Original · Whole history</dt><dd><Badge tone={cleanOutcome.tone}>{cleanOutcome.text}</Badge></dd></div>}
-        <div><dt>{series.fault ? "Faulted" : "Original"} · Whole history</dt><dd><Badge tone={outcome.tone}>{outcome.text}</Badge></dd></div>
-      </dl>
+      {!guided && historyResults}
       <div className="playback-controls">
         <div className="playback-buttons">
           <IconButton label={playing ? "Pause" : index === last ? "Replay from start" : "Play"} variant="secondary" disabled={last < 1 || (guided && !!reduced)} onClick={() => { if (index === last) setIndex(0); setPlaying(value => !value); }}>{playing ? <Pause size={17} aria-hidden="true" /> : <Play size={17} aria-hidden="true" />}</IconButton>
@@ -78,10 +85,10 @@ function Player({ series, comparison, horizon, minLead, guided = false }: Replay
         <span className="playback-cycle">Cycle {integer(point.cycle)} / {integer(series.failure_cycle)}</span>
       </div>
       <div className="playback-readout" aria-label="Current replay state">
-        <span>Current reading: <strong>{integer(point.rul)}</strong> {point.rul === 1 ? "cycle" : "cycles"} before failure · {window}</span>
-        <div className="current-alerts">{original && <span>Original <Badge tone={original.alert ? "info" : "neutral"}>{original.alert ? "Warning active" : "Warning inactive"}</Badge></span>}<span>{series.fault ? "Faulted" : "Original"} <Badge tone={point.alert ? "info" : "neutral"}>{point.alert ? "Warning active" : "Warning inactive"}</Badge></span></div>
+        <span>{!guided && "Current reading: "}<strong>{integer(point.rul)}</strong> {point.rul === 1 ? "cycle" : "cycles"} before failure · {window}</span>
+        <div className="current-alerts">{original && <span>Original <Badge tone={original.alert ? "info" : "neutral"}>{warningState(original.alert)}</Badge></span>}<span>{series.fault ? "Faulted" : "Original"} <Badge tone={point.alert ? "info" : "neutral"}>{warningState(point.alert)}</Badge></span></div>
       </div>
-      <div className={guided ? "guided-replay-chart" : undefined}><ScoreTimeline series={series} comparison={comparison} horizon={horizon} minLead={minLead} cursorCycle={point.cycle} /></div>
+      <div className={guided ? "guided-replay-chart" : undefined}><ScoreTimeline series={series} comparison={comparison} horizon={horizon} minLead={minLead} cursorCycle={point.cycle} compact={guided} height={guided ? 160 : undefined} /></div>
       {guided && <div className="guided-replay-context">
         <p data-testid="replay-guidance">{point.rul >= minLead && point.rul <= horizon
           ? "Warnings count as in time here. Compare the original and faulted warning states."
@@ -91,10 +98,8 @@ function Player({ series, comparison, horizon, minLead, guided = false }: Replay
         {(faultIndex < 0 || windowIndex < 0) && <p className="note">{faultIndex < 0 ? "Fault onset is not available in this stored trace. " : ""}{windowIndex < 0 ? "No stored reading falls inside the warning window." : ""}</p>}
         {reduced && <p className="note">Reduced motion is on. Use the slider or jump controls.</p>}
       </div>}
-      <details><summary>How to read this replay</summary><p className="note">Scores rank risk; they are not necessarily failure probabilities. The shaded window marks useful warning time. Warning state follows the stored alert rule, so one threshold crossing may not activate or clear a warning. One stored example, not fleet-wide performance.</p></details>
+      <details><summary>How to read this replay</summary><p className="note">Scores rank risk; they are not necessarily failure probabilities. The shaded window marks useful warning time. Warning state follows the stored alert rule, so one threshold crossing may not activate or clear a warning. One stored example, not fleet-wide performance.</p>{guided && <><p className="note">Alert threshold: {series.threshold.toFixed(3)}</p>{historyResults}{sensorReadings}</>}</details>
     </Panel>
-    {series.fault && <Panel title={`What happened to ${series.fault.sensor}`} description={`Fault starts ${series.fault_onset_rul ?? "an unrecorded number of"} cycles before failure · ${series.fault.duration === "persistent" ? "Persistent" : "Temporary"}`}>
-      <SensorTrace series={series} cursorCycle={point.cycle} />
-    </Panel>}
+    {!guided && sensorReadings}
   </>;
 }

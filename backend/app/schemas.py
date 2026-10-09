@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from uuid import UUID
 
 
 class Strict(BaseModel):
@@ -625,6 +626,7 @@ class DatasetRegistration(Strict):
 
 class ExperimentCreate(Strict):
     dataset_id: str
+    folder_id: UUID | None = None
     min_detection_fraction: float = Field(default=0.70, ge=0, le=1)
     max_early_alarm_burden: float = Field(default=0.10, ge=0, le=1)
     protocol: ExperimentProtocol | None = None
@@ -658,6 +660,67 @@ class ExperimentRecord(Strict):
     parent_experiment_id: str | None = None
     operation_id: str | None = None
     pilot_brief: PilotBrief | None = None
+
+
+class LibraryFolderInput(Strict):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class LibraryFolder(Strict):
+    id: str
+    name: str
+
+
+class LibraryItemRef(Strict):
+    kind: Literal["run", "upload"]
+    id: UUID
+
+
+class LibraryUpdate(Strict):
+    items: list[LibraryItemRef] = Field(min_length=1, max_length=100)
+    action: Literal["rename", "move", "archive", "restore"]
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    folder_id: UUID | None = None
+
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def strip_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def valid_action(self):
+        if self.action == "rename" and (len(self.items) != 1 or self.display_name is None):
+            raise ValueError("Rename one item at a time and supply its new name.")
+        if self.action != "rename" and self.display_name is not None:
+            raise ValueError("A display name is only used when renaming an item.")
+        if self.action != "move" and self.folder_id is not None:
+            raise ValueError("A folder is only used when moving items.")
+        return self
+
+
+class LibraryItem(Strict):
+    kind: Literal["run", "upload"]
+    id: str
+    dataset_id: str
+    display_name: str
+    original_name: str
+    source: Literal["synthetic", "upload"]
+    folder_id: str | None = None
+    archived: bool = False
+    created_at: float | None = None
+    status: str
+    run_count: int = 0
+    row_count: int | None = None
+
+
+class LibrarySnapshot(Strict):
+    folders: list[LibraryFolder]
+    items: list[LibraryItem]
 
 
 class GuideAnswer(Strict):

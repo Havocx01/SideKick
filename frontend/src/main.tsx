@@ -16,7 +16,7 @@ const router = createBrowserRouter([
     hydrateFallbackElement: <div className="state" role="status">Loading workspace...</div>,
     children: [
       { index: true, element: <Start /> },
-      { path: "walkthrough", lazy: async () => ({ Component: (await import("./views/Walkthrough")).Walkthrough }) },
+      { path: "walkthrough", element: <Start /> },
       { path: "benchmark", lazy: async () => ({ Component: (await import("./views/DataSetup")).DataSetup }) },
       { path: "new", element: <NewExperiment /> },
       { path: "experiments", element: <ExperimentHistory /> },

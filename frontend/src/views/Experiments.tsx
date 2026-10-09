@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, ApiError, experiments } from "../api/client";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { api, ApiError, experiments, library } from "../api/client";
 import type { ColumnMapping, DatasetRegistration, ExperimentRecord, ExperimentProtocol, PilotBrief } from "../api/types";
 import { defaultProtocol, PilotBriefEditor, ProtocolEditor } from "../components/ProtocolEditor";
 import { Badge, Button, Field, Panel, Select, StateBlock } from "../components/Chrome";
@@ -11,7 +11,11 @@ import { NumberField } from "@/registry/components/number-field/number-field";
 import { Progress as ArcProgress } from "@/components/arc/progress/progress";
 import { CsvAttachment } from "../components/CsvAttachment";
 import { observeTraining } from "../components/TrainingNotifications";
-import { integer, percent } from "../format";
+import { csvValidationError, uploadCsv } from "../lib/csv-upload";
+import { RollingNumber } from "../components/cult/RollingNumber";
+import { shouldShowWalkthroughIntro } from "../components/cult/IntroDisclosure";
+import { walkthroughPath } from "../walkthrough";
+import { OverviewWarningMetric } from "../components/OverviewWarningMetric";
 
 export const activeJob = (status: string) => ["queued", "running", "cancelling"].includes(status);
 function errorMessage(error: unknown) {
@@ -20,19 +24,8 @@ function errorMessage(error: unknown) {
   return "Something went wrong. Try again.";
 }
 const duration = (seconds: number) => `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
-
-function minimumUploadDisplay(signal: AbortSignal) {
-  return new Promise<void>(resolve => {
-    function finish() {
-      window.clearTimeout(timer);
-      signal.removeEventListener("abort", finish);
-      resolve();
-    }
-    const timer = window.setTimeout(finish, 3000);
-    signal.addEventListener("abort", finish, { once: true });
-    if (signal.aborted) finish();
-  });
-}
+const Walkthrough = lazy(() => import("./Walkthrough").then(module => ({ default: module.Walkthrough })));
+const ExperimentLibrary = lazy(() => import("../components/ExperimentLibrary").then(module => ({ default: module.ExperimentLibrary })));
 
 function TrainingOnly({ children, upload = false }: { children: ReactNode; upload?: boolean }) {
   const health = useApi(() => api.health(), []);
@@ -60,19 +53,29 @@ function TrainingOnly({ children, upload = false }: { children: ReactNode; uploa
 }
 
 export function Start() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const autoOpened = useRef(false);
+  const walkthroughOpen = location.pathname === "/walkthrough";
+  useEffect(() => {
+    if (walkthroughOpen || autoOpened.current) return;
+    autoOpened.current = true;
+    if (shouldShowWalkthroughIntro()) navigate(walkthroughPath("clean"), { replace: true });
+  }, [walkthroughOpen, navigate]);
   const health = useApi(() => api.health(), []);
   const selection = useApi(() => api.selection(), []);
   const example = selection.data?.ranked.find(row => row.candidate === "logistic_regression" && row.config_id === "lr2");
   return (
     <>
+      {walkthroughOpen && <Suspense fallback={null}><Walkthrough /></Suspense>}
       <section className="welcome" aria-labelledby="welcome-heading">
         <div>
           <h1 id="welcome-heading">Will warnings survive sensor faults?</h1>
           <p>Train failure-warning models. Test them with missing, stuck or drifting readings.</p>
           <div className="hero-actions">
-            <Link className="button contrast" to="/walkthrough?step=clean">Start guided walkthrough <ArrowRight size={16} aria-hidden="true" /></Link>
+            <Link id="open-walkthrough" className="button contrast" to={walkthroughPath("clean")}>View walkthrough <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
-          <p className="hero-footnote">5 steps · Recorded results</p>
+          <p className="hero-footnote"><RollingNumber value={5} /> steps · Recorded results</p>
         </div>
         <div className="benchmark-preview">
           <div className="preview-heading"><h2>Warnings in time</h2><Badge>Recorded NASA Benchmark</Badge></div>
@@ -81,14 +84,8 @@ export function Start() {
             {example ? (
               <>
                 <div className="benchmark-bars">
-                  <div>
-                    <div className="benchmark-bar-label"><span>Healthy sensors</span><strong>{integer(example.clean.detected)} / {integer(example.clean.engines)}</strong></div>
-                    <div className="benchmark-track" aria-hidden="true"><span style={{ width: percent(example.clean.detection_fraction) }} /></div>
-                  </div>
-                  <div>
-                    <div className="benchmark-bar-label"><span>Weakest sensor fault</span><strong>{example.worst_metrics ? `${integer(example.worst_metrics.detected)} / ${integer(example.worst_metrics.engines)}` : percent(example.worst_detection_required)}</strong></div>
-                    <div className="benchmark-track fault" aria-hidden="true"><span style={{ width: percent(example.worst_detection_required) }} /></div>
-                  </div>
+                  <OverviewWarningMetric label="Healthy sensors" detected={example.clean.detected} histories={example.clean.engines} fraction={example.clean.detection_fraction} />
+                  <OverviewWarningMetric label="Weakest sensor fault" detected={example.worst_metrics?.detected} histories={example.worst_metrics?.engines} fraction={example.worst_detection_required} fault />
                 </div>
                 {/* <div className="preview-explanation">
                   <details><summary>What was tested?</summary><p>{scenarioLabel(example.worst_scenario_id ?? "")}. Warnings active 10–30 cycles before failure. Simulated NASA data, not ABB field validation.</p></details>
@@ -108,11 +105,11 @@ export function Start() {
               <Link className="button" to="/comparison">Explore benchmark <ArrowRight size={16} aria-hidden="true" /></Link>
             </section>
             <section>
-              <div className="start-option"><FlaskConical size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Sample experiment</h3><p>{health.data?.sample_equipment ?? 60} simulated histories</p></div></div>
+              <div className="start-option"><FlaskConical size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Sample experiment</h3><p><RollingNumber value={health.data?.sample_equipment ?? 60} /> simulated histories</p></div></div>
               {health.data?.can_train ? <Link className="button" to="/new?source=sample">Set up sample <ArrowRight size={16} aria-hidden="true" /></Link> : <span className="option-unavailable">Available in the local app</span>}
             </section>
             <section>
-              <div className="start-option"><Upload size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Your data</h3><p>CSV · Up to 10 MB · Complete failure histories</p></div></div>
+              <div className="start-option"><Upload size={20} strokeWidth={1.75} aria-hidden="true" /><div><h3>Your data</h3><p>CSV · Up to <RollingNumber value={10} /> MB · Complete failure histories</p></div></div>
               {health.data?.can_upload ? <Link className="button" to="/new?source=upload">Upload CSV <ArrowRight size={16} aria-hidden="true" /></Link> : <span className="option-unavailable">Available in the local app</span>}
             </section>
           </div>
@@ -136,6 +133,7 @@ export function NewExperiment() {
 function ExperimentSetup() {
   const analysis = useAnalysis();
   const health = useApi(() => api.health(), []);
+  const savedLibrary = useApi(() => library.get(), []);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [data, setData] = useState<DatasetRegistration | null>(null);
@@ -154,6 +152,9 @@ function ExperimentSetup() {
   const [pilotBrief, setPilotBrief] = useState<PilotBrief>({ data_classification: "unverified" });
   const datasetId = params.get("dataset");
   const isSample = params.get("source") === "sample";
+  const folderParam = params.get("folder");
+  const selectedFolder = folderParam ?? savedLibrary.data?.items.find(item => item.kind === "upload" && item.id === datasetId)?.folder_id ?? "unfiled";
+  const folderUnavailable = Boolean(savedLibrary.data && selectedFolder !== "unfiled" && !savedLibrary.data.folders.some(folder => folder.id === selectedFolder));
   useEffect(() => () => uploadController.current?.abort(), []);
   function receive(value: DatasetRegistration) {
     setData(value);
@@ -188,8 +189,9 @@ function ExperimentSetup() {
   }, [datasetId]);
   async function prepare(file?: File) {
     if (file) setAttachment(file);
-    if (file && file.size > 10 * 1024 * 1024) {
-      setError("CSV files must be 10 MB or smaller.");
+    const invalid = file && csvValidationError(file);
+    if (invalid) {
+      setError(invalid);
       setUploadState("error");
       return;
     }
@@ -198,16 +200,13 @@ function ExperimentSetup() {
     if (file) setUploadState("uploading");
     setBusy(true);
     setError("");
-    const minimumDisplay = controller ? minimumUploadDisplay(controller.signal) : undefined;
     try {
-      const value = file ? await experiments.upload(file, controller!.signal) : await experiments.sample();
-      await minimumDisplay;
+      const value = file ? await uploadCsv(file, controller!.signal, selectedFolder === "unfiled" ? null : selectedFolder) : await experiments.sample();
       if (controller?.signal.aborted) return;
       if (file) setUploadState("ready");
       receive(value);
-      setParams({ source: file ? "upload" : "sample", dataset: value.dataset_id }, { replace: true });
+      setParams({ source: file ? "upload" : "sample", dataset: value.dataset_id, ...(folderParam ? { folder: folderParam } : {}) }, { replace: true });
     } catch (e) {
-      await minimumDisplay;
       if (controller?.signal.aborted) return;
       if (file) setUploadState("error");
       setError(errorMessage(e));
@@ -223,7 +222,7 @@ function ExperimentSetup() {
     uploadController.current = null;
     setAttachment(null); setUploadState("ready"); setError(""); setBusy(false);
     setData(null); setMapping(null); setComplete(false);
-    setParams({ source: "upload" }, { replace: true });
+    setParams({ source: "upload", ...(folderParam ? { folder: folderParam } : {}) }, { replace: true });
     requestAnimationFrame(() => csvInput.current?.focus());
   }
   async function confirm() {
@@ -247,6 +246,7 @@ function ExperimentSetup() {
     try {
       const result = await experiments.create({
         dataset_id: data.dataset_id,
+        ...(folderParam !== null ? { folder_id: selectedFolder === "unfiled" ? null : selectedFolder } : {}),
         min_detection_fraction: detection / 100,
         max_early_alarm_burden: burden / 100
         , ...(health.data?.can_edit_protocol ? { protocol: { ...protocol, min_detection_fraction: detection / 100, max_early_alarm_burden: burden / 100 }, pilot_brief: pilotBrief } : {})
@@ -269,13 +269,17 @@ function ExperimentSetup() {
       options={[...(key === "failure_cycle" ? [{ value: "__none", label: "No failure-cycle column" }] : []), ...(data?.columns ?? []).map(value => ({ value, label: value }))]}
     />
   );
-  const invalidSettings = !Number.isFinite(detection) || !Number.isFinite(burden) || detection < 0 || detection > 100 || burden < 0 || burden > 100
+  const invalidSettings = folderUnavailable || !Number.isFinite(detection) || !Number.isFinite(burden) || detection < 0 || detection > 100 || burden < 0 || burden > 100
     || Boolean(health.data?.can_edit_protocol && (!protocol.scenarios?.some(s => s.required !== false)
       || !((protocol.min_useful_lead ?? 10) < (protocol.horizon_cycles ?? 30) && (protocol.horizon_cycles ?? 30) < (protocol.transition_band_end ?? 45))));
   return (
     <div className="experiment-setup">
       <header className="page-head">
         <h1>{isSample ? "Run a sample experiment" : "Use your equipment histories"}</h1>
+        <div className="setup-folder"><Select label="Save in folder" value={selectedFolder} disabled={busy || savedLibrary.loading} onValueChange={value => setParams(current => { const next = new URLSearchParams(current); next.set("folder", value); return next; })} options={[{ value: "unfiled", label: "Unfiled" }, ...(savedLibrary.data?.folders ?? []).map(folder => ({ value: folder.id, label: folder.name })), ...(folderUnavailable ? [{ value: selectedFolder, label: "Unavailable folder" }] : [])]} />
+          {folderUnavailable && <p className="note" role="alert">This folder is unavailable. Choose another folder or Unfiled.</p>}
+          {savedLibrary.error && <p className="note" role="alert">Could not load folders. <button type="button" className="text-button" onClick={savedLibrary.reload}>Retry loading</button></p>}
+        </div>
       </header>
       <ol className="setup-steps" aria-label="Data setup steps">
         {["Choose data", "Confirm mapping", "Train models"].map((step, index) => <li key={step} aria-current={index === (!data ? 0 : data.confirmed ? 2 : 1) ? "step" : undefined}><span className="step-number">{index + 1}</span>{step}</li>)}
@@ -510,75 +514,7 @@ export function ExperimentHistory() {
     </TrainingOnly>
   );
 }
-function History() {
-  const health = useApi(() => api.health(), []);
-  const [records, setRecords] = useState<ExperimentRecord[] | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  useEffect(() => {
-    let alive = true;
-    async function update() {
-      try {
-        const records = await experiments.list();
-        if (!alive) return;
-        setRecords(records);
-        setError(null);
-      } catch (error) {
-        if (alive) setError(error as Error);
-      }
-    }
-    void update();
-    const timer = window.setInterval(update, 3000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, []);
-  return (
-    <>
-      <header className="page-head">
-        <h1>Your experiments</h1>
-      </header>
-      <div className="actions">
-        <Link className="button primary" to="/new?source=sample">
-          Run sample
-        </Link>
-        {health.data?.can_upload && (
-          <Link className="button" to="/new?source=upload">
-            Upload data
-          </Link>
-        )}
-      </div>
-      <StateBlock loading={!records && !error} error={error}>
-        {records?.length ? (
-          <div className="experiment-list">
-            {records.map((r) => (
-              <Link
-                key={r.experiment_id}
-                to={`/experiments/${r.experiment_id}${r.status === "completed" ? "/comparison" : ""}`}
-              >
-                <div>
-                  <strong>{r.name}</strong>
-                  <p>
-                    {r.source === "synthetic" ? "Synthetic" : "Uploaded"} ·{" "}
-                    {new Date(r.created_at * 1000).toLocaleString()} · {r.experiment_id.slice(0, 8)}
-                  </p>
-                </div>
-                <span>
-                  <Badge tone={r.status === "completed" ? "ok" : "neutral"}>{r.status.replaceAll("_", " ")}</Badge>
-                  <p>{duration(r.elapsed_seconds ?? 0)}</p>
-                </span>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <Panel title="No experiments yet">
-            <p>Start with the synthetic sample to try the entire workflow without a download.</p>
-          </Panel>
-        )}
-      </StateBlock>
-    </>
-  );
-}
+function History() { return <Suspense fallback={<StateBlock loading />}><ExperimentLibrary /></Suspense>; }
 
 export function ExperimentProgress() {
   return (
