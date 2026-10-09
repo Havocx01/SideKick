@@ -1,0 +1,35 @@
+.shell {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  padding: 1px;
+  border-radius: 19px;
+  background: var(--border-subtle);
+}
+
+.beam[data-beam] {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.shell[data-hidden] .beam,
+.shell[data-hidden] .beam::before,
+.shell[data-hidden] .beam::after,
+.shell[data-hidden] [data-beam-bloom] {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beam[data-beam] {
+    animation: none !important;
+  }
+
+  .beam[data-beam]::before,
+  .beam[data-beam]::after,
+  .beam [data-beam-bloom] {
+    display: none !important;
+    animation: none !important;
+  }
+}

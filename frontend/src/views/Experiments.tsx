@@ -16,6 +16,7 @@ import { RollingNumber } from "../components/cult/RollingNumber";
 import { shouldShowWalkthroughIntro } from "../components/cult/IntroDisclosure";
 import { walkthroughPath } from "../walkthrough";
 import { OverviewWarningMetric } from "../components/OverviewWarningMetric";
+import { BorderBeamCard } from "../components/cult/BorderBeamCard";
 
 export const activeJob = (status: string) => ["queued", "running", "cancelling"].includes(status);
 function errorMessage(error: unknown) {
@@ -77,7 +78,7 @@ export function Start() {
           </div>
           <p className="hero-footnote"><RollingNumber value={5} /> steps · Recorded results</p>
         </div>
-        <div className="benchmark-preview">
+        <BorderBeamCard cardClassName="benchmark-preview">
           <div className="preview-heading"><h2>Warnings in time</h2><Badge>Recorded NASA Benchmark</Badge></div>
           <div className="preview-subtitle">Logistic regression · lr2</div>
           <StateBlock loading={selection.loading} error={selection.error}>
@@ -94,7 +95,7 @@ export function Start() {
               </>
             ) : <p className="note">Open the recorded comparison to inspect the available candidates and fault tests.</p>}
           </StateBlock>
-        </div>
+        </BorderBeamCard>
       </section>
       <section className="start-section" aria-labelledby="start-heading">
         <h2 id="start-heading">Start an experiment</h2>
