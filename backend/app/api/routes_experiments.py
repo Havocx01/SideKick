@@ -46,6 +46,20 @@ def check_access(request: Request, kind: str, id: str):
         request.app.state.demo.require(kind, id, owner(request))
 
 
+def library_owner(request: Request):
+    return f"demo:{owner(request)}" if get_settings().mode == "demo" else "local"
+
+
+def check_folder(request: Request, jobs: Jobs, folder_id):
+    from app.experiments.library import validate_folder
+
+    try:
+        with jobs.workspace.connect() as conn:
+            validate_folder(conn, library_owner(request), folder_id)
+    except (KeyError, ValueError):
+        raise HTTPException(404, "This folder is unavailable. Choose another folder or Unfiled.") from None
+
+
 def upload_jobs(request: Request) -> Jobs:
     if get_settings().mode != "full":
         raise HTTPException(403, "CSV uploads are available locally. Use the synthetic sample in the hosted demo.")
@@ -67,6 +81,9 @@ async def upload(request: Request, jobs: Jobs = Depends(upload_jobs)):
     # This avoids unbounded multipart parsing before the replay-mode guard.
     from app.experiments.datasets import MAX_UPLOAD_BYTES, register
 
+    folder_id = request.headers.get("x-folder-id") or None
+    check_folder(request, jobs, folder_id)
+
     id = str(uuid4())
     directory = jobs.workspace.directory("datasets", id)
     directory.mkdir(parents=True)
@@ -79,10 +96,14 @@ async def upload(request: Request, jobs: Jobs = Depends(upload_jobs)):
                 if size > MAX_UPLOAD_BYTES:
                     raise HTTPException(413, "CSV files must be 10 MB or smaller.")
                 output.write(chunk)
-        return register(jobs.workspace, path, id, unquote(request.headers.get("x-filename", "Uploaded CSV")))
+        return register(jobs.workspace, path, id, unquote(request.headers.get("x-filename", "Uploaded CSV")),
+                        library_owner=library_owner(request), folder_id=folder_id)
     except HTTPException:
         path.unlink(missing_ok=True)
         raise
+    except KeyError:
+        path.unlink(missing_ok=True)
+        raise HTTPException(404, "This folder is unavailable. Choose another folder or Unfiled.") from None
     except (ValueError, UnicodeError) as exc:
         path.unlink(missing_ok=True)
         raise HTTPException(422, f"Cannot read this CSV. {exc}") from exc
@@ -117,6 +138,8 @@ def confirm_dataset(dataset_id: str, payload: DatasetConfirmation, request: Requ
 @router.post("/experiments", response_model=ExperimentRecord, status_code=201)
 def create_experiment(payload: ExperimentCreate, request: Request, jobs: Jobs = Depends(local_jobs)):
     check_access(request, "datasets", payload.dataset_id)
+    if payload.folder_id is not None:
+        check_folder(request, jobs, str(payload.folder_id))
     try:
         if get_settings().mode == "demo":
             demo = request.app.state.demo
@@ -127,10 +150,10 @@ def create_experiment(payload: ExperimentCreate, request: Request, jobs: Jobs = 
                         "The shared server is running another experiment. Try again shortly, or explore the recorded benchmark.",
                     )
                 demo.admit("experiment", owner(request))
-                record = jobs.create(payload)
+                record = jobs.create(payload, library_owner=library_owner(request))
                 demo.claim("experiments", record.experiment_id, owner(request))
                 return record
-        return jobs.create(payload)
+        return jobs.create(payload, library_owner=library_owner(request))
     except KeyError:
         raise HTTPException(404, "Dataset not found") from None
     except ValueError as exc:

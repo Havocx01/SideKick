@@ -93,7 +93,7 @@ class DemoAccess:
             if existing:
                 return self.workspace.get("datasets", next(iter(existing)))
             self.admit("sample", visitor)
-            record = sample(self.workspace, hosted=True)
+            record = sample(self.workspace, hosted=True, library_owner=f"demo:{visitor}")
             self.claim("datasets", record.dataset_id, visitor)
             return record
 
@@ -125,5 +125,10 @@ class DemoAccess:
                 if path.exists():
                     shutil.rmtree(path)
                 conn.execute(f"DELETE FROM {kind} WHERE id=?", (id,))
+                library_kind = "upload" if kind == "datasets" else "run"
+                conn.execute("DELETE FROM library_items WHERE kind=? AND id=?", (library_kind, id))
                 conn.execute("DELETE FROM demo_owners WHERE kind=? AND id=?", (kind, id))
+            conn.execute("UPDATE library_items SET folder_id=NULL WHERE folder_id IN "
+                         "(SELECT id FROM library_folders WHERE owner LIKE 'demo:%' AND created_at < ?)", (time.time() - RETENTION,))
+            conn.execute("DELETE FROM library_folders WHERE owner LIKE 'demo:%' AND created_at < ?", (time.time() - RETENTION,))
             conn.execute("DELETE FROM demo_requests WHERE created < ?", (time.time() - RETENTION,))

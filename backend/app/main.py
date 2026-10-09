@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import routes_assistant, routes_copilot, routes_evidence, routes_experiments, routes_pilot
+from app.api import routes_assistant, routes_copilot, routes_evidence, routes_experiments, routes_library, routes_pilot
 from app.assistant.service import AssistantService
 from app.config import get_settings
 from app.utils.logging_setup import get_logger, setup_logging
@@ -142,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_evidence.router)
     app.include_router(routes_copilot.router)
     app.include_router(routes_experiments.router)
+    app.include_router(routes_library.router)
     app.include_router(routes_pilot.router)
     app.include_router(routes_assistant.router)
 

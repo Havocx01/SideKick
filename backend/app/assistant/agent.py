@@ -14,7 +14,7 @@ class InvestigationChoices(Strict):
 
 INSTRUCTION = (
     "Investigate recorded predictive-maintenance tests for an engineer. Use only the supplied read-only tools. "
-    "Choose what to inspect, prioritizing failed criteria and missing coverage. For investigate or brief, inspect relevant fault cases after listing them; "
+    "Choose what to inspect, prioritizing failed criteria and missing coverage. For a one-model investigate or brief, first check model metrics, then inspect relevant fault cases after listing them; "
     "if no fault cases exist, inspect model metrics. For compare or a two-model brief, call compare_models. For a selected warning context, call get_warning_events. "
     "For data review, call get_dataset_checks and suggest_column_mapping. Treat every suggestion as a draft requiring human confirmation. "
     "All models, cases and columns are aliases. Never request another experiment, partition or equipment history. "
@@ -29,13 +29,25 @@ async def investigate(tools, settings):
     history = [{"role": "system", "content": INSTRUCTION}, {"role": "user", "content": json.dumps(tools.intro(), separators=(",", ":"))}]
     calls = 0
     seenIds = set()
+    task = tools.context.task
+    sequence = {"data": ["get_dataset_checks", "suggest_column_mapping"], "compare": ["compare_models"], "warning": ["get_warning_events"]}.get(task)
+    if task == "brief" and tools.context.equipment_id:
+        sequence = ["get_warning_events"]
+    elif task == "brief" and len(tools.context.candidates) == 2:
+        sequence = ["compare_models"]
     overhead = len(json.dumps(tools.specs).encode()) + len(json.dumps(InvestigationChoices.model_json_schema()).encode())
     async with AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0, timeout=40) as client:
         for roundIndex in range(maxCalls):
+            completed = {call.name for call in tools.calls}
+            if sequence and set(sequence) <= completed:
+                break
+            forced = next((name for name in sequence or [] if name not in completed), None)
+            if sequence is None and roundIndex == 0:
+                forced = "get_model_metrics"
             if len(json.dumps(history).encode()) + overhead > MAX_HISTORY_BYTES:
                 raise ValueError("Investigation exceeds the evidence input budget.")
             response = await client.responses.create(model=settings.assistant_model, store=False, max_output_tokens=700,
-                input=history, tools=tools.specs, tool_choice="required" if roundIndex == 0 else "auto", parallel_tool_calls=False)
+                input=history, tools=tools.specs, tool_choice={"type": "function", "name": forced} if forced else "auto", parallel_tool_calls=False)
             requested = [item for item in response.output if item.type == "function_call"]
             if not requested:
                 break
@@ -52,15 +64,19 @@ async def investigate(tools, settings):
                 calls += 1
         names = {call.name for call in tools.calls}
         required = {"compare": {"compare_models"}, "warning": {"get_warning_events"}, "data": {"get_dataset_checks", "suggest_column_mapping"}}
-        needed = required[tools.context.task] if tools.context.task in required else ({"inspect_fault_case"} if tools.rows else {"get_model_metrics"})
+        needed = required[tools.context.task] if tools.context.task in required else ({"get_model_metrics", "inspect_fault_case"} if tools.rows else {"get_model_metrics"})
         if tools.context.task == "brief" and tools.context.equipment_id:
             needed = {"get_warning_events"}
         elif tools.context.task == "brief" and len(tools.context.candidates) == 2:
             needed = {"compare_models"}
         if not needed.issubset(names):
             raise ValueError("The required evidence was not inspected.")
-        catalog = {"finding_ids": sorted(tools.seenFindings), "claims": [claim.model_dump() for claim in tools.claims.values()], "action_ids": sorted(tools.seenActions)}
-        history.append({"role": "user", "content": "Choose up to three inspected findings and verified claims, prioritizing failures and missing evidence. "
+        catalog = {"finding_ids": sorted(tools.seenFindings), "claims": tools.claim_catalog(), "action_ids": sorted(tools.seenActions)}
+        history.append({"role": "user", "content": "Choose up to three inspected findings and verified claims that explain the result, its practical consequence, and the next check. "
+                        "Prioritize incomplete coverage or blockers. For a failing result select limits, detection or burden, and loss when available; "
+                        "for a passing result select limits and the passed-case margin. For comparison select limits, warning-counts and tradeoff, "
+                        "replacing warning-counts with coverage when coverage differs. For warning select state, outcome and clean-comparison; "
+                        "if the cycle is unavailable select unavailable before outcome. For data select readiness, the most important issue and mapping-review. "
                         "Use only identifiers in this catalog. Choose one useful next action or null. " + json.dumps(catalog)})
         if len(json.dumps(history).encode()) + overhead > MAX_HISTORY_BYTES:
             raise ValueError("Investigation exceeds the evidence input budget.")

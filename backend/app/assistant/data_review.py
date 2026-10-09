@@ -100,9 +100,18 @@ class DataTools(EvidenceTools):
     def get_dataset_checks(self):
         validation = next(source for source in self.result.sources if source.metric == "mapping_valid")
         valid = validation.value == "True"
-        claim = self.claim("data-readiness", "The current mapping passes file validation. Confirm the column roles and observed failures before training." if valid
-                           else "Resolve the blocking data issue, then validate the mapping again. Do not replace unknown failures with the final reading.", [validation.id])
-        return self.expose([finding for finding in self.result.findings if finding.id != "data-mapping"], [claim])
+        finding = next(f for f in self.result.findings if f.id == "data-validation")
+        count = next((source for source in self.result.sources if source.metric == "equipment_count"), None)
+        text = (f"The current mapping passes file and training-readiness checks for {count.display} equipment histories. " if valid and count else
+                "The current mapping passes file and training-readiness checks. " if valid else f"Training is blocked: {finding.detail} ")
+        text += "Confirm the column roles and observed failure records before training." if valid else "Correct this issue and validate again; do not invent failure labels."
+        claim = self.claim("data-readiness", text, [validation.id] + ([count.id] if count else []))
+        claims = [claim]
+        checks = [f for f in self.result.findings if f.id not in ("data-validation", "data-mapping", "data-size")]
+        checks.sort(key=lambda f: (f.tone not in ("danger", "warning"), f.id != "data-fault_eligible_channels"))
+        for issue in checks:
+            claims.append(self.claim(f"data-issue-{issue.id}", issue.detail, issue.source_ids))
+        return self.expose([finding for finding in self.result.findings if finding.id != "data-mapping"], claims)
 
     def suggest_column_mapping(self):
         mapping = self.result.suggested_mapping
@@ -120,4 +129,4 @@ class DataTools(EvidenceTools):
     def local(self):
         checks = self.call("get_dataset_checks", {})
         mapping = self.call("suggest_column_mapping", {})
-        return self.finish([checks["finding_ids"][0], "data-mapping"], checks["claims"] + mapping["claims"], None, None)
+        return self.finish([checks["finding_ids"][0], "data-mapping"], checks["claims"][:2] + mapping["claims"], None, None)

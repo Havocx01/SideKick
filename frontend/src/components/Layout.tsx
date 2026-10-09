@@ -9,6 +9,7 @@ import { AnalysisInspector } from "./AnalysisInspector";
 import { ThemeToggle } from "./ThemeToggle";
 import { Toaster } from "@/components/ui/toast";
 import { TrainingNotifications } from "./TrainingNotifications";
+import { CanvasFractalGrid } from "./cult/CanvasFractalGrid";
 
 export function Layout() {
   return <AnalysisProvider><Workspace /></AnalysisProvider>;
@@ -23,7 +24,7 @@ function Workspace() {
   for (const key of ["candidate", "partition"]) { const value = params.get(key); if (value) context.set(key, value); }
   const record = useApi(() => (id ? experiments.get(id) : Promise.resolve(null)), [id, location.pathname]);
   const prefix = id ? `/experiments/${id}` : "";
-  const isEvidence = ["comparison", "replay", "data", "benchmark", "walkthrough"].some(page => location.pathname.endsWith(`/${page}`));
+  const isEvidence = ["comparison", "replay", "data", "benchmark"].some(page => location.pathname.endsWith(`/${page}`));
   const pilotReady = Boolean(id && health.data?.can_review_pilot && record.data?.status === "completed");
   const sections = [
     { title: "Workspace", views: [
@@ -39,12 +40,13 @@ function Workspace() {
   ];
   const views = sections.flatMap(section => section.views);
   const workspace = health.data?.mode === "replay" ? "Recorded demo" : health.data?.mode === "demo" ? "Hosted sample workspace" : "Local workspace";
-  const activeView = views.find(view => view.to === location.pathname);
+  const workspacePath = location.pathname === "/walkthrough" ? "/" : location.pathname;
+  const activeView = views.find(view => view.to === workspacePath);
   const currentView = activeView?.label ?? (location.pathname === "/walkthrough" ? "Guided walkthrough" : location.pathname.endsWith("/pilot") ? "Equipment pilot" : location.pathname === "/new" ? "New experiment" : "Experiment progress");
-  const sectionName = sections.find(section => section.views.some(view => view.to === location.pathname))?.title ?? (isEvidence ? "Evidence" : location.pathname.endsWith("/pilot") ? "Pilot" : "Workspace");
+  const sectionName = sections.find(section => section.views.some(view => view.to === workspacePath))?.title ?? (isEvidence ? "Evidence" : location.pathname.endsWith("/pilot") ? "Pilot" : "Workspace");
   const sectionHref = sectionName === "Evidence" ? `${prefix}/comparison` : sectionName === "Pilot" ? "/experiments" : "/";
   const PageIcon = activeView?.icon ?? (isEvidence ? Layers : location.pathname.endsWith("/pilot") ? ClipboardCheck : FlaskConical);
-  const isOverview = location.pathname === "/";
+  const isOverview = location.pathname === "/" || location.pathname === "/walkthrough";
   const sourceName = id ? record.data?.source === "synthetic" ? "Synthetic experiment" : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment" : "Recorded NASA benchmark";
   const stage = location.pathname === "/walkthrough" || params.get("partition") !== "holdout" ? "Development results" : "Final validation";
   const validity = id && record.data?.source === "upload" ? "Field performance unverified" : "Not field validated";
@@ -117,10 +119,11 @@ function Workspace() {
             <ThemeToggle />
           </div>
         </header>
-        <div className="workspace-body">
+        <div className={`workspace-body${isOverview ? " overview-workspace" : ""}`}>
+          {isOverview && <CanvasFractalGrid waveIntensity={36} enableMouseGlow={false} respectReducedMotion={false} />}
           <main className={`main${isOverview ? " overview-main" : ""}`} id="main-content" tabIndex={-1}>
             <div className="main-inner">
-              <div className={`page${isOverview ? " page-overview" : ""}`} key={location.pathname}>
+              <div className={`page${isOverview ? " page-overview" : ""}`} key={isOverview ? "overview" : location.pathname}>
                 <Outlet key={id ?? "benchmark"} />
               </div>
             </div>

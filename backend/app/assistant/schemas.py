@@ -99,7 +99,7 @@ class AnalysisResult(Strict):
     brief_draft: str | None = None
     mode: Literal["evidence", "ai"] = "evidence"
     model: str | None = None
-    prompt_version: str = "sidekick-analysis-v2.2"
+    prompt_version: str = "sidekick-analysis-v3.0"
     verification: str = "Evidence references checked"
     fallback_reason: str | None = None
     assessment: list[AnalysisClaim] = Field(default_factory=list)

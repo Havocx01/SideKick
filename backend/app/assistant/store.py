@@ -78,6 +78,21 @@ class AssistantStore:
             row = db.execute("SELECT allowed FROM consent WHERE owner=? AND experiment=?", (owner, experiment)).fetchone()
         return bool(row and row[0])
 
+    def latest_draft(self, owner: str, fingerprint: str) -> AnalysisRecord | None:
+        """Retain human edits across prompt updates, only for identical scoped evidence."""
+        digest = fingerprint.partition(":")[2]
+        if not digest:
+            return None
+        with self.connect() as db:
+            row = db.execute('''SELECT payload FROM analyses WHERE owner=?
+                AND substr(json_extract(payload,'$.cache_fingerprint'), instr(json_extract(payload,'$.cache_fingerprint'), ':') + 1)=?
+                AND json_extract(payload,'$.status')='completed'
+                AND json_type(payload,'$.brief_text')='text'
+                AND (public=0 OR json_extract(payload,'$.created_at') >= ?)
+                ORDER BY json_extract(payload,'$.updated_at') DESC LIMIT 1''',
+                (owner, digest, time.time() - 86400)).fetchone()
+        return AnalysisRecord.model_validate_json(row[0]) if row else None
+
     def set_consent(self, owner: str, experiment: str, allowed: bool):
         with self.connect() as db:
             db.execute("INSERT OR REPLACE INTO consent VALUES(?,?,?)", (owner, experiment, int(allowed)))

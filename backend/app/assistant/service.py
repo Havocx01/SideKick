@@ -84,6 +84,14 @@ class AssistantService:
                     AnalysisStage(id="explain", label="Investigate evidence", status="completed"),
                     AnalysisStage(id="verify", label="Verify references", status="completed")], result=result,
             cache_fingerprint=fingerprint)
+        draft = self.store.latest_draft(owner, fingerprint)
+        if draft:
+            from app.assistant.evidence import with_brief
+            generated = with_brief(draft.result, draft.context.model_copy(update={"task": "brief"})).brief_draft if draft.result else None
+            # Unedited generated text should improve with the new analysis too.
+            if draft.brief_text != generated:
+                record.brief_text = draft.brief_text
+                record.brief_saved_at = draft.brief_saved_at
         if not reason and self.tasks:
             reason = "Another live analysis is running. Recorded evidence is ready."
         if reason:

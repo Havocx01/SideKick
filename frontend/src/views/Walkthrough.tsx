@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
-import { motionTokens } from "@/registry/motion-tokens";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { AcceptanceCriteria, CandidateVerdict } from "../api/types";
 import { useApi } from "../hooks/useApi";
 import { useEvidence } from "../hooks/useEvidence";
@@ -10,16 +8,15 @@ import { Badge, Panel, StateBlock } from "../components/Chrome";
 import { EvidenceExport } from "../components/DecisionSummary";
 import { WarningCounts, WarningDefinitions } from "../components/ResultStory";
 import { ReplayExample } from "../components/ReplayExample";
-import { WalkthroughProgress } from "../components/cult/WalkthroughProgress";
+import { IntroDisclosure } from "../components/cult/IntroDisclosure";
 import { GuidedModelRows, WalkthroughChoice, WarningWindow } from "../components/WalkthroughTools";
-import { WalkthroughSpotlight } from "../components/WalkthroughSpotlight";
 import { candidateLabel, integer, percent, scenarioLabel, scenarioSummary } from "../format";
 
 export function Walkthrough() {
   const [params] = useSearchParams();
   const step = walkthroughStep(params);
   const index = walkthroughSteps.indexOf(step);
-  const reduced = useReducedMotion();
+  const navigate = useNavigate();
   const api = useEvidence();
   const selection = useApi(() => api.selection(), [api]);
   const traces = useApi(() => step.id === "replay" ? api.replay("16") : Promise.resolve([]), [api, step.id]);
@@ -31,25 +28,11 @@ export function Walkthrough() {
   const clean = traces.data?.find(s => s.candidate === "logistic_regression" && s.config_id === "lr2" && s.scenario_id === "clean");
   const criteria = selection.data?.criteria;
   const missing = !criteria || (["clean", "fault", "replay"].includes(step.id) && !model);
-  const previous = walkthroughSteps[index - 1];
-  const next = walkthroughSteps[index + 1];
-  const guideReady = !selection.loading && !selection.error && !missing && (
-    step.id === "replay" ? !!fault && !!clean && !traces.loading :
-    step.id === "compare" ? !!ordinary || !!augmented : step.id === "report" ? !!augmented && !report.loading : true);
-  return <div className="guided-walkthrough">
-    <header className="page-head walkthrough-heading"><h1>{step.title}</h1><p>{step.instruction}</p><p className="walkthrough-mobile-source">Recorded NASA benchmark · Development</p></header>
-    <div className="walkthrough-bar">
-      <div className="walkthrough-step-group">
-        <nav className="walkthrough-steps" aria-label="Walkthrough steps">
-          {walkthroughSteps.map((item, i) => <Link key={item.id} to={walkthroughPath(item.id)} aria-current={item.id === step.id ? "step" : undefined}><span>{i + 1}</span>{item.label}</Link>)}
-        </nav>
-        <WalkthroughProgress currentStep={index + 1} totalSteps={walkthroughSteps.length} />
-      </div>
-      <div className="walkthrough-navigation">{previous ? <Link className="button" to={walkthroughPath(previous.id)}>Back</Link> : <Link className="button" to="/">Back to overview</Link>}<span>Step {index + 1} of {walkthroughSteps.length}</span>{next ? <Link className="button primary" to={walkthroughPath(next.id)}>Next</Link> : <Link className="button" aria-label="Restart walkthrough" to={walkthroughPath("clean")}>Restart</Link>}</div>
-    </div>
+  return <IntroDisclosure steps={walkthroughSteps} currentStep={index}
+    onStepSelect={selected => { const target = walkthroughSteps[selected]; if (target) navigate(walkthroughPath(target.id)); }}
+    onClose={() => navigate("/", { replace: true })}>
     <StateBlock loading={selection.loading} error={selection.error}>
-      {missing ? <Panel title="This walkthrough evidence is unavailable"><p>The recorded benchmark must include the named models and their fault results. No substitute results are shown.</p><Link to="/comparison">Explore available benchmark evidence</Link></Panel> : criteria && <motion.div key={step.id} data-testid="walkthrough-result"
-        initial={reduced ? false : { opacity: .8 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : motionTokens.duration.fast }}>
+      {missing ? <Panel title="This walkthrough evidence is unavailable"><p>The recorded benchmark must include the named models and their fault results. No substitute results are shown.</p><Link to="/comparison">Explore available benchmark evidence</Link></Panel> : criteria && <div key={step.id} data-testid="walkthrough-result">
         {step.id === "clean" && model && <Panel title={candidateLabel(model.candidate, model.config_id)}>
           <div className="guided-healthy-layout"><WarningCounts metrics={model.clean} label="Healthy sensors" /><WarningWindow criteria={criteria} /></div>
           <p className="note walkthrough-boundary">Recorded development results. Test limits are demonstration settings.</p>
@@ -74,13 +57,9 @@ export function Walkthrough() {
           <details className="disclosure-plain"><summary>What's included?</summary><p>HTML decision report, CSV metrics and JSON evidence. The report covers aug3 development results; the ZIP includes all experiment metrics. Raw uploads and model files are excluded.</p></details>
           <p className="note walkthrough-boundary">Evidence for review, not deployment approval.</p>
         </Panel>}
-      </motion.div>}
+      </div>}
     </StateBlock>
-    <div className="walkthrough-footer">
-      {/* {step.id !== "report" && <Link className="walkthrough-exit" to={`/comparison?${new URLSearchParams({ candidate: step.candidate, partition: "out_of_fold" })}`}>Full results</Link>} */}
-      <WalkthroughSpotlight step={step.id} ready={guideReady} criteria={criteria} />
-    </div>
-  </div>;
+  </IntroDisclosure>;
 }
 
 function FaultStep({ model, criteria }: { model: CandidateVerdict; criteria: AcceptanceCriteria }) {

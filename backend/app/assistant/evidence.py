@@ -257,14 +257,17 @@ def with_brief(result: AnalysisResult, context: AnalysisRequest) -> AnalysisResu
         cited += [by_id[i] for i in claim.source_ids if i in by_id and by_id[i] not in cited]
     models = list(dict.fromkeys(s.context.split(" · ")[0] for s in result.sources)) or context.candidates
     lines = ["Engineer review draft", "",
+             "Test evidence, not deployment approval.", "",
              f"Experiment: {context.experiment_id or 'Recorded benchmark'} · {PARTITIONS[context.partition]}",
              f"Model: {', '.join(models)}", ""]
     if result.interpretation:
         lines += ["AI interpretation (verify against the evidence)", result.interpretation, ""]
     if result.assessment:
-        lines += ["Assessment"] + [f"- {claim.text}" for claim in result.assessment] + [""]
-    lines += ["Findings"] + [f"- {f.title}: {f.detail}" for f in result.findings[:3]]
-    lines += ["", "Evidence"] + [f"- {s.label}: {s.display} ({s.context})" for s in cited[:6]]
-    lines += ["", "Proposed next checks"] + ([f"- {a.label}: {a.detail}" for a in result.actions[:2]] or ["- Agree a next check with the equipment engineer."])
-    lines += ["", "Limitations"] + [f"- {item}" for item in result.limitations]
+        lines += ["Review focus"] + [f"- {claim.text}" for claim in result.assessment]
+    else:
+        lines += ["Findings"] + [f"- {f.title}: {f.detail}" for f in result.findings[:3]]
+        lines += ["", "Evidence"] + [f"- {s.label}: {s.display} ({s.context})" for s in cited[:6]]
+    lines += ["", "Proposed next checks"] + ([f"- {a.detail}" for a in result.actions[:1]] or ["- Agree the next check and its acceptance criteria with the equipment engineer."])
+    lines += ["- Review owner: [assign engineer]", "- Acceptance / stop condition: [agree before the next check]"]
+    lines += ["", "Limitations"] + [f"- {item}" for item in result.limitations if not item.startswith("Engineer review draft.") and item != "Recorded test results do not approve deployment."]
     return result.model_copy(update={"brief_draft": "\n".join(lines)})

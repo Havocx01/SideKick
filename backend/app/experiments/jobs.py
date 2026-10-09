@@ -45,7 +45,7 @@ class Jobs:
         self.mutex = threading.Lock()
         self.thread: threading.Thread | None = None
 
-    def create(self, request: ExperimentCreate) -> ExperimentRecord:
+    def create(self, request: ExperimentCreate, *, library_owner="local") -> ExperimentRecord:
         with self.mutex:
             if self.stopping.is_set():
                 raise ValueError("The server is shutting down. Retry after restarting it.")
@@ -84,7 +84,9 @@ class Jobs:
                 pilot_brief=pilot_brief,
             )
             directory = self.workspace.directory("experiments", record.experiment_id)
-            self.workspace.reserve(record.model_dump(mode="json"))
+            self.workspace.reserve(record.model_dump(mode="json"), library_owner=library_owner,
+                                   folder_id=str(request.folder_id) if request.folder_id else None,
+                                   folder_explicit="folder_id" in request.model_fields_set)
             try:
                 directory.mkdir(parents=True)
                 self.thread = threading.Thread(target=self._run, args=(record.experiment_id,), daemon=True)
