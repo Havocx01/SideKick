@@ -1,9 +1,10 @@
+import { Select } from "@/registry/components/select/select";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, experiments, library } from "../api/client";
 import type { ColumnMapping, DatasetRegistration, ExperimentRecord, ExperimentProtocol, PilotBrief } from "../api/types";
 import { defaultProtocol, PilotBriefEditor, ProtocolEditor } from "../components/ProtocolEditor";
-import { Badge, Button, Field, Panel, Select, StateBlock } from "../components/Chrome";
+import { Badge, Button, Field, Panel, StateBlock } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
 import { useAnalysis } from "../components/AnalysisProvider";
 import { AlertCircle, Check, Circle, Clock3, LoaderCircle, Upload } from "lucide-react";

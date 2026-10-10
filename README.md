@@ -53,6 +53,12 @@ With Docker Desktop running, `docker compose up --build` starts the local develo
 
 Check the rendered bindings with `node scripts/check_local_docker.mjs`. This checks configuration without starting services or printing environment secrets.
 
+### Keep saved experiments safe
+
+Stop the local server, then run `.\tasks.ps1 backup` to save uploads, results, folders, analyses, briefs and validation history. GitHub contains the code, not this local data. Restore a trusted ZIP into a new workspace with `.\tasks.ps1 restore -Archive '<backup.zip>' -Destination '<new directory>'`; existing workspaces are never overwritten. See [backup and recovery](docs/workspace-backup.md) for startup settings, ownership and snapshot limitations.
+
+Run `.\tasks.ps1 evaluation-pack` to prepare offline engineer review cases, a separate answer key and blank scoring sheets. See [engineer evaluation pack](docs/engineer-evaluation-pack.md). Creating the pack runs no training or paid AI.
+
 ## Try it
 
 Start with **Start guided walkthrough**. It uses recorded NASA results to explain what Sidekick tests and how to read the warnings. It does not train models or score reserved histories.
