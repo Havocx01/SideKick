@@ -30,8 +30,11 @@ for (const theme of ["light", "dark"]) for (const width of [1280, 390]) {
   });
 }
 
-test("reduced motion renders final counts, static canvas and beam, and responds to preference changes", async ({ page }) => {
-  await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true"));
+test("saved animations off renders final counts, static canvas and beam, and responds to the app switch", async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true");
+    localStorage.setItem("sidekick-motion", "reduced");
+  });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   const canvas = page.locator("canvas");
@@ -50,12 +53,16 @@ test("reduced motion renders final counts, static canvas and beam, and responds 
   })).toBe(true);
   await page.screenshot({ path: `${screenshots}/overview-reduced-motion.png` });
   await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(canvas.locator("..")).toHaveAttribute("data-active", "false");
+  await page.getByRole("switch", { name: "Animations", exact: true }).click();
   await expect(canvas.locator("..")).toHaveAttribute("data-active", "true");
   await page.mouse.move(900, 400); await page.waitForTimeout(100);
   const moving = await canvas.evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL());
   await page.waitForTimeout(100);
   expect(await canvas.evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL())).not.toBe(moving);
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(canvas.locator("..")).toHaveAttribute("data-active", "true");
+  await page.getByRole("switch", { name: "Animations", exact: true }).click();
   await expect(canvas.locator("..")).toHaveAttribute("data-active", "false");
   const finalPixels = await canvas.evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL());
   await page.mouse.move(550, 250); await page.waitForTimeout(150);

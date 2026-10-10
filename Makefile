@@ -9,7 +9,7 @@ else
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help setup setup-full data pipeline pipeline-fast bundle api web build types docker
+.PHONY: help setup setup-full data pipeline pipeline-fast bundle api api-dev web build types docker
 
 help: ## List the available tasks
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
@@ -34,8 +34,11 @@ pipeline-fast: ## Same pipeline with fewer folds and the required faults only
 bundle: ## Rebuild evidence/bundle.json from the recorded runs
 	$(BIN)/python scripts/export_bundle.py
 
-api: ## Serve the API with reload on http://127.0.0.1:8140
-	$(BIN)/uvicorn app.main:app --reload --app-dir backend --host 127.0.0.1 --port 8140
+api: ## Serve the API on http://127.0.0.1:8140
+	$(BIN)/uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8140
+
+api-dev: ## Serve the API with backend-only development reload
+	$(BIN)/uvicorn app.main:app --reload --reload-dir backend --app-dir backend --host 127.0.0.1 --port 8140
 
 web: ## Serve the frontend with hot reload on http://127.0.0.1:5173
 	cd frontend && npm run dev

@@ -51,6 +51,8 @@ class AssistantService:
             return "Recorded evidence analysis. Live AI is not configured."
         if settings.mode == "demo" and not self.store.unlocked(owner):
             return "Recorded evidence analysis. Presenter access enables live AI."
+        if settings.mode == "full":
+            return None if self.store.workspace_consent() else "Enable AI analysis for this workspace."
         if consent_required and not self.store.consent(owner, experiment):
             return "Cloud analysis is off for this experiment."
         return None
@@ -61,6 +63,8 @@ class AssistantService:
             return "Cloud analysis is unavailable in replay mode."
         if self.settings.mode == "demo" and not self.store.unlocked(owner):
             return "Presenter access has expired."
+        if self.settings.mode == "full" and self.store.workspace_consent() is not None:
+            return None if self.store.workspace_consent() else "AI permission is off for this workspace."
         if consent_required and not self.store.consent(owner, experiment):
             return "Cloud consent is off for this experiment."
         return None
@@ -103,6 +107,10 @@ class AssistantService:
         fingerprint, draft_fingerprint, evidence_digest = self.identities(loaded, context, not reason)
         if reuse:
             saved = self.store.latest(owner, fingerprint) or self.store.latest_scoped(owner, draft_fingerprint)
+            if saved and not reason and saved.result and saved.result.mode == "evidence" and saved.result.fallback_reason in {
+                "Enable AI analysis for this workspace.", "Cloud analysis is off for this experiment.",
+            }:
+                saved = None  # Explicit approval upgrades a permission fallback once.
             if saved:
                 denied = self.output_access_reason(owner, context.consent_scope, consent_required)
                 origins = self.store.provenance(saved.id, owner)
@@ -213,6 +221,11 @@ class AssistantService:
         for id, context in list(self.contexts.items()):
             if context[:2] == (owner, experiment):
                 await self.cancel(id, owner)
+
+    async def revoke_workspace(self):
+        self.store.revoke_results(workspace=True)
+        for id, context in list(self.contexts.items()):
+            await self.cancel(id, context[0])
 
     async def close(self):
         tasks = list(self.tasks.values())

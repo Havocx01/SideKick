@@ -35,7 +35,7 @@ interface AnalysisState {
   statusRecovery: "" | "refresh" | "unavailable";
   close: (restoreFocus?: boolean) => void;
   cancel: () => Promise<void>;
-  setConsent: (allowed: boolean) => Promise<void>;
+  setConsent: (allowed: boolean, workspace?: boolean) => Promise<ConsentState | undefined>;
   unlock: (code: string) => Promise<void>;
   saveBrief: (text: string) => Promise<void>;
   editBrief: (text: string) => void;
@@ -161,7 +161,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         const caps = await assistant.capabilities(next.experiment_id, next.dataset_id);
         if (token !== generation.current) return;
         setCapabilities(caps);
-        const consentScope = next.dataset_id ? `dataset:${next.dataset_id}` : next.experiment_id;
+        const consentScope = caps.mode === "full" ? "workspace" : next.dataset_id ? `dataset:${next.dataset_id}` : next.experiment_id;
         let consentPermitsDraft = true;
         if (caps.consent_required && consentScope) {
           const state = await assistant.consent(consentScope);
@@ -268,22 +268,41 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     try { const next = await assistant.cancel(current.id); if (token === generation.current) updateRecord(next); }
     catch (failure) { if (token === generation.current) { setError(`Cancellation could not be confirmed. ${analysisError(failure)}`); setStatusRecovery("refresh"); } }
   }
-  async function setConsent(allowed: boolean) {
-    const consentScope = context?.dataset_id ? `dataset:${context.dataset_id}` : context?.experiment_id;
-    if (!context || !consentScope) return;
+  async function setConsent(allowed: boolean, workspace = false) {
+    const consentScope = workspace || capabilities?.mode === "full" ? "workspace" : context?.dataset_id ? `dataset:${context.dataset_id}` : context?.experiment_id;
+    if (!consentScope) return;
     if (requestRef.current) cancelledAdmissions.current.add(generation.current);
     const token = ++generation.current;
     window.clearTimeout(draftTimer.current); draft.current = null;
-    await Promise.all([...writes.current.values()].map(write => write.catch(() => undefined)));
+    const revokingWorkspace = consentScope === "workspace" && !allowed;
+    if (!revokingWorkspace) await Promise.all([...writes.current.values()].map(write => write.catch(() => undefined)));
     const current = recordRef.current;
-    if (current && isActive(current)) await assistant.cancel(current.id);
+    if (!revokingWorkspace && current && isActive(current)) await assistant.cancel(current.id);
     const state = await assistant.setConsent(consentScope, allowed);
     if (token !== generation.current) return;
     updateConsent(state);
     updateRecord(null);
-    const caps = await assistant.capabilities(context.experiment_id, context.dataset_id);
-    if (token === generation.current) setCapabilities(caps);
+    setPending(false); setVerifying(false); setError(""); setStatusRecovery(""); requestRef.current = null;
+    if (consentScope === "workspace") {
+      try { localStorage.setItem("sidekick-workspace-ai-revision", crypto.randomUUID()); } catch { /* Server permission remains authoritative. */ }
+    }
+    try {
+      const caps = await assistant.capabilities(context?.experiment_id, context?.dataset_id);
+      if (token === generation.current) setCapabilities(caps);
+    } catch {
+      if (token === generation.current) { setCapabilities(null); setError("AI permission was saved, but availability could not be checked. Reopen analysis to refresh."); }
+    }
+    return state;
   }
+  useEffect(() => {
+    const verify = () => {
+      if (open && capabilities?.mode === "full" && contextRef.current && recordRef.current && !isActive(recordRef.current)) void run(contextRef.current, false);
+    };
+    const storage = (event: StorageEvent) => { if (event.key === "sidekick-workspace-ai-revision") verify(); };
+    window.addEventListener("focus", verify);
+    window.addEventListener("storage", storage);
+    return () => { window.removeEventListener("focus", verify); window.removeEventListener("storage", storage); };
+  }, [open, capabilities?.mode, run]);
   async function unlock(code: string) {
     const token = generation.current;
     await assistant.unlock(code);

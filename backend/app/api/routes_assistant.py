@@ -78,6 +78,10 @@ def load_context(request, context):
 
 
 def check_consent_context(request, scope):
+    if scope == "workspace":
+        if service(request).settings.mode != "full":
+            raise HTTPException(403, "Workspace AI permission is available only in the local app.")
+        return
     if scope.startswith("dataset:"):
         dataset_context(request, scope.removeprefix("dataset:"))
     else:
@@ -148,8 +152,8 @@ def capabilities(request: Request, response: Response, experiment_id: str | None
     reason = assistant.live_reason(who, scope, required)
     return AssistantCapabilities(tasks=list(assistant.settings.assistant_tasks), live_available=reason is None,
         unlock_available=assistant.settings.mode == "demo" and bool(assistant.settings.assistant_presenter_code),
-        unlocked=assistant.settings.mode == "full" or assistant.store.unlocked(who), consent_required=required,
-        consent_granted=not required or assistant.store.consent(who, scope), mode=assistant.settings.mode,
+        unlocked=assistant.settings.mode == "full" or assistant.store.unlocked(who), consent_required=assistant.settings.mode == "full" or required,
+        consent_granted=bool(assistant.store.workspace_consent()) if assistant.settings.mode == "full" else not required or assistant.store.consent(who, scope), mode=assistant.settings.mode,
         note=reason or "Live analysis is available.")
 
 
@@ -191,7 +195,10 @@ async def cancel(id: str, request: Request, response: Response):
 def consent(experiment_id: str, request: Request, response: Response):
     check_consent_context(request, experiment_id)
     who = visitor(request, response)
-    return ConsentState(experiment_id=experiment_id, allowed=service(request).store.consent(who, experiment_id), disclosure=DISCLOSURE)
+    assistant = service(request)
+    local = assistant.settings.mode == "full"
+    return ConsentState(experiment_id=experiment_id, allowed=bool(assistant.store.workspace_consent()) if local else assistant.store.consent(who, experiment_id),
+                        disclosure=("Applies to all existing and future analyses in this local workspace. " if local else "") + DISCLOSURE)
 
 
 @router.post("/consent/{experiment_id}", response_model=ConsentState, dependencies=[Depends(guard)])
@@ -199,11 +206,17 @@ async def set_consent(experiment_id: str, payload: ConsentUpdate, request: Reque
     check_consent_context(request, experiment_id)
     who = visitor(request, response)
     assistant = service(request)
-    if payload.allowed:
+    if assistant.settings.mode == "full":
+        if payload.allowed:
+            assistant.store.set_workspace_consent(True)
+        else:
+            await assistant.revoke_workspace()
+    elif payload.allowed:
         assistant.store.set_consent(who, experiment_id, True)
     else:
         await assistant.revoke(who, experiment_id)
-    return ConsentState(experiment_id=experiment_id, allowed=payload.allowed, disclosure=DISCLOSURE)
+    return ConsentState(experiment_id=experiment_id, allowed=payload.allowed,
+                        disclosure=("Applies to all existing and future analyses in this local workspace. " if assistant.settings.mode == "full" else "") + DISCLOSURE)
 
 
 @router.post("/access", dependencies=[Depends(guard)])

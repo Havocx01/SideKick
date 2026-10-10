@@ -47,6 +47,10 @@ On macOS or Linux, with Python 3.11+ and Node.js installed, run `python3 scripts
 
 The existing `.\tasks.ps1` and `make` tasks remain available for setup, builds and frontend development. Run `.\tasks.ps1 web` or `make web` for frontend hot reload. The built app needs only the API server.
 
+Start the built app with `.\tasks.ps1 api` or `make api`. Normal API launches do not use the development reloader. Use `.\tasks.ps1 api -Reload` or `make api-dev` only while editing backend code; these watch the backend directory. `.\tasks.ps1 api -Port 8000` uses a different local port. Keep the terminal open while using Sidekick.
+
+Animations are on by default. The **Animations** switch beside the theme control saves your choice, including turning them off, across refreshes.
+
 The launcher and Windows API command load `.env` from the repository folder if it exists. Restart the server after changing it. PowerShell environment variables override `.env`; clear an old key with `Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue` before starting.
 
 With Docker Desktop running, `docker compose up --build` starts the local development API and web app. Open [localhost:5173](http://localhost:5173). Both published ports bind to host loopback; the processes still listen on their container interfaces so the web service can reach the API. Full mode is a local workspace. Sharing it remotely needs a separately designed authentication and access boundary.
@@ -77,6 +81,8 @@ CSVs need at least 25 distinct complete equipment histories, consecutive integer
 
 ## Optional AI
 
+In the local app, open **AI settings** beside the theme and animation controls, then choose **Enable AI analysis** once. This approval covers all existing and future experiments and data reviews, and stays saved across browser and server restarts. New analysis contexts use AI automatically when the server key is configured; saved answers are reused across analysis and review brief. Turning AI off in the same control cancels active work and removes cloud-derived answers and briefs while retaining evidence-only drafts and recorded test data. Existing per-experiment approvals do not automatically become workspace approval. Hosted presenter access and replay restrictions remain separate.
+
 Set `OPENAI_API_KEY` in the server environment before starting Sidekick. The default model is `gpt-4.1-mini-2025-04-14`; override it with `SIDEKICK_ASSISTANT_MODEL`. Never put a key in frontend code or commit it.
 
 AI uses read-only tools to inspect recorded model metrics, fault cases and warning events. It chooses evidence-backed assessments and a next check. Every displayed claim, number and link comes from Sidekick's verified evidence; the model cannot change results, launch training or approve deployment. Without live AI, the same tools follow a fixed investigation sequence.
@@ -87,7 +93,7 @@ Completed analyses and review drafts are saved on the server. Reopening them or 
 
 Closing an analysis leaves its saved job available. Temporary status failures retry automatically; **Refresh status** reads the existing job and does not start another AI request. Cached results track the configured live model and actual prompt/tool contracts. Human-edited briefs remain attached to the same scoped evidence across those upgrades.
 
-Uploaded datasets and experiments each require explicit, revocable cloud consent. Only derived checks, column types, missing-value fractions, pseudonymous aliases and recorded metrics leave the server. Raw rows, column names, equipment IDs and file paths are excluded. `store=False` does not remove the provider's possible abuse-monitoring retention.
+Local uploads and experiments use the single explicit, revocable workspace AI permission described above. Only derived checks, column types, missing-value fractions, pseudonymous aliases and recorded metrics leave the server. Raw rows, column names, equipment IDs and file paths are excluded. `store=False` does not remove the provider's possible abuse-monitoring retention.
 
 On a hosted demo, set `SIDEKICK_ASSISTANT_PRESENTER_CODE` as a server secret to enable private presenter access. Public visitors receive evidence-only analysis. Sidekick has no session, daily or hourly analysis allowance. Live analysis runs one request at a time. Each investigation can use up to eight read-only tool calls and one final selection, with a 45-second timeout. Replay mode never calls the provider. Set `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` to disable cloud calls everywhere. `SIDEKICK_ASSISTANT_TASKS` (default `investigate,compare,warning,brief,data`) controls the workflows.
 

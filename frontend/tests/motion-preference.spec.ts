@@ -6,7 +6,10 @@ test.beforeEach(async ({ page }) => {
 
 test("app motion override restores canvas and beam under system reduced motion and survives refresh", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.addInitScript(() => localStorage.setItem("sidekick-theme", "dark"));
+  await page.addInitScript(() => {
+    localStorage.setItem("sidekick-theme", "dark");
+    if (localStorage.getItem("sidekick-motion") === null) localStorage.setItem("sidekick-motion", "reduced");
+  });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   const toggle = page.getByRole("switch", { name: "Animations", exact: true });
@@ -48,9 +51,8 @@ test("app motion override restores canvas and beam under system reduced motion a
 });
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
-  test(`overview numbers roll and bars grow with animations enabled under ${reducedMotion}`, async ({ page }) => {
+  test(`overview animates by default, including numbers and bars, under ${reducedMotion}`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
-    if (reducedMotion === "reduce") await page.addInitScript(() => localStorage.setItem("sidekick-motion", "full"));
     // Hold the recorded selection until the page is mounted, so capture starts
     // at the entrance animation rather than after an arbitrary network delay.
     let release!: () => void;
