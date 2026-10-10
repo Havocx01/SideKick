@@ -1,5 +1,6 @@
+import { useMotionPreference } from "../hooks/useMotionPreference";
 import { useState, type ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import SegmentedControl from "@/components/arc/segmented-control/segmented-control";
 import { Alert } from "@/components/arc/alert/alert";
 import type { ConfigReport } from "../api/client";
@@ -13,7 +14,7 @@ import styles from "../views/data-protocol.module.css";
 export function WarningTiming({ config, positiveFraction }: { config: ConfigReport; positiveFraction?: number | null }) {
   const [zone, setZone] = useState<WarningZone>("timely");
   const [rulesOpen, setRulesOpen] = useState(false);
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   const timing = protocolTiming(config.config);
   const selected = timing.zones.find(item => item.id === zone);
   return <Panel title="When a warning counts" description="Operating cycles · Diagram not to scale">
@@ -80,6 +81,6 @@ export function DataSeparation({ splits, config, profile }: { splits: SplitAssig
 }
 
 function Explanation({ children }: { children: ReactNode }) {
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   return <div className={styles.explanation} aria-live="polite" aria-atomic="true"><motion.p key={String(children)} initial={reduced ? false : { opacity: .6 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : .18 }}>{children}</motion.p></div>;
 }

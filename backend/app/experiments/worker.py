@@ -61,8 +61,11 @@ def run(root: Path, id: str):
         if dataset.data_hash != record["data_hash"]:
             raise ValueError("Dataset contents changed after confirmation. Upload and confirm it again.")
         from app.experiments.exposure import history_ids
+        from app.experiments.preflight import check_training_feasibility
         from app.models.splits import make_splits
-        workspace.expose(history_ids(dataset, make_splits(dataset, config).development).values(), id, "Development fitting, threshold selection and fault testing")
+        splits = make_splits(dataset, config)
+        check_training_feasibility(dataset, splits)
+        workspace.expose(history_ids(dataset, splits.development).values(), id, "Development fitting, threshold selection and fault testing")
         evidence = EvidenceStore(directory / "runs")
         training = evidence.start_run(
             "training",

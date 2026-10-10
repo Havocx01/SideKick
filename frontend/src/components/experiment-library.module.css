@@ -200,6 +200,9 @@
   .empty { padding: var(--space-6) var(--space-4); }
 }
 @media (prefers-reduced-motion: reduce) {
+  @scope (:root:not([data-motion="full"])) {
   .menu, .dialog, .backdrop, .dateHeading svg, .headerAction { transition: none; }
   .menu[data-starting-style], .menu[data-ending-style] { transform: none; }
+
+  }
 }

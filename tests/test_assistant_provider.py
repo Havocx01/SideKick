@@ -96,7 +96,10 @@ def test_context_tasks_stop_after_the_required_tool_instead_of_repeating_calls(m
         InvestigationChoices(finding_ids=[finding], claim_ids=claims, action_id=None))
     result = asyncio.run(investigate(scoped, SETTINGS))
     assert [call.name for call in result.investigation] == [name]
-    assert f'"name": "{name}"' in packets[0]
+    assert len(packets) == 1  # One structured selection, no tool-planning requests.
+    inspected = json.loads(json.loads(packets[0])[2]["content"])["server_inspection"]
+    assert inspected["name"] == name
+    assert all(call.label.startswith("Server inspection · ") for call in result.investigation)
 
 
 @pytest.mark.parametrize("name,args", [

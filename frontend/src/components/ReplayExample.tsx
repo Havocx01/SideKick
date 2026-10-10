@@ -1,5 +1,6 @@
+import { useMotionPreference } from "../hooks/useMotionPreference";
 import { useEffect, useState } from "react";
-import { useIsPresent, useReducedMotion } from "motion/react";
+import { useIsPresent } from "motion/react";
 import { useSearchParams } from "react-router-dom";
 import type { ReplaySeries } from "../api/types";
 import { useAnalysis } from "./AnalysisProvider";
@@ -19,7 +20,7 @@ export function ReplayExample(props: ReplayExampleProps) {
 }
 
 function Player({ series, comparison, horizon, minLead, guided = false }: ReplayExampleProps) {
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   const present = useIsPresent();
   const analysis = useAnalysis();
   const experimentId = useExperimentId();

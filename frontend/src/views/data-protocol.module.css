@@ -115,4 +115,7 @@
   .page :global(table td[data-label]:not([data-primary])) { flex: 1 1 100%; margin: 0; padding: 0; order: 2; }
 }
 @media(pointer:coarse) { .page { --control-height-sm: 44px; --control-height-md: 44px; } }
-@media(prefers-reduced-motion:reduce) { .disclosure > button svg { transition: none; } }
+@media(prefers-reduced-motion:reduce) {
+  @scope (:root:not([data-motion="full"])) { .disclosure > button svg { transition: none; } 
+  }
+}

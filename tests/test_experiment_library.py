@@ -210,3 +210,70 @@ def test_replay_blocks_library(local_settings, monkeypatch):
     with TestClient(create_app()) as client:
         assert client.get("/api/library").status_code == 403
         assert client.post("/api/library/folders", json={"name": "Folder"}).status_code == 403
+
+
+def test_result_label_is_read_only_targeted_and_survives_archive(local_settings, monkeypatch):
+    from app.experiments.library import Library
+    from app.main import create_app
+
+    with TestClient(create_app()) as client:
+        workspace = client.app.state.jobs.workspace
+        _, run = seed(workspace)
+        original = workspace.get("experiments", run)
+        assert client.get(f"/api/experiments/{run}").json()["display_name"] is None
+        library = Library(workspace)
+        library.change("local", [{"kind": "run", "id": run}], "rename", display_name="Pump commissioning")
+        library.change("local", [{"kind": "run", "id": run}], "archive")
+        # Detail must not scan the complete library for a single label.
+        monkeypatch.setattr(Library, "snapshot", lambda *args: pytest.fail("Unexpected snapshot scan"))
+        response = client.get(f"/api/experiments/{run}")
+        assert response.status_code == 200
+        assert response.json()["display_name"] == "Pump commissioning"
+        assert response.json()["name"] == "pump.csv"
+        assert workspace.get("experiments", run) == original
+        assert "display_name" not in original
+        assert client.get("/api/experiments").json()[0]["name"] == "pump.csv"
+
+
+def test_result_display_name_never_crosses_demo_owners(local_settings, monkeypatch):
+    from app.config import reset_settings
+    from app.experiments.library import Library
+    from app.main import create_app
+    from hashlib import sha256
+
+    monkeypatch.setenv("SIDEKICK_MODE", "demo")
+    reset_settings()
+    with TestClient(create_app()) as client:
+        dataset, run = seed(client.app.state.jobs.workspace, source="synthetic")
+        client.get("/api/health")
+        visitor = sha256(client.cookies["sidekick_demo"].encode()).hexdigest()
+        client.app.state.demo.claim("datasets", dataset, visitor)
+        client.app.state.demo.claim("experiments", run, visitor)
+        labels = Library(client.app.state.jobs.workspace)
+        labels.change(f"demo:{visitor}", [{"kind": "run", "id": run}], "rename", display_name="Private label")
+        labels.change("demo:another-visitor", [{"kind": "run", "id": run}], "rename", display_name="Wrong owner's label")
+        assert client.get(f"/api/experiments/{run}").json()["display_name"] == "Private label"
+        client.cookies.clear()
+        assert client.get(f"/api/experiments/{run}").status_code == 404
+
+def test_demo_folder_storage_caps_are_atomic_and_local_is_exempt(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.assistant.store import AnalysisCapacityError
+    from app.experiments.library import Library
+    library = Library(Workspace(tmp_path))
+    def create(index):
+        try:
+            return library.create_folder(f'demo:{index}', f'Folder {index}', max_demo_folders=2, max_visitor_folders=1)
+        except AnalysisCapacityError:
+            return None
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        assert len([folder for folder in pool.map(create, range(6)) if folder]) == 2
+    assert library.create_folder('local', 'Local unaffected')
+    with library.workspace.connect() as db:
+        owner, id = db.execute("SELECT owner,id FROM library_folders WHERE owner LIKE 'demo:%' LIMIT 1").fetchone()
+    with pytest.raises(AnalysisCapacityError):
+        library.create_folder(owner, 'Another', max_demo_folders=10, max_visitor_folders=1)
+    library.rename_folder(owner, id, 'Retained folder')
+    with library.workspace.connect() as db:
+        db.execute('UPDATE library_folders SET created_at=0 WHERE id=?', (id,))
+    assert create(7)

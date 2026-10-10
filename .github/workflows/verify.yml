@@ -3,6 +3,10 @@ on: [push, pull_request]
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      SIDEKICK_ASSISTANT_LIVE_ENABLED: '0'
+      SIDEKICK_ASSISTANT_LIVE_EVAL: '0'
+      SIDEKICK_MLFLOW: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,6 +23,13 @@ jobs:
       - run: python scripts/generate_types.py
       - run: git diff --exit-code frontend/src/api/types.ts
       - run: npm ci
+        working-directory: frontend
+      - run: node scripts/check_local_docker.mjs
+      - run: npm run lint
+        working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm run test:protocol
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

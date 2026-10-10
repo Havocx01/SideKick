@@ -36,9 +36,9 @@ test("comparison, warning explanation and review brief stay grounded in recorded
   const comparison = page.locator(".analysis-compare");
   await expect(comparison).toContainText("Meets limits");
   await expect(comparison).toContainText("Required cases passed");
-  await expect(page.getByRole("region", { name: "Assessment", exact: true })).toContainText("Only one selected model meets every recorded test limit");
+  await expect(page.getByRole("region", { name: "Assessment", exact: true })).toContainText("Only XGBoost (xgb1) meets every recorded test limit; Logistic regression (lr2) does not.");
   await page.getByText("Evidence and test details", { exact: true }).click();
-  await expect(page.locator(".analysis-source").first()).toContainText("Development");
+  await expect(page.getByRole("region", { name: "Evidence and test details" })).toContainText("Development");
   await page.getByRole("button", { name: "Close analysis", exact: true }).click();
 
   await page.getByRole("button", { name: "Prepare review brief", exact: true }).click();

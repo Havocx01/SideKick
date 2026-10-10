@@ -1,11 +1,12 @@
+import { useMotionPreference } from "../hooks/useMotionPreference";
 import type { AlertMetrics, CandidateVerdict, AcceptanceCriteria } from "../api/types";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { motionTokens } from "@/registry/motion-tokens";
 import { integer, percent, scenarioLabel, scenarioSummary } from "../format";
 
 export function WarningCounts({ metrics, label, fault = false, compact = false, animated = false }: { metrics: AlertMetrics; label: string; fault?: boolean; compact?: boolean; animated?: boolean }) {
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   const outcomes = [
     { label: "In time", value: metrics.detected, tone: "in-time" },
     { label: "Late", value: metrics.late, tone: "late" },

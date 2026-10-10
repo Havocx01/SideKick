@@ -1,9 +1,12 @@
 import json
+import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
 from app.assistant.data_review import DataTools, reviewData
+from app.assistant.agent import InvestigationChoices, investigate
 from app.assistant.schemas import AnalysisRequest
 from app.data.synthetic import make_synthetic_dataset
 from app.experiments.datasets import register
@@ -93,3 +96,38 @@ def test_live_selection_cannot_hide_readiness_or_a_quality_warning(dataset):
     packet = tools.call("suggest_column_mapping", {})
     result = tools.finish(packet["finding_ids"], packet["claims"], None, "test")
     assert [claim.id for claim in result.assessment] == ["data-readiness", "data-issue-data-missing_values", "mapping-review"]
+
+
+def test_data_review_inspects_locally_then_uses_one_selection_request(dataset, monkeypatch):
+    workspace, record, _ = dataset
+    tools = toolsFor(workspace, AnalysisRequest(task="data", dataset_id=record.dataset_id, mapping=record.mapping))
+    requests = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            assert kwargs["max_retries"] == 0
+            self.responses = self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def create(self, **kwargs):
+            raise AssertionError("Data review must not pay for predetermined tool planning")
+
+        async def parse(self, **kwargs):
+            requests.append(kwargs)
+            return SimpleNamespace(output_parsed=InvestigationChoices(
+                finding_ids=["data-validation", "data-mapping"], claim_ids=["mapping-review"], action_id=None))
+
+    monkeypatch.setattr("app.assistant.agent.AsyncOpenAI", Client)
+    settings = SimpleNamespace(openai_api_key="fixture", assistant_model="fixture", llm_max_tool_calls=8)
+    result = asyncio.run(investigate(tools, settings))
+    assert len(requests) == 1
+    assert [call.name for call in result.investigation] == ["get_dataset_checks", "suggest_column_mapping"]
+    assert all(call.label.startswith("Server inspection · ") for call in result.investigation)
+    packet = json.dumps(requests[0]["input"])
+    assert "private-factory" not in packet and record.dataset_id not in packet and "sensor_" not in packet
+    assert result.mode == "ai" and len(result.assessment) <= 3

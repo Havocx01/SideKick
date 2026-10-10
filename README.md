@@ -52,6 +52,10 @@ SIDEKICK_MODE=full make api
 
 For frontend development, run `.\tasks.ps1 web` or `make web` in another terminal. The built app needs only the API server.
 
+With Docker Desktop running, `docker compose up --build` starts the local development API and web app. Open [localhost:5173](http://localhost:5173). Both published ports bind to host loopback; the processes still listen on their container interfaces so the web service can reach the API. Full mode is a local workspace. Sharing it remotely needs a separately designed authentication and access boundary.
+
+Check the rendered bindings with `node scripts/check_local_docker.mjs`. This checks configuration without starting services or printing environment secrets.
+
 ## Try it
 
 Start with **Start guided walkthrough**. It uses recorded NASA results to explain what Sidekick tests and how to read the warnings. It does not train models or score reserved histories.
@@ -66,7 +70,7 @@ For an engineering pilot, open **Equipment pilot** from a completed local experi
 
 The local sample uses 60 simulated histories and ten configurations. The hosted sample uses 30 shorter histories, three sensors and four configurations. Custom protocols, CSV uploads, freezing and final validation are local only. Hosted results expire; export them promptly.
 
-CSVs need at least 25 complete equipment histories, integer cycle indices, numeric sensors and failure information. Confirm histories reach failure if no failure-cycle column exists. Censored histories and timestamps are unsupported. If an embedded browser does not open the picker, use **Paste CSV instead** or Chrome/Edge.
+CSVs need at least 25 distinct complete equipment histories, consecutive integer operating cycles, numeric sensors and failure information. An initial cycle above 1 is fine; missing cycle rows and copied histories are rejected. Development folds must contain enough scorable readings and both warning-label classes. Confirm histories reach failure if no failure-cycle column exists. Censored histories and timestamps are unsupported. If an embedded browser does not open the picker, use **Paste CSV instead** or Chrome/Edge.
 
 ## Optional AI
 
@@ -78,9 +82,13 @@ Use **Review data** during CSV setup to check the current mapping and blockers. 
 
 Completed analyses and review drafts are saved on the server. Reopening them or switching between analysis and a brief reuses the result for the same model and evidence. Draft edits save automatically; **Rerun with AI** starts a fresh request. Changing data, model, mapping or evaluation context uses separate results.
 
+Closing an analysis leaves its saved job available. Temporary status failures retry automatically; **Refresh status** reads the existing job and does not start another AI request. Cached results track the configured live model and actual prompt/tool contracts. Human-edited briefs remain attached to the same scoped evidence across those upgrades.
+
 Uploaded datasets and experiments each require explicit, revocable cloud consent. Only derived checks, column types, missing-value fractions, pseudonymous aliases and recorded metrics leave the server. Raw rows, column names, equipment IDs and file paths are excluded. `store=False` does not remove the provider's possible abuse-monitoring retention.
 
 On a hosted demo, set `SIDEKICK_ASSISTANT_PRESENTER_CODE` as a server secret to enable private presenter access. Public visitors receive evidence-only analysis. Sidekick has no session, daily or hourly analysis allowance. Live analysis runs one request at a time. Each investigation can use up to eight read-only tool calls and one final selection, with a 45-second timeout. Replay mode never calls the provider. Set `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` to disable cloud calls everywhere. `SIDEKICK_ASSISTANT_TASKS` (default `investigate,compare,warning,brief,data`) controls the workflows.
+
+Public-demo storage has aggregate safety limits: `SIDEKICK_DEMO_ANALYSIS_MAX_RECORDS=2000`, `SIDEKICK_DEMO_ANALYSIS_MAX_BYTES=33554432` (32 MiB of reserved payload), `SIDEKICK_DEMO_FOLDER_MAX_RECORDS=2000`, and `SIDEKICK_DEMO_FOLDER_MAX_PER_VISITOR=100`. Each admitted analysis reserves room for its bounded result and a 12,000-character edited brief, including worst-case JSON escaping. These are storage limits, not request allowances; the byte budget can fill before the record limit. Eligible demo state expires after 24 hours. Capacity errors reject new storage before provider work; existing results, edits, exports, cancellation and folder organization remain available. Unexpired records are never evicted to admit another visitor. Local workspace storage is exempt. Monitor physical SQLite and WAL sizes separately; the payload budget is not a filesystem-size guarantee, and no per-request VACUUM runs.
 
 Routine tests use mocked provider responses. After changing the model or prompt, run the small live evaluation with `SIDEKICK_ASSISTANT_LIVE_EVAL=1` and a server-side key: `python scripts/evaluate_assistant.py`. It reports which cases passed verification and does not print the key.
 

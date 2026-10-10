@@ -1,4 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function settledResult(page: Page) {
+  // Read only the present preview; Cult leaves the exiting preview aria-hidden.
+  const result = page.locator('[data-testid="walkthrough-result"]:not([aria-hidden="true"] *)');
+  await expect(result).toHaveCount(1);
+  return result;
+}
 
 // Explicit entry is tested here; automatic introduction has dedicated tests.
 test.beforeEach(async ({ page }) => {
@@ -11,15 +18,15 @@ test("the walkthrough explains the recorded evidence without starting jobs", asy
   await page.goto("/");
   await page.getByRole("link", { name: "View walkthrough", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Start with healthy sensors", exact: true })).toBeVisible();
-  await expect(page.getByTestId("walkthrough-result")).toContainText("80 / 80");
+  await expect(await settledResult(page)).toContainText("80 / 80");
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Now make one sensor fail", exact: true })).toBeVisible();
-  await expect(page.getByTestId("walkthrough-result")).toContainText("41 / 80");
-  await expect(page.getByTestId("walkthrough-result")).toContainText("24");
+  await expect(await settledResult(page)).toContainText("41 / 80");
+  await expect(await settledResult(page)).toContainText("24");
   await page.reload();
   await expect(page.getByRole("heading", { name: "Now make one sensor fail", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page.getByText("Playback of stored results", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Watch one warning change", exact: true })).toBeVisible();
   const slider = page.getByRole("slider", { name: "Replay cycle" });
   const end = await slider.getAttribute("aria-valuenow");
   await page.getByRole("button", { name: "Restart playback", exact: true }).click();
@@ -39,7 +46,7 @@ test("the walkthrough explains the recorded evidence without starting jobs", asy
   await expect(slider).toHaveAttribute("aria-valuenow", end!);
   await expect(page.getByRole("button", { name: "Replay from start", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page.getByTestId("walkthrough-result")).toContainText("79 / 80");
+  await expect(await settledResult(page)).toContainText("79 / 80");
   await page.getByRole("button", { name: "Next", exact: true }).click();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download evidence", exact: true }).click();
@@ -86,9 +93,9 @@ for (const mode of ["demo", "replay"]) {
       await route.fulfill({ response, json: { ...health, mode, can_upload: false, can_train: mode === "demo", can_freeze: false, can_validate: false } });
     });
     await page.goto("/walkthrough?step=clean&partition=holdout&candidate=missing");
-    await expect(page.getByTestId("walkthrough-result")).toContainText("80 / 80");
+    await expect(await settledResult(page)).toContainText("80 / 80");
     await page.getByRole("button", { name: "Next", exact: true }).click();
-    await expect(page.getByTestId("walkthrough-result")).toContainText("41 / 80");
+    await expect(await settledResult(page)).toContainText("41 / 80");
     expect(mutations).toEqual([]);
   });
 }
@@ -122,12 +129,12 @@ test("candidate rows select from metrics and keep keyboard access", async ({ pag
   await expect(page.getByRole("button", { name: "Investigate failure", exact: true })).toHaveCount(0);
 });
 
-test("compact results reveal explanations only when requested", async ({ page }) => {
+test("compact results keep sensor faults expanded and reveal scoring details on request", async ({ page }) => {
   await page.goto("/comparison?candidate=logistic_regression%2Flr2");
   const result = page.getByTestId("inspected-summary");
   await expect(result.getByRole("img", { name: "Lowest detection: 41 in time, 24 late, 15 missed, out of 80 histories", exact: true })).toBeVisible();
   await expect(result).toContainText("39 fewer timely warnings");
-  await expect(page.getByRole("table", { name: "Worst detection by sensor and fault" })).not.toBeVisible();
+  await expect(page.getByRole("table", { name: "Worst detection by sensor and fault" })).toBeVisible();
   const sizes = await page.evaluate(() => ({ sidebar: document.querySelector('.sidebar')!.getBoundingClientRect().width, header: document.querySelector('.workspace-bar')!.getBoundingClientRect().height }));
   expect(sizes.sidebar).toBeLessThanOrEqual(185);
   expect(sizes.header).toBeLessThanOrEqual(60);
@@ -241,14 +248,15 @@ test("replay seeks to fault onset and displays stored warning state rather than 
   });
   await page.goto("/walkthrough?step=replay");
   const state = page.getByLabel("Current replay state");
-  await expect(state).toContainText("Faulted Warning active");
-  await expect(page.getByRole("img", { name: "Score over time for 16", exact: true })).toBeVisible();
+  await expect(state).toContainText("Original Warning off");
+  await expect(state).toContainText("Faulted Warning on");
+  await expect(page.getByRole("img", { name: /^Score over time for 16; alert threshold \d+\.\d{3}$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Replay from start", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Fault begins", exact: true }).click();
   await expect(page.getByRole("slider", { name: "Replay cycle" })).toHaveAttribute("aria-valuenow", "1");
   await expect(state).toContainText("60 cycles before failure");
   await page.getByRole("button", { name: "Restart playback", exact: true }).click();
-  await expect(state).toContainText("Faulted Warning inactive");
+  await expect(state).toContainText("Faulted Warning off");
   await page.getByText("How to read this replay", { exact: true }).click();
   await expect(page.getByText(/one threshold crossing may not activate or clear a warning/)).toBeVisible();
 });

@@ -27,6 +27,15 @@ class Library:
     def __init__(self, workspace):
         self.workspace = workspace
 
+    def display_name(self, owner, run_id):
+        """Read one owner's label without loading the library or mutating evidence."""
+        with self.workspace.connect() as conn:
+            row = conn.execute(
+                "SELECT display_name FROM library_items WHERE owner=? AND kind='run' AND id=?",
+                (owner, run_id),
+            ).fetchone()
+        return row[0] if row else None
+
     def snapshot(self, owner, allowed=None):
         with self.workspace.connect() as conn:
             folders = [dict(id=row[0], name=row[1]) for row in conn.execute(
@@ -58,11 +67,20 @@ class Library:
                               "row_count": record.get("row_count") if kind == "upload" else None})
         return {"folders": folders, "items": items}
 
-    def create_folder(self, owner, name):
+    def create_folder(self, owner, name, *, max_demo_folders=2000, max_visitor_folders=100):
         name = clean_name(name, 80)
         folder = {"id": str(uuid4()), "name": name}
         try:
             with self.workspace.connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                if owner.startswith("demo:"):
+                    cutoff = time.time() - 86400
+                    conn.execute("UPDATE library_items SET folder_id=NULL WHERE folder_id IN (SELECT id FROM library_folders WHERE owner LIKE 'demo:%' AND created_at < ?)", (cutoff,))
+                    conn.execute("DELETE FROM library_folders WHERE owner LIKE 'demo:%' AND created_at < ?", (cutoff,))
+                    total, personal = conn.execute("SELECT COUNT(*),COALESCE(SUM(owner=?),0) FROM library_folders WHERE owner LIKE 'demo:%'", (owner,)).fetchone()
+                    if total >= max_demo_folders or personal >= max_visitor_folders:
+                        from app.assistant.store import AnalysisCapacityError
+                        raise AnalysisCapacityError("The shared demo is temporarily at folder storage capacity. Existing folders and items remain available.")
                 conn.execute("INSERT INTO library_folders VALUES (?,?,?,?,?)",
                              (folder["id"], owner, name, name.casefold(), time.time()))
         except sqlite3.IntegrityError:

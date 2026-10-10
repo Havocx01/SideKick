@@ -76,6 +76,25 @@ export interface AnalysisClaim {
   source_ids: string[];
 }
 
+export interface AnalysisDetail {
+  id: string;
+  context: AnalysisRequest;
+  status: "queued" | "running" | "completed" | "cancelled" | "interrupted" | "failed";
+  created_at: number;
+  updated_at: number;
+  stages: AnalysisStage[];
+  result?: AnalysisResult | null;
+  error?: string | null;
+  brief_text?: string | null;
+  brief_saved_at?: number | null;
+  cache_fingerprint?: string | null;
+  /** Exact scoped evidence identity, independent of generated-result versions. */
+  draft_fingerprint?: string | null;
+  reused?: boolean;
+  /** Response-only comparison with current scoped evidence and output contract. */
+  output_currency: "current" | "historical";
+}
+
 export interface AnalysisFinding {
   id: string;
   title: string;
@@ -96,6 +115,8 @@ export interface AnalysisRecord {
   brief_text?: string | null;
   brief_saved_at?: number | null;
   cache_fingerprint?: string | null;
+  /** Exact scoped evidence identity, independent of generated-result versions. */
+  draft_fingerprint?: string | null;
   reused?: boolean;
 }
 
@@ -347,6 +368,32 @@ export interface ExperimentCreate {
   pilot_brief?: PilotBrief | null;
 }
 
+export interface ExperimentDetail {
+  experiment_id: string;
+  dataset_id: string;
+  name: string;
+  source: "synthetic" | "upload";
+  status: JobStatus;
+  created_at: number;
+  started_at?: number | null;
+  finished_at?: number | null;
+  elapsed_seconds?: number;
+  stage?: string;
+  completed_work?: number;
+  total_work?: number | null;
+  work_unit?: string;
+  error?: string | null;
+  config: Record<string, unknown>;
+  config_fingerprint: string;
+  data_hash: string;
+  source_digest: string;
+  job_kind?: "development" | "freeze" | "validation";
+  parent_experiment_id?: string | null;
+  operation_id?: string | null;
+  pilot_brief?: PilotBrief | null;
+  display_name?: string | null;
+}
+
 export interface ExperimentProtocol {
   version?: number;
   min_useful_lead?: number;
@@ -381,28 +428,6 @@ export interface ExperimentRecord {
   parent_experiment_id?: string | null;
   operation_id?: string | null;
   pilot_brief?: PilotBrief | null;
-}
-
-export interface LibraryFolder { id: string; name: string }
-export interface LibraryItemRef { kind: "run" | "upload"; id: string }
-export interface LibraryItem extends LibraryItemRef {
-  dataset_id: string;
-  display_name: string;
-  original_name: string;
-  source: "synthetic" | "upload";
-  folder_id: string | null;
-  archived: boolean;
-  created_at: number | null;
-  status: string;
-  run_count: number;
-  row_count: number | null;
-}
-export interface LibrarySnapshot { folders: LibraryFolder[]; items: LibraryItem[] }
-export interface LibraryUpdate {
-  items: LibraryItemRef[];
-  action: "rename" | "move" | "archive" | "restore";
-  display_name?: string;
-  folder_id?: string | null;
 }
 
 export interface FaultScenario {
@@ -449,6 +474,47 @@ export interface InvestigationCall {
   name: string;
   label: string;
   source_ids?: string[];
+}
+
+export interface LibraryFolder {
+  id: string;
+  name: string;
+}
+
+export interface LibraryFolderInput {
+  name: string;
+}
+
+export interface LibraryItem {
+  kind: "run" | "upload";
+  id: string;
+  dataset_id: string;
+  display_name: string;
+  original_name: string;
+  source: "synthetic" | "upload";
+  folder_id?: string | null;
+  archived?: boolean;
+  created_at?: number | null;
+  status: string;
+  run_count?: number;
+  row_count?: number | null;
+}
+
+export interface LibraryItemRef {
+  kind: "run" | "upload";
+  id: string;
+}
+
+export interface LibrarySnapshot {
+  folders: LibraryFolder[];
+  items: LibraryItem[];
+}
+
+export interface LibraryUpdate {
+  items: LibraryItemRef[];
+  action: "rename" | "move" | "archive" | "restore";
+  display_name?: string | null;
+  folder_id?: string | null;
 }
 
 export interface NumericClaim {

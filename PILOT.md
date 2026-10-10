@@ -2,6 +2,8 @@
 
 Status: equipment family, field data and reviewing engineer are not yet confirmed.
 
+[Engineer and analysis evaluation sheet](docs/sidekick-engineer-evaluation.md) defines the manual, deterministic and AI comparison. It is prepared, but the study has not been conducted.
+
 The question is simple: does testing sensor failures help an engineer make a better decision about an equipment warning model?
 
 ## Find a suitable partner
@@ -25,7 +27,7 @@ The local app accepts a CSV up to 10 MB, with at least 25 complete equipment his
 | Required information | What to check |
 | --- | --- |
 | Equipment ID | One identifier per complete equipment history. Record repeated assets or rebuilds; do not assume they are independent. |
-| Cycle index | Integer operating cycles, with one reading per equipment/cycle pair. Record the actual sampling interval. |
+| Cycle index | Integer operating cycles, with one reading per equipment/cycle pair and unit spacing within each history. An initial cycle above 1 is acceptable. Record the actual sampling interval. |
 | Sensor columns | Numeric readings. Document units, sensor meaning, missing values and operating regimes. |
 | Failure information | A consistent failure cycle for each history, including a reading at that cycle. Without that column, explicitly confirm that every history actually ends in failure. |
 | Scope | One equipment family, known failure definition and relevant operating conditions. |

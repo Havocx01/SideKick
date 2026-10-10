@@ -1,20 +1,27 @@
-import { useEffect, useRef } from "react";
+import { MotionConfig } from "motion/react";
+import { useMotionPreference } from "../hooks/useMotionPreference";
+import { MotionToggle } from "./MotionToggle";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import { Activity, ArrowUpRight, ChevronDown, ClipboardCheck, Database, FlaskConical, House, Layers, Plus } from "lucide-react";
 import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useExperimentId } from "../hooks/useEvidence";
-import { AnalysisProvider } from "./AnalysisProvider";
-import { AnalysisInspector } from "./AnalysisInspector";
+import { AnalysisProvider, useAnalysis } from "./AnalysisProvider";
+import { DeferredAnalysisLoading } from "./DeferredAnalysisLoading";
 import { ThemeToggle } from "./ThemeToggle";
 import { Toaster } from "@/components/ui/toast";
 import { TrainingNotifications } from "./TrainingNotifications";
-import { CanvasFractalGrid } from "./cult/CanvasFractalGrid";
+const AnalysisInspector = lazy(() => import("./AnalysisInspector").then(module => ({ default: module.AnalysisInspector })));
+const CanvasFractalGrid = lazy(() => import("./cult/CanvasFractalGrid").then(module => ({ default: module.CanvasFractalGrid })));
 
 export function Layout() {
-  return <AnalysisProvider><Workspace /></AnalysisProvider>;
+  const reduced = useMotionPreference();
+  useLayoutEffect(() => { document.documentElement.dataset.motion = reduced ? "reduced" : "full"; }, [reduced]);
+  return <MotionConfig reducedMotion={reduced ? "always" : "never"}><AnalysisProvider><Workspace /></AnalysisProvider></MotionConfig>;
 }
 function Workspace() {
+  const analysis = useAnalysis();
   const health = useApi(() => api.health(), []);
   const id = useExperimentId();
   const location = useLocation();
@@ -47,7 +54,8 @@ function Workspace() {
   const sectionHref = sectionName === "Evidence" ? `${prefix}/comparison` : sectionName === "Pilot" ? "/experiments" : "/";
   const PageIcon = activeView?.icon ?? (isEvidence ? Layers : location.pathname.endsWith("/pilot") ? ClipboardCheck : FlaskConical);
   const isOverview = location.pathname === "/" || location.pathname === "/walkthrough";
-  const sourceName = id ? record.data?.source === "synthetic" ? "Synthetic experiment" : record.data?.source === "upload" ? "Uploaded-data experiment" : "Experiment" : "Recorded NASA benchmark";
+  const sourceName = id ? record.data?.display_name ?? record.data?.name ?? "Experiment" : "Recorded NASA benchmark";
+  const sourceType = record.data?.source === "synthetic" ? "Synthetic sample" : "Uploaded data";
   const stage = location.pathname === "/walkthrough" || params.get("partition") !== "holdout" ? "Development results" : "Final validation";
   const validity = id && record.data?.source === "upload" ? "Field performance unverified" : "Not field validated";
 
@@ -105,22 +113,22 @@ function Workspace() {
             <details className="source-chip" ref={sourceRef}>
               <summary aria-label={`${sourceName}. ${stage}. ${validity}. About these results`}>
                 <Database size={14} strokeWidth={2} aria-hidden="true" />
-                <strong>{sourceName}</strong>
+                <strong title={sourceName}>{sourceName}</strong>
                 <span className="source-sep" aria-hidden="true" />
                 <span className="source-detail">{stage}</span>
                 <ChevronDown size={12} strokeWidth={2.4} aria-hidden="true" />
               </summary>
               <div className="source-popover">
-                <p><strong>{stage}</strong> · {validity}</p>
+                <p><strong>{stage}</strong> · {id ? `${sourceType} · ` : ""}{validity}</p>
                 <p>{id ? `${record.data ? new Date(record.data.created_at * 1000).toLocaleString() : "Loading source"} · ${id}` : "Simulated NASA data. Reserved histories were already examined and are not fresh validation."}</p>
               </div>
             </details>
           ) : null}
-            <ThemeToggle />
+            <ThemeToggle /><MotionToggle />
           </div>
         </header>
         <div className={`workspace-body${isOverview ? " overview-workspace" : ""}`}>
-          {isOverview && <CanvasFractalGrid waveIntensity={36} enableMouseGlow={false} respectReducedMotion={false} />}
+          {isOverview && <Suspense fallback={null}><CanvasFractalGrid waveIntensity={36} enableMouseGlow={false} /></Suspense>}
           <main className={`main${isOverview ? " overview-main" : ""}`} id="main-content" tabIndex={-1}>
             <div className="main-inner">
               <div className={`page${isOverview ? " page-overview" : ""}`} key={isOverview ? "overview" : location.pathname}>
@@ -128,7 +136,7 @@ function Workspace() {
               </div>
             </div>
           </main>
-          <AnalysisInspector />
+          {analysis.open && <Suspense fallback={<DeferredAnalysisLoading />}><AnalysisInspector /></Suspense>}
         </div>
       </div>
     </div>

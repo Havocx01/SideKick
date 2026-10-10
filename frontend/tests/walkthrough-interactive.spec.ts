@@ -21,7 +21,7 @@ test("the intro opens over Overview and can be dismissed and reopened", async ({
 
 test("saved dismissal survives a new session and explicit links still open", async ({ page, context }) => {
   await page.goto("/");
-  await page.getByRole("checkbox", { name: "Don’t show again" }).check();
+  await page.getByRole("checkbox", { name: "Don\u2019t show again" }).check();
   await page.getByRole("button", { name: "Close walkthrough", exact: true }).click();
   const another = await context.newPage();
   await another.goto("/");

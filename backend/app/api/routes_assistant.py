@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from app.api.deps import bundle
 from app.api.routes_experiments import check_access
 from app.assistant.exports import export_brief
-from app.assistant.schemas import AnalysisRequest, AnalysisRecord, AssistantAccess, AssistantCapabilities, BriefUpdate, ConsentState, ConsentUpdate
+from app.assistant.schemas import AnalysisRequest, AnalysisRecord, AnalysisDetail, AssistantAccess, AssistantCapabilities, BriefUpdate, ConsentState, ConsentUpdate
+from app.assistant.store import AnalysisCapacityError, AnalysisRevokedError
 from app.experiments.demo import owner as demo_owner, public_origin
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
@@ -90,23 +91,47 @@ def owned_record(id, request, response):
         record = assistant.store.get(id, who)
     except KeyError:
         raise HTTPException(404, "Analysis not found.") from None
-    if assistant.settings.mode == "demo" and record.created_at < time.time() - 86400:
+    if assistant.store.expired(id, who):
         raise HTTPException(404, "Analysis expired. Start a new analysis.")
     if record.context.task == "data":
         consent_required = dataset_context(request, record.context.dataset_id)["source"] == "upload"
     else:
         bundle(request, record.context.experiment_id)
         consent_required = upload_context(request, record.context.experiment_id)
-    revoked = record.result is not None and record.result.mode == "ai" and assistant.live_reason(who, record.context.consent_scope, consent_required)
+    origins = assistant.store.provenance(record.id, who)
+    tombstone = assistant.store.revoked(id, who)
+    denied = assistant.output_access_reason(who, record.context.consent_scope, consent_required) or ("Cloud consent was revoked." if tombstone else None)
+    revoked = origins[0] != "evidence" and denied
     if record.result is None or revoked:
         from app.assistant.investigation import EvidenceTools
         loaded, _ = load_context(request, record.context)
-        record.result = loaded.local() if record.context.task == "data" else EvidenceTools(loaded, record.context).local()
+        try:
+            record.result = loaded.local() if record.context.task == "data" else EvidenceTools(loaded, record.context).local()
+        except ValueError:
+            if denied:
+                raise HTTPException(403, "Cloud analysis access is off, and this historical model no longer has available evidence.") from None
+            raise HTTPException(409, "This historical analysis uses an incompatible contract and its model evidence is unavailable.") from None
         if revoked:
             record.result.fallback_reason = "Showing recorded evidence; live analysis access is off."
-            record.brief_text = None
-            record.brief_saved_at = None
+    if tombstone:
+        record.error = "Cloud consent was revoked. Recorded evidence and proven evidence-only drafts remain available."
+    if denied and origins[1] != "evidence":
+        record.brief_text = None
+        record.brief_saved_at = None
     return record, who
+
+
+def check_output_write(record, who, request, *, retained_evidence=False):
+    assistant = service(request)
+    required = dataset_context(request, record.context.dataset_id)["source"] == "upload" if record.context.task == "data" else upload_context(request, record.context.experiment_id)
+    origins = assistant.store.provenance(record.id, who)
+    stored_brief = assistant.store.get(record.id, who).brief_text
+    if retained_evidence and stored_brief is not None and origins[1] == "evidence" and record.result and record.result.mode == "evidence":
+        return
+    if assistant.store.revoked(record.id, who):
+        raise HTTPException(403, "This analysis was revoked. Start a fresh analysis before saving or exporting a review.")
+    if assistant.output_access_reason(who, record.context.consent_scope, required) and (origins[0] != "evidence" or (stored_brief is not None and origins[1] != "evidence")):
+        raise HTTPException(403, "Cloud analysis access is off. Start a fresh evidence analysis to save or export a review.")
 
 
 @router.get("/capabilities", response_model=AssistantCapabilities)
@@ -137,11 +162,22 @@ async def create(payload: AnalysisRequest, request: Request, response: Response,
         return await service(request).create(loaded, payload, visitor(request, response), required, reuse=reuse)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
+    except AnalysisCapacityError as error:
+        raise HTTPException(503, str(error)) from error
 
 
-@router.get("/analyses/{id}", response_model=AnalysisRecord)
+@router.get("/analyses/{id}", response_model=AnalysisDetail)
 def get_analysis(id: str, request: Request, response: Response):
-    return owned_record(id, request, response)[0]
+    record, who = owned_record(id, request, response)
+    loaded, _ = load_context(request, record.context)
+    origin = service(request).store.provenance(id, who)[0]
+    try:
+        fingerprint, _, _ = service(request).identities(loaded, record.context, origin == "cloud")
+        currency = "current" if origin != "unknown" and fingerprint == record.cache_fingerprint else "historical"
+    except ValueError:
+        # A retired configuration can still have readable, ownership-checked saved evidence.
+        currency = "historical"
+    return AnalysisDetail(**record.model_dump(), output_currency=currency)
 
 
 @router.post("/analyses/{id}/cancel", response_model=AnalysisRecord, dependencies=[Depends(guard)])
@@ -190,6 +226,7 @@ def unlock(payload: AssistantAccess, request: Request, response: Response):
 @router.post("/analyses/{id}/brief", response_model=AnalysisRecord, dependencies=[Depends(guard)])
 def save_brief(id: str, payload: BriefUpdate, request: Request, response: Response):
     record, who = owned_record(id, request, response)
+    check_output_write(record, who, request)
     if record.status != "completed":
         raise HTTPException(409, "Wait for the analysis to finish before saving a brief.")
     if not payload.draft_only and not payload.text.strip():
@@ -197,41 +234,46 @@ def save_brief(id: str, payload: BriefUpdate, request: Request, response: Respon
     record.brief_text = payload.text
     record.brief_saved_at = None if payload.draft_only else time.time()
     record.updated_at = time.time()
-    service(request).store.save(record, who)
+    try:
+        service(request).store.save(record, who)
+    except AnalysisRevokedError as error:
+        raise HTTPException(403, str(error)) from error
     return record
 
 
 @router.post("/analyses/{id}/review", response_model=AnalysisRecord, dependencies=[Depends(guard)])
 def prepare_review(id: str, request: Request, response: Response):
-    from uuid import uuid4
     from app.assistant.evidence import with_brief
     record, who = owned_record(id, request, response)
+    check_output_write(record, who, request, retained_evidence=True)
     if "brief" not in service(request).settings.assistant_tasks:
         raise HTTPException(403, "Review briefs are not enabled.")
     if record.status != "completed" or not record.result:
         raise HTTPException(409, "Wait for the investigation to finish.")
     if record.context.task == "data":
         raise HTTPException(422, "Review briefs require model results.")
-    if service(request).settings.mode == "demo":
+    if service(request).settings.mode in {"demo", "replay"}:
         service(request).store.expire_public()
     context = record.context.model_copy(update={"task": "brief"})
-    if record.cache_fingerprint:
-        saved = service(request).store.latest(who, record.cache_fingerprint)
-        if saved and (saved.context.task == "brief" or saved.brief_text is not None):
-            saved, _ = owned_record(saved.id, request, response)
-            return service(request).restore(saved, context, "Review brief")
     result = with_brief(record.result.model_copy(deep=True), context)
     result.title = "Review brief"
-    now = time.time()
-    review = AnalysisRecord(id=str(uuid4()), context=context, status="completed", created_at=now, updated_at=now,
-        stages=record.stages, result=result, cache_fingerprint=record.cache_fingerprint)
-    service(request).store.save(review, who, public=service(request).settings.mode == "demo")
+    # The brief is another view of the admitted analysis, so conversion needs no new storage or provider work.
+    review = record.model_copy(update={"context": context, "result": result, "updated_at": time.time()}, deep=True)
+    try:
+        review = service(request).store.convert_review(review, who)
+    except AnalysisRevokedError as error:
+        raise HTTPException(403, str(error)) from error
+    except KeyError:
+        raise HTTPException(404, "Analysis expired or unavailable. Reopen the current analysis.") from None
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
     return review
 
 
 @router.get("/analyses/{id}/export")
 def export(id: str, request: Request, response: Response):
-    record, _ = owned_record(id, request, response)
+    record, who = owned_record(id, request, response)
+    check_output_write(record, who, request, retained_evidence=True)
     if record.status != "completed":
         raise HTTPException(409, "Wait for the analysis to finish before exporting.")
     return Response(export_brief(record), media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="sidekick-review-{record.id}.zip"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})

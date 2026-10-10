@@ -1,5 +1,31 @@
 # Sidekick V2 verification
 
+## Animation regression follow-up (9 October 2026)
+
+The user's Chrome reported system reduced motion, which the reliability changes newly enforced for rolling numbers and the fractal background. Sidekick now has a persistent app-only Animations switch alongside the theme control. It follows the system until explicitly changed, then applies the same choice to Motion components, CSS transitions, the canvas, border beam and theme transition. The user's existing overview tab was refreshed, enabled and checked again after refresh; Windows and Chrome preferences were unchanged.
+
+The focused browser gate passed **32 tests** across motion, UI regressions, walkthrough interactions and evidence clarity, including both themes and 390 px layouts. The three new motion tests also passed after strengthening the beam assertion to observe its changing angle. They verify actual intermediate rolling-number values and growing bar transforms under both normal and system-reduced motion, cursor-responsive canvas frames, keyboard activation, static opt-out and persistence. Frontend lint, TypeScript and the production build passed. Impeccable's scoped detector returned no findings. The screenshot is `output/playwright/remediation/overview-animations-enabled.png`.
+
+This follow-up is frontend-only and supersedes the earlier motion behavior; the earlier reliability receipt and source manifest describe their original checkpoint. No training, validation job, live AI request, commit or deployment was performed for this fix.
+
+## Reliability and AI completion (9 October 2026)
+
+The final backend gate passed **199 tests**, including the marked synthetic training, freeze, reserved-validation and export integration test. Ruff, frontend lint, TypeScript, all **7 protocol tests**, deterministic generated-type comparison and the production build passed. The complete browser gate passed **65 tests** (3.5 minutes), including the browser sample train/freeze/validate/export workflow. The protocol tests are now part of normal CI; paid evaluation stays outside CI.
+
+Regression coverage includes migration-before-upgrade provenance, scoped atomic revocation, late-write tombstones, retained evidence-only briefs, owner/session/expiry checks, historical output currency, active-job reuse, public replay/demo capacity and legacy byte accounting. Browser coverage verifies delayed admission through close/reopen and analysis/brief switching, GET-only recovery, replaced-context isolation, explicit-save revisions, conversion/save ordering, failed-draft preservation, keyboard selection/rename, drag/drop, CSV retry/cancel and archive links. Desktop and 390 px layouts, both themes and reduced motion were checked. Synthetic jobs use isolated test-owned workspaces, not saved user experiments.
+
+Fresh review reproduced two additional defects: conversion could overwrite concurrently saved notes, and revocation could deny safe export of a retained evidence-only brief. Conversion now shares the client write queue, revision guards retain newer visible text, and the server merges current draft fields inside a SQLite transaction. Evidence-only retained briefs remain exportable with reconstructed local evidence; revoked-record writes stay denied. The independent standards reviewer exhausted its usage after supplying a concrete reproduction; the controller completed both review axes locally. See the [closeout review](docs/arc/audits/2026-10-09-sidekick-reliability-closeout.md) for that limitation.
+
+Earlier full browser attempts found stale walkthrough assertions in addition to the repaired library harness: outgoing Cult previews briefly coexist, compact copy/labels differ, and the sensor matrix is intentionally always expanded. The focused walkthrough suite now passes **11 checks** using the present accessible preview and current semantics. Exact recorded counts, read-only behavior, stored alert state and keyboard disclosures are retained.
+
+All **12 offline assistant cases** pass the expanded usefulness rubric. Mocked comparison, warning and data paths verify local server inspection followed by one structured provider selection request. A single authorized post-change live failing-result analysis used the unchanged current model, five provider requests, zero retries and the six-request/$0.10 ceiling. It took **7.84 seconds**, with estimated usage cost **$0.0024564**, retaining missing-reading flags, median imputation and late/missed-warning checks. This case showed equivalent essential information to local output; improved engineer decisions are **not established**. Outputs and usage meter remain in ignored `output/reliability-live-check/`; no further paid suite was repeated. This new probe is separate from the earlier two-case review.
+
+Recorded data/evidence/submission/artifact content and the original council audit remain unchanged. Existing evidence/source compatibility checks remain active; old source fingerprints are not rewritten to permit validation. Cold overview JavaScript measured **661,348 bytes raw / 207,304 gzip**, compared with **776,972 / 241,964** before remediation. Overview and first-analysis-open fixture timings are recorded separately and are not performance guarantees. The main-chunk size advisory and two Starlette/AnyIO deprecation warnings remain nonblocking.
+
+`node scripts/check_local_docker.mjs` passes the API/web loopback publication check. Docker runtime and fresh hosted-memory verification are **environment-blocked**: `docker info` cannot connect to the Docker Desktop Linux engine pipe. Configuration success is not runtime verification. No deployment, commit or push was made. Real-equipment reliability and the [engineer evaluation study](docs/sidekick-engineer-evaluation.md) remain separate milestones.
+
+Final receipts, manifests and logs are under ignored `output/remediation/reliability-*`. Changes exist only in the worktree and remain uncommitted and undeployed.
+
 ## Read-only AI investigation (7 October 2026)
 
 104 non-integration backend tests passed, including bounded provider tool calls, selected-experiment and model scope, verified claims, private packets, consent/revocation, local mapping review, immutable data, reusable briefs and public storage limits. Cloud calls were mocked; no live provider evaluation or paid request was made.
@@ -58,10 +84,15 @@ After the README setup and build, use PowerShell from the repository root:
 git diff --exit-code frontend/src/api/types.ts
 $env:SIDEKICK_TEST_PYTHON = (Resolve-Path '.venv/Scripts/python.exe').Path
 Set-Location frontend
+npm run lint
+npm run typecheck
+npm run test:protocol
 npm run build
 npx playwright install chromium
 npm test
 ```
+
+While generated types are intentionally uncommitted, use `scripts/generate_types.py --output output/generated-types-check.ts` and compare that temporary output with the intended frontend file; CI retains the clean-generation Git diff check. Two final temporary generations matched the frontend types exactly.
 
 Each browser test invocation creates its own workspace. This keeps tests independent without deleting an existing exposure ledger. On Linux, install the dev requirements, run the same Python checks, then build and test from `frontend`. Use `npx playwright install --with-deps chromium` when browser system dependencies are missing.
 

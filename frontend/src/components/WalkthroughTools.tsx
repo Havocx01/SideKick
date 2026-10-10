@@ -1,5 +1,6 @@
+import { useMotionPreference } from "../hooks/useMotionPreference";
 import { type ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { motionTokens } from "@/registry/motion-tokens";
 import type { AcceptanceCriteria, CandidateVerdict } from "../api/types";
 import { candidateLabel, integer } from "../format";
@@ -24,7 +25,7 @@ export function WarningWindow({ criteria }: { criteria: AcceptanceCriteria }) {
 }
 
 export function GuidedModelRows({ models, emphasis }: { models: CandidateVerdict[]; emphasis: "warnings" | "tests" }) {
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   function bar(value: number, total: number, children: ReactNode) {
     const fraction = total > 0 ? Math.max(0, Math.min(1, value / total)) : 0;
     return <><strong>{children}</strong><span className="guided-model-bar" aria-hidden="true"><motion.span initial={false}

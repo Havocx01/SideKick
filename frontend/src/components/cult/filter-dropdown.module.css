@@ -23,4 +23,7 @@
 .footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--border-subtle); padding-top: var(--space-2); margin-top: var(--space-4); }
 .footer button { min-height: 36px; padding-inline: var(--space-2); color: var(--text-secondary); }
 @media (max-width: 768px) { .trigger { margin-left: auto; } .select, .item, .footer button { min-height: 44px; } }
-@media (prefers-reduced-motion: reduce) { .popup, .options, .chevron { transition: none; } .popup[data-starting-style], .popup[data-ending-style], .options[data-starting-style], .options[data-ending-style] { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  @scope (:root:not([data-motion="full"])) { .popup, .options, .chevron { transition: none; } .popup[data-starting-style], .popup[data-ending-style], .options[data-starting-style], .options[data-ending-style] { transform: none; } 
+  }
+}

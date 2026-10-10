@@ -51,10 +51,8 @@
 .sidekick-spotlight .driver-popover-arrow-side-left { border-left-color: var(--surface); }
 .sidekick-spotlight .driver-popover-arrow-side-right { border-right-color: var(--surface); }
 .walkthrough-guide-button { gap: 8px; min-height: 44px; margin-left: auto; }
-@media (prefers-reduced-motion: no-preference) {
-  .sidekick-spotlight { animation: spotlight-appear 160ms ease-out; }
-  @keyframes spotlight-appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-}
+html[data-motion="full"] .sidekick-spotlight { animation: spotlight-appear 160ms ease-out; }
+@keyframes spotlight-appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 640px) {
   .driver-popover.sidekick-spotlight { width: 320px; padding: 16px; }
   .sidekick-spotlight .driver-popover-footer button { min-height: 44px; }

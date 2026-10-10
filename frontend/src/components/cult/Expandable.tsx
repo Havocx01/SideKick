@@ -1,8 +1,9 @@
+import { useMotionPreference } from "../../hooks/useMotionPreference";
 // Adapted from Cult UI's Expandable, ExpandableTrigger and ExpandableContent.
 // https://cult-ui.com/r/expandable.json. MIT license: see LICENSE.
 // Uses native buttons and immediate collapse so hidden rows cannot retain focus.
 import { createContext, useContext, useId, type ComponentPropsWithoutRef, type ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { motionTokens } from "@/registry/motion-tokens";
 
 type Expansion = { expanded: boolean; toggle: () => void; contentId: string };
@@ -30,7 +31,7 @@ export function ExpandableTrigger(props: ComponentPropsWithoutRef<"button">) {
 
 export function ExpandableContent({ children, className }: { children: ReactNode; className?: string }) {
   const { expanded, contentId } = useExpandable();
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   return <div id={contentId} hidden={!expanded} className={className}>
     {expanded && <motion.div initial={{ opacity: reduced ? 1 : 0 }} animate={{ opacity: 1 }}
       transition={{ duration: reduced ? 0 : motionTokens.duration.fast, ease: motionTokens.ease.enter }}>{children}</motion.div>}

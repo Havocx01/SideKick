@@ -1,9 +1,11 @@
 """Practical analysis checks, beyond merely accepting valid evidence references."""
 from pathlib import Path
+import json
 
 import pytest
 
 from app.assistant.investigation import EvidenceTools
+from app.assistant.evidence import with_brief
 from app.assistant.schemas import AnalysisRequest
 from app.evidence.bundle import load_bundle
 from app.schemas import Partition
@@ -22,6 +24,44 @@ def test_failure_explains_requirement_gap_and_specific_next_check(bundle):
     assert "39 fewer timely warnings" in answer
     assert "missing-reading" in result.actions[0].detail.lower()
     assert "sensor_8" in result.actions[0].detail
+
+
+def test_generic_live_choice_cannot_displace_verified_dropout_check_or_brief(bundle):
+    saved = json.loads((Path(__file__).parent / "fixtures/assistant_saved_live_selection.json").read_text())
+    tools = EvidenceTools(bundle, AnalysisRequest(task="investigate", candidates=[saved["candidate"]]))
+    tools.call("get_model_metrics", {"model": "model-1"})
+    cases = tools.call("list_fault_cases", {"model": "model-1", "order": "failed", "limit": 1})
+    tools.call("inspect_fault_case", {"model": "model-1", "case": cases["cases"][0]["case"]})
+    # The saved live probe selected generic a0 instead of its inspected case.
+    result = tools.finish(saved["finding_ids"], saved["claim_ids"], saved["action_id"], saved["model"])
+    check = result.actions[0].detail
+    assert result.actions[0].id.startswith("inspect-")
+    for fact in ["missing-reading flags", "median imputation", "late and missed warnings"]:
+        assert fact in check
+    context = tools.context.model_copy(update={"task": "brief"})
+    brief = with_brief(result, context).brief_draft
+    assert check in brief and brief.count(check) == 1
+
+
+def test_unselected_inspected_fault_does_not_outrank_the_selected_fault(bundle):
+    tools = EvidenceTools(bundle, AnalysisRequest(task="investigate", candidates=["logistic_regression/lr2"]))
+    tools.call("get_model_metrics", {"model": "model-1"})
+    cases = tools.call("list_fault_cases", {"model": "model-1", "order": "failed", "limit": 2})
+    first = tools.call("inspect_fault_case", {"model": "model-1", "case": cases["cases"][0]["case"]})
+    tools.call("inspect_fault_case", {"model": "model-1", "case": cases["cases"][1]["case"]})
+    selected = f"inspect-model-1-{cases['cases'][0]['case']}"
+    result = tools.finish(first["finding_ids"], first["claims"][:3], None, "fixture-model")
+    assert result.actions[0].id == selected
+
+
+def test_inspected_fault_check_survives_a_metrics_only_provider_selection(bundle):
+    tools = EvidenceTools(bundle, AnalysisRequest(task="investigate", candidates=["logistic_regression/lr3"]))
+    metrics = tools.call("get_model_metrics", {"model": "model-1"})
+    cases = tools.call("list_fault_cases", {"model": "model-1", "order": "failed", "limit": 1})
+    tools.call("inspect_fault_case", {"model": "model-1", "case": cases["cases"][0]["case"]})
+    result = tools.finish(metrics["finding_ids"][:1], ["limits-model-1"], "a0", "fixture-model")
+    assert result.actions[0].id.startswith("inspect-")
+    assert "missing-reading flags" in result.actions[0].detail
 
 
 def test_passing_case_explains_margin_without_approving_deployment(bundle):

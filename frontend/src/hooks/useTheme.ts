@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { readMotionPreference } from "./useMotionPreference";
 
 export type Theme = "light" | "dark";
 
@@ -22,7 +23,7 @@ export function useTheme() {
       document.documentElement.style.colorScheme = next;
     };
     const transition = (document as Document & { startViewTransition?: (update: () => void) => unknown }).startViewTransition;
-    if (transition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) transition.call(document, apply);
+    if (transition && !readMotionPreference()) transition.call(document, apply);
     else apply();
     setThemeState(next);
     try {

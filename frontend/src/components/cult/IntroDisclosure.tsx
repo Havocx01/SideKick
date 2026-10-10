@@ -1,18 +1,13 @@
+import { useMotionPreference } from "../../hooks/useMotionPreference";
 // Adapted from Cult UI Intro Disclosure (MIT). See ./LICENSE.
 // Sidekick uses live, recorded-evidence controls in place of the media preview.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Dialog } from "@base-ui/react/dialog";
-import { AnimatePresence, motion, useIsPresent, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useIsPresent } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 import styles from "./intro-disclosure.module.css";
 
-const featureKey = "feature_sidekick-walkthrough";
-const sessionKey = "sidekick.walkthrough.intro.dismissed";
-
-export function shouldShowWalkthroughIntro() {
-  try { return localStorage.getItem(featureKey) !== "false" && sessionStorage.getItem(sessionKey) !== "true"; }
-  catch { return false; }
-}
+import { walkthroughFeatureKey as featureKey, walkthroughSessionKey as sessionKey } from "../../lib/walkthrough-preference";
 
 export function IntroDisclosure({ steps, currentStep, onStepSelect, onClose, children }: {
   steps: readonly { id: string; label: string; title: string; instruction: string; help: string; short_description: string }[];
@@ -29,7 +24,7 @@ export function IntroDisclosure({ steps, currentStep, onStepSelect, onClose, chi
   const direction = useRef<1 | -1>(1);
   if (currentStep !== previousStep.current) direction.current = currentStep > previousStep.current ? 1 : -1;
   const touch = useRef<{ x: number; y: number } | null>(null);
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   const step = steps[currentStep];
   useEffect(() => {
     setVisited(previous => new Set([...previous, currentStep]));

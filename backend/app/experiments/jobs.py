@@ -66,7 +66,9 @@ class Jobs:
                 ColumnMapping.model_validate(dataset["mapping"]), dataset["complete_histories"],
                 id=request.dataset_id, source=dataset["source"], config=config,
             )
-            check_coverage(prepared, protocol)
+            from app.experiments.preflight import check_training_feasibility
+            splits = check_coverage(prepared, protocol)
+            check_training_feasibility(prepared, splits)
             pilot_brief = request.pilot_brief
             if dataset["source"] == "synthetic" and pilot_brief is not None:
                 pilot_brief = pilot_brief.model_copy(update={"data_classification": "simulated"})

@@ -1,6 +1,7 @@
+import { useMotionPreference } from "../hooks/useMotionPreference";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useReducedMotion } from "motion/react";
+
 import { ScanLine } from "lucide-react";
 import { driver, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
@@ -51,7 +52,7 @@ export function WalkthroughSpotlight({ step, ready, criteria }: {
 }) {
   const [enabled, setEnabled] = useState(() => !wasDismissed());
   const navigate = useNavigate();
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   useEffect(() => {
     if (!enabled || !ready || !criteria) return;
     let cancelled = false;

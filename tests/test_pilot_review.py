@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from app.evidence.bundle import load_bundle
 from app.experiments.store import Workspace
-from app.schemas import ExperimentProtocol, FaultScenario, FrozenModelRecord, Partition, ValidationRecord
+from app.schemas import ExperimentProtocol, ExperimentRecord, FaultScenario, FrozenModelRecord, Partition, ValidationRecord
 
 
 @pytest.fixture
@@ -22,8 +22,11 @@ def pilot_case(tmp_path):
     loaded.protocol = ExperimentProtocol(scenarios=[FaultScenario(fault=next(r.fault for r in loaded.scenario_results if r.required and r.fault))])
     loaded.final_evaluation = None
     workspace = Workspace(tmp_path)
-    workspace.reserve({"experiment_id": loaded.experiment_id, "dataset_id": loaded.dataset_id,
-        "source": "upload", "status": "completed", "source_digest": loaded.source_digest})
+    record = ExperimentRecord(experiment_id=loaded.experiment_id, dataset_id=loaded.dataset_id,
+        name="Pilot fixture", source="upload", status="completed", created_at=1,
+        source_digest=loaded.source_digest, config=loaded.config,
+        config_fingerprint=loaded.config_fingerprint, data_hash=loaded.profile.data_hash)
+    workspace.reserve(record.model_dump(mode="json"))
     payload = {"brief": {"equipment_family": "Motor family A", "reviewing_engineer": "Engineer A",
         "current_procedure": "Review spreadsheets", "intended_decision": "Choose a supervised trial candidate",
         "success_measure": "Review minutes and missed fault cases", "data_classification": "field"},

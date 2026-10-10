@@ -27,6 +27,18 @@ def test_atomic_validation_claim_and_exposure(tmp_path):
         workspace.reserve_operation(new_job, {"job_id": new_job["experiment_id"]}, "validation")
 
 
+def test_duplicate_reserved_batch_is_atomic(tmp_path):
+    workspace = Workspace(tmp_path)
+    parent, operation_id = str(uuid4()), str(uuid4())
+    job = record()
+    job.update(parent_experiment_id=parent, operation_id=operation_id)
+    workspace.reserve_operation(job, {"job_id": job["experiment_id"], "exposure_started_at": None}, "validation")
+    with pytest.raises(ValueError, match="Repeated reserved"):
+        workspace.expose(["same", "same"], parent, "Scoring", validation_id=operation_id)
+    assert workspace.exposed(["same"]) == []
+    assert workspace.operation(parent, "validation")["exposure_started_at"] is None
+
+
 def test_restart_marks_active_jobs_interrupted(tmp_path):
     workspace = Workspace(tmp_path)
     job = record()

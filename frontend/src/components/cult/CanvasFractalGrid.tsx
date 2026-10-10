@@ -1,3 +1,4 @@
+import { readMotionPreference, subscribeMotionPreference } from "../../hooks/useMotionPreference";
 import { useEffect, useId, useRef } from "react";
 import { motion, useAnimation } from "motion/react";
 import styles from "./canvas-fractal-grid.module.css";
@@ -51,8 +52,7 @@ export function CanvasFractalGrid({
     let visible = true;
     let dotColor = "";
     let glowColor = "";
-    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let reducedMotion = respectReducedMotion && motionPreference.matches;
+    let reducedMotion = respectReducedMotion && readMotionPreference();
     const pointer = { x: 0, y: 0, active: false };
     const canInteract = () => visible && !document.hidden;
     const canAnimate = () => !reducedMotion && canInteract();
@@ -107,7 +107,7 @@ export function CanvasFractalGrid({
       frame = 0;
       root!.dataset.active = String(canAnimate());
       gradientControls.stop();
-      if (!canInteract()) leave();
+      if (!canInteract() || reducedMotion) leave();
       if (enableGradient && canAnimate()) {
         void gradientControls.start({
           background: gradients,
@@ -137,7 +137,7 @@ export function CanvasFractalGrid({
     }
 
     function move(event: PointerEvent) {
-      if (event.pointerType === "touch" || !canInteract()) return;
+      if (event.pointerType === "touch" || !canAnimate()) return;
       const bounds = root!.getBoundingClientRect();
       pointer.x = event.clientX - bounds.left;
       pointer.y = event.clientY - bounds.top;
@@ -161,7 +161,7 @@ export function CanvasFractalGrid({
       draw(0);
     }
     function motionChanged() {
-      reducedMotion = respectReducedMotion && motionPreference.matches;
+      reducedMotion = respectReducedMotion && readMotionPreference();
       syncAnimation();
     }
 
@@ -177,7 +177,7 @@ export function CanvasFractalGrid({
     intersectionObserver.observe(root);
     window.addEventListener("pointermove", move, { passive: true, capture: true });
     document.addEventListener("visibilitychange", syncAnimation);
-    motionPreference.addEventListener("change", motionChanged);
+    const unsubscribeMotion = subscribeMotionPreference(motionChanged);
     syncAnimation();
     return () => {
       cancelAnimationFrame(frame);
@@ -187,7 +187,7 @@ export function CanvasFractalGrid({
       intersectionObserver.disconnect();
       window.removeEventListener("pointermove", move, true);
       document.removeEventListener("visibilitychange", syncAnimation);
-      motionPreference.removeEventListener("change", motionChanged);
+      unsubscribeMotion();
     };
   }, [dotSize, dotSpacing, dotOpacity, waveIntensity, waveRadius, enableMouseGlow, enableGradient, gradientAnimationDuration, respectReducedMotion, gradientControls]);
 

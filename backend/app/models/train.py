@@ -8,6 +8,7 @@ import numpy as np
 
 from app.config import EXPERIMENT, ExperimentConfig
 from app.data.dataset import Dataset
+from app.faults.augmentation import augmentation_onset_bounds
 from app.faults.inject import apply_fault
 from app.features.build import FeatureBuilder, Preprocessor
 from app.models.base import Candidate, DesignMatrix
@@ -65,15 +66,16 @@ class TrainingResult:
         raise KeyError(f"{equipment_id} is not a validation engine in any fold")
 
 
-def sample_augmentation_faults(sensors: list[str], seed: int, copies: int, config: ExperimentConfig) -> list[FaultSpec]:
+def sample_augmentation_faults(sensors: list[str], seed: int, copies: int, config: ExperimentConfig, *, support: int) -> list[FaultSpec]:
     """Training faults are sampled independently of the fixed evaluation grid."""
     generator = np.random.default_rng(seed)
+    lower, upper = augmentation_onset_bounds(config, support)
     kinds = [FaultKind.dropout, FaultKind.stuck, FaultKind.drift]
     specs: list[FaultSpec] = []
     for copyIndex in range(copies):
         sensor = str(generator.choice(sensors))
         kind = kinds[int(generator.integers(0, len(kinds)))]
-        onset = int(generator.integers(config.min_useful_lead + 5, 120))
+        onset = int(generator.integers(lower, upper))
         specs.append(
             FaultSpec(
                 kind=kind,
@@ -102,13 +104,14 @@ def build_augmented_design(
     eligible = [s for s in builder.sensors if builder.preprocessor.std_of(s) > 0]
     if not eligible:
         return None
+    support = int(dataset.frame.loc[dataset.frame["equipment_id"].isin(train_engines)].groupby("equipment_id")["rul"].max().min())
 
     parts: list[EngineBlock] = []
     for equipmentId in train_engines:
         block = blocks[equipmentId]
         readings = dataset.sensor_matrix(equipmentId)
         engineSeed = derive_seed(seed, "augment_engine", equipmentId)
-        for copyIndex, spec in enumerate(sample_augmentation_faults(eligible, engineSeed, copies, config)):
+        for copyIndex, spec in enumerate(sample_augmentation_faults(eligible, engineSeed, copies, config, support=support)):
             result = apply_fault(
                 readings[:, builder.preprocessor.index_of(spec.sensor)],
                 block.rul,
