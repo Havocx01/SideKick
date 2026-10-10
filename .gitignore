@@ -30,8 +30,8 @@ artifacts/*
 !artifacts/.gitkeep
 
 # Secrets and logs
-.env
-.env.local
+.[eE][nN][vV]*
+!.env.example
 install.log
 *.log
 
@@ -40,6 +40,7 @@ install.log
 /output/
 frontend/test-results/
 frontend/playwright-report/
+frontend/output/
 .DS_Store
 Thumbs.db
 .idea/

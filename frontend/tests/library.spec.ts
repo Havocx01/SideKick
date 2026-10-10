@@ -88,7 +88,7 @@ test("native single and selected drag moves, archive protection, restore and fai
   const folder = page.locator(`[data-folder-id="${folderId}"]`);
   await alpha.click(); await beta.click({ modifiers: ["Control"] });
   await dragRow(page, alpha, folder);
-  await expect(page.getByRole("status")).toContainText("Moved to Pumps");
+  await expect(page.getByRole("status").filter({ hasText: "Moved to Pumps" })).toBeVisible();
   expect(fixture.state.items.filter(item => item.folder_id === folderId)).toHaveLength(3);
   await page.getByRole("button", { name: "Pumps", exact: true }).click();
   const movesBefore = fixture.calls.length;

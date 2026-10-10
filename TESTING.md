@@ -90,6 +90,20 @@ A new browser sample completed training, agreement, freezing, reserved evaluatio
 
 ## Run the checks
 
+The recorded `evidence/bundle.json` is checked against the exact SHA-256 stored
+in `evidence/replays-v1.5.json`. Its original bytes are deliberately marked
+`-text` in `.gitattributes`: Git must not normalize line endings on Windows,
+Linux or in source ZIPs. `tests/test_evidence_checkout.py` checks both Git
+line-ending modes, archive output, checkout output and checksum rejection.
+Changing that attribute without preserving the bytes can make verified replay
+examples disappear while ordinary metrics continue to work.
+
+GitHub Actions retains failed browser traces and the HTML report for seven
+days under the `browser-failure-diagnostics` artifact. Download that artifact
+from the failed run and use `npx playwright show-trace <trace.zip>` in
+`frontend` to inspect the failure; local diagnostics remain ignored by Git
+and excluded from Docker builds.
+
 The 6 October decision-explanation update passed 50 backend tests and 11 browser tests. Regression cases distinguish lowest detection from highest early-alarm time, name the failing fault and limit, handle missing measurements and incomplete coverage, preserve historical evidence, and keep development and final-validation explanations separate. The result, Evidence guide and HTML export use the same recorded reason. TypeScript, the production build and Ruff passed. The existing bundle-size warning remains.
 
 The interface was also checked at 390, 768, 1024 and 1440 pixels and in dark mode. No page overflow was found. [First equipment pilot checklist](PILOT.md) documents the remaining field-data and engineer-review work. No actual industrial pilot or measured field benefit is claimed.
