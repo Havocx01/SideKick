@@ -38,7 +38,7 @@ Tasks:
   data        Download the NASA C-MAPSS dataset into data\cmapss
   pipeline    Full evaluation, then write the evidence bundle (-Fast for a quick run)
   bundle      Rebuild evidence\bundle.json from the recorded runs
-  api         Serve the API on http://127.0.0.1:8000
+  api         Serve the API on http://127.0.0.1:8140
   web         Serve the frontend on http://127.0.0.1:5173
   build       Regenerate types and build the frontend into frontend\dist
   types       Regenerate frontend types from the Pydantic schemas
@@ -84,7 +84,7 @@ Tasks:
 
     'api' {
         Use-Venv
-        $serverArgs = @('app.main:app', '--reload', '--app-dir', (Join-Path $root 'backend'))
+        $serverArgs = @('app.main:app', '--reload', '--host', '127.0.0.1', '--port', '8140', '--app-dir', (Join-Path $root 'backend'))
         $envFile = Join-Path $root '.env'
         if (Test-Path -LiteralPath $envFile -PathType Leaf) {
             $serverArgs += @('--env-file', $envFile)

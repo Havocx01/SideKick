@@ -10,7 +10,7 @@ export default defineConfig({
     // Proxy the API to keep browser requests on one origin.
     proxy: {
       "/api": {
-        target: process.env.SIDEKICK_API_URL ?? "http://127.0.0.1:8000",
+        target: process.env.SIDEKICK_API_URL ?? "http://127.0.0.1:8140",
         changeOrigin: true
       }
     }
