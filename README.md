@@ -32,6 +32,7 @@ Requires Python 3.11+ and Node.js 22.12+ (or 20.19+).
 From the repository folder in PowerShell:
 
 ```powershell
+Unblock-File -Path .\tasks.ps1
 .\tasks.ps1 setup
 .\tasks.ps1 build
 $env:SIDEKICK_MODE = 'full'
