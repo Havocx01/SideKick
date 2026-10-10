@@ -1,5 +1,15 @@
 # Sidekick V2 verification
 
+## Docker runtime and commit follow-up (9 October 2026)
+
+The Docker prerequisite is resolved. Docker Desktop's stale runtime socket directory was preserved under `run.sidekick-verification-backup-20261009` and replaced after stopping the failed Desktop processes; no image, container, volume, WSL disk or Sidekick data was deleted to repair startup. Linux Engine 28.3.2 became available.
+
+Fresh demo, replay and development API images built successfully. Isolated Compose services served the frontend, proxied API health and recorded selection on loopback-only ports 15173 and 18000. The final demo image passed the existing hosted-memory script under a 512 MiB hard limit: **266.26 MiB peak sampled working set**, **268.87 MiB cgroup peak**, **7.73 seconds** for the synthetic training/export check, and no OOM kill. Owner isolation and exported evidence were checked. Replay HTTP checks passed record and byte capacity, readable/editable/exportable existing records at capacity, reuse, owner isolation, restart persistence, and expired read/export rejection with capacity recovery. These checks used disposable containers, smaller test limits, no host data mounts and disabled live AI.
+
+The fresh gate passed **212 backend tests**, **68 browser tests**, **7 protocol tests**, Ruff, frontend lint, TypeScript, generated-type consistency and production builds. An initial backend run found Windows CRLF conversion of the generated contract; `.gitattributes` now pins that file to LF without weakening its byte-for-byte test. `.dockerignore` excludes browser traces/reports, which inflated the build context during concurrent tests. Two test-library deprecation warnings and the existing bundle-size advisory remain nonblocking.
+
+The reviewed application and animation changes were already committed in `a807144` and merged into starting HEAD `97b8afd`. This authorized follow-up records the configuration fixes and verification in Git. No push or public deployment was performed. [Runtime receipt and commands](docs/arc/audits/2026-10-09-sidekick-deployment-verification.md) describe the final checked images; detailed local fixtures and memory measurements are under ignored `output/deployment-verification/`. Earlier blocked statements below describe historical checkpoints. Field reliability and measured engineer/AI benefit remain separate, uncompleted evaluations.
+
 ## Animation regression follow-up (9 October 2026)
 
 The user's Chrome reported system reduced motion, which the reliability changes newly enforced for rolling numbers and the fractal background. Sidekick now has a persistent app-only Animations switch alongside the theme control. It follows the system until explicitly changed, then applies the same choice to Motion components, CSS transitions, the canvas, border beam and theme transition. The user's existing overview tab was refreshed, enabled and checked again after refresh; Windows and Chrome preferences were unchanged.

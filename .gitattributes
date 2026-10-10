@@ -1,0 +1,2 @@
+# Generated contracts are checked byte-for-byte against the generator on every OS.
+frontend/src/api/types.ts text eol=lf

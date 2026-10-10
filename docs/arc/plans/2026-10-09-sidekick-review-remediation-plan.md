@@ -4,12 +4,15 @@
 **Goal:** Make Sidekick reproducibly buildable, reject invalid study inputs before work begins, recover saved analysis reliably, and complete focused UI/operational fixes.  
 **Stack:** Python/FastAPI/SQLite, pytest/Ruff; React/TypeScript/Vite, npm, Playwright and Node protocol tests.  
 **Planned at:** `046a972`.  
-**Status:** DONE (technical remediation); Docker runtime environment-blocked, changes uncommitted and undeployed.  
+**Status:** DONE (technical remediation); Docker runtime verified in the deployment follow-up. Reviewed application committed in a807144; no public deployment by this task.
+
 **Assurance:** Guarded for data admission, exposure and stored analysis compatibility; standard for UI/deployment fixes.  
 **Rationale:** Changes affect the validity of comparisons, one-time validation safeguards, saved user drafts and mode/ownership boundaries.  
 **Format:** Repository-specific plan. The installed Arc detail skill lacks its supporting references and document-reviewer files; this document does not claim formal Arc schema validation.
 
 ## Scope and defaults
+
+The authorized 9 October deployment follow-up resolved the remaining Docker prerequisite and recorded a fresh 212-backend / 68-browser / 7-protocol gate. Demo memory, actual loopback bindings and replay capacity/restart/expiry checks passed in isolated containers. The reviewed application and local verification follow-up are committed. See the [runtime verification receipt](../audits/2026-10-09-sidekick-deployment-verification.md); earlier blocked/uncommitted notes below are historical checkpoints.
 
 - Address all 14 review findings, including the verification gaps grouped under F2.
 - Preserve Sidekick's compact visual identity, existing Cult/Arc adaptations, blue accent, status colors, routes, browser history and report/evidence links.

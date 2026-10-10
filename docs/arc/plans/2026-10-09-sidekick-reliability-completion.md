@@ -1,10 +1,14 @@
 # Complete Sidekick reliability and AI fixes
 
-Status: DONE (technical completion; Docker runtime environment-blocked). User-approved implementation, uncommitted and undeployed.
+Status: DONE (technical completion; Docker runtime verified in the authorized deployment follow-up). Reviewed application committed in a807144; merged into 97b8afd. No public deployment by this task.
 Planned assurance: Guarded. Effective assurance: Guarded.
 Reason: Saved cloud-derived text, access revocation, transactional capacity and paid-request identity require behavioral and privacy regression coverage.
 
-## Implementation state
+## Deployment follow-up
+
+On 9 October 2026 the user explicitly authorized Docker runtime verification and committing reviewed changes. The application, including the animation follow-up, was already committed in `a807144` and merged into starting HEAD `97b8afd`. The remaining Docker prerequisite is now resolved: production demo/replay and development API builds, isolated loopback Compose services, hosted memory, replay capacity, restart persistence and expiry passed. Fresh gates passed 212 backend, 68 browser and 7 protocol tests. The only new configuration fixes pin generated contract line endings and exclude browser reports/traces from Docker context. See the [deployment verification receipt](../audits/2026-10-09-sidekick-deployment-verification.md). This follow-up is committed locally; no public deployment or push was performed. Engineer benefit and field reliability remain unmeasured.
+
+## Original implementation state (historical checkpoint)
 
 - Starting HEAD: `046a97240e852c8818d5da6baaccd5a4e5a88cae`.
 - Existing remediation work is explicitly in scope; preserve it. Initial dirty-path fingerprints: `output/remediation/reliability-baseline.json`.
