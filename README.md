@@ -25,33 +25,29 @@ Built for ABB Accelerator 2026, Theme 1, by Adam Qablawi and Kareem Massoud.
 
 No API key is needed for these workflows. Optional AI investigates the selected evidence. This is a validation workbench, not a deployment approval system or live monitor.
 
-## Run locally
+## Try Sidekick
 
-Requires Python 3.11+ and Node.js 22.12+ (or 20.19+).
+**No installation:** open the [public demo](https://sidekick-e9lu.onrender.com/) and choose **View walkthrough**. You can explore recorded results and train a sample. Uploads and full validation are available locally.
 
-From the repository folder in PowerShell:
+**Run on Windows:**
 
-```powershell
-Unblock-File -Path .\tasks.ps1
-.\tasks.ps1 setup
-.\tasks.ps1 build
-$env:SIDEKICK_MODE = 'full'
-.\tasks.ps1 api
-```
+1. Download the [GitHub ZIP](https://github.com/Havocx01/SideKick/archive/refs/heads/main.zip) and **extract it**.
+2. Open the extracted folder and double-click **Start Sidekick.cmd**.
+3. Sidekick prepares itself and opens your browser. Start with **View walkthrough** or **Set up sample**.
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Keep the terminal open. After setup, only the last two commands are needed. Press Ctrl+C to stop.
+The first launch needs internet and may take a few minutes. Install [Python](https://www.python.org/downloads/windows/) 3.11+ and [Node.js LTS](https://nodejs.org/en/download) once if the launcher asks for them. Python 3.12 was used for the Windows verification; Node.js must be 22.12+ or 20.19+.
 
-The Windows API command loads `.env` from the repository folder if it exists. Restart the server after changing it. PowerShell environment variables override `.env`; clear an old key with `Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue` before starting.
+For later launches, double-click **Start Sidekick.cmd** again. It reuses the installation and rebuilds the interface when files change. Keep its window open while using the app; press **Ctrl+C** to stop it. The local address is [http://127.0.0.1:8140](http://127.0.0.1:8140). No API key is needed.
 
-On macOS or Linux:
+If that address is already serving the same interface, the launcher opens it. If another app or an older Sidekick is using the port, it asks you to close that server first.
 
-```bash
-make setup
-make build
-SIDEKICK_MODE=full make api
-```
+On macOS or Linux, with Python 3.11+ and Node.js installed, run `python3 scripts/launch.py` from the extracted folder. It performs the same setup and opens the app.
 
-For frontend development, run `.\tasks.ps1 web` or `make web` in another terminal. The built app needs only the API server.
+### Development commands
+
+The existing `.\tasks.ps1` and `make` tasks remain available for setup, builds and frontend development. Run `.\tasks.ps1 web` or `make web` for frontend hot reload. The built app needs only the API server.
+
+The launcher and Windows API command load `.env` from the repository folder if it exists. Restart the server after changing it. PowerShell environment variables override `.env`; clear an old key with `Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue` before starting.
 
 ## Try it
 
