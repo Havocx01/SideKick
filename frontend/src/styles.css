@@ -194,13 +194,19 @@ input[type="file"]::file-selector-button:hover { background: var(--fill-strong);
 .sidebar-create { width: 100%; justify-content: center; white-space: nowrap;}
 .benchmark-return { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-2); border-radius: 8px; font-size: var(--text-xs); color: var(--text-secondary); }
 .benchmark-return:hover { background: var(--fill); color: var(--foreground); text-decoration: none; }
-.sidebar-foot { margin-top: auto; display: grid; gap: var(--space-2); padding-inline: var(--space-2); color: var(--text-secondary); font-size: var(--text-xs); }
+.sidebar-foot { margin-top: auto; display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-2) 0; border-top: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: var(--text-xs); }
 .sidebar-foot p { margin: 0; }
-.workspace-status { display: flex; gap: var(--space-2); align-items: center; color: var(--foreground); font-weight: 500; }
+.workspace-summary { display: grid; gap: var(--space-2); }
+.workspace-status { display: grid; grid-template-columns: 7px minmax(0, 1fr); gap: var(--space-2); align-items: start; color: var(--foreground); font-weight: 500; line-height: 1.5; }
 .status-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: var(--text-muted); }
-.status-dot.connected { background: var(--success); box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 18%, transparent); }
+.workspace-status .status-dot { margin-top: calc((1.5em - 7px) / 2); }
+.status-dot.connected { background: var(--success); }
+.workspace-description, .workspace-retry { padding-left: calc(7px + var(--space-2)); }
+.workspace-description span { display: block; }
+.sidebar-meta { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); padding-top: var(--space-2); }
+.sidebar-meta > span { white-space: nowrap; }
 .repo-link { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-secondary); text-decoration: none; }
-.repo-link:hover { color: var(--foreground); text-decoration: none; }
+.repo-link:hover, .repo-link:focus-visible { color: var(--foreground); text-decoration: none; }
 .main { min-width: 0; overflow-y: auto; scroll-behavior: smooth; scrollbar-gutter: stable; background: var(--background); }
 .workspace-bar { height: var(--bar-height); flex-shrink: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: 0 var(--space-6); background: var(--chrome); border-bottom: 1px solid var(--border-subtle); }
 .workspace-breadcrumb { min-width: 0; }
