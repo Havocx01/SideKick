@@ -19,8 +19,9 @@
 **/dist
 **/test-results
 **/playwright-report
+**/.playwright-cli
+**/output
 **/__pycache__
 **/*.pyc
-**/.env
-**/.env.*
+**/.[eE][nN][vV]*
 **/*.log

@@ -1,2 +1,6 @@
 # Generated contracts are checked byte-for-byte against the generator on every OS.
 frontend/src/api/types.ts text eol=lf
+
+# This recorded file is bound to replays-v1.5.json by an exact byte checksum.
+# Preserve its original CRLF bytes in commits, checkouts and source archives.
+/evidence/bundle.json -text whitespace=cr-at-eol

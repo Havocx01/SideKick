@@ -756,10 +756,6 @@ details > p, details ul { margin-top: var(--space-3); }
 .walkthrough-mobile-source { display: none; }
 .guided-walkthrough .walkthrough-steps a { min-height: 44px; font-weight: 500; }
 .guided-walkthrough .walkthrough-navigation .button { min-height: 44px; }
-.walkthrough-progress { display: flex; gap: var(--space-2); padding-inline: var(--space-3); }
-.walkthrough-progress > span { position: relative; flex: 1; height: 3px; background: var(--fill); border-radius: var(--radius-pill); overflow: hidden; }
-.walkthrough-progress > span > span { display: block; height: 100%; background: var(--accent); transform-origin: left; }
-.walkthrough-progress > span[data-state="completed"] > span { opacity: .45; }
 .guided-healthy-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: var(--space-8); align-items: start; }
 .guided-healthy-layout > .walkthrough-window { border-left: 1px solid var(--border-subtle); padding-left: var(--space-8); }
 .walkthrough-window h3 { margin: 0; font-size: var(--text-sm); font-weight: 500; }
