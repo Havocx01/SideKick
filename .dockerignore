@@ -17,6 +17,8 @@
 !pyproject.toml
 **/node_modules
 **/dist
+**/test-results
+**/playwright-report
 **/__pycache__
 **/*.pyc
 **/.env
