@@ -112,6 +112,7 @@ def test_reuse_shares_live_ai_in_both_directions_without_another_provider_call(a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
+    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     service.settings.openai_api_key = "not-a-real-key"
     calls = []
 
@@ -259,6 +260,7 @@ def test_rejected_ai_output_falls_back_to_recorded_evidence(assistant_app, monke
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
+    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     assistant.settings.openai_api_key = "test-not-a-real-key"
     async def invalid(result, context, settings, **kwargs):
         raise ValueError("Cloud interpretation contained an unsupported numeric claim.")
@@ -288,6 +290,7 @@ def test_provider_errors_are_actionable_without_leaking_responses(assistant_app,
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
+    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     assistant.settings.openai_api_key = "not-a-real-key"
     response = httpx.Response(status, request=httpx.Request("POST", "https://api.openai.com/v1/responses"))
     kind = {401: AuthenticationError, 403: PermissionDeniedError, 429: RateLimitError}.get(status, APIStatusError)
@@ -311,6 +314,7 @@ def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
+    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     assistant.settings.openai_api_key = "test-not-a-real-key"
     calls = []
     async def slow(result, context, settings, **kwargs):
@@ -331,10 +335,12 @@ def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
         await asyncio.sleep(0)
         cancelled = await assistant.cancel(record.id, "owner")
         assert cancelled.status == "cancelled"
+        assistant.store.set_workspace_consent(False)
         record = await assistant.create(loaded, context, "owner", True)
         assert record.status == "completed"
-        assert "off" in record.result.fallback_reason
+        assert "Enable AI analysis" in record.result.fallback_reason
         assistant.store.set_consent("owner", "uploaded", True)
+        assistant.store.set_workspace_consent(True)
         upload_context = context.model_copy(update={"experiment_id": "uploaded"})
         record = await assistant.create(loaded.model_copy(update={"experiment_id": "uploaded"}), upload_context, "owner", True)
         await asyncio.sleep(0)
@@ -495,6 +501,7 @@ def test_live_analysis_ignores_legacy_usage_and_has_no_session_or_daily_cap(assi
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
+    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     assistant.settings.openai_api_key = "not-a-real-key"
     with assistant.store.connect() as db:
         db.execute("CREATE TABLE IF NOT EXISTS usage(owner TEXT NOT NULL, created REAL NOT NULL)")
@@ -521,6 +528,7 @@ def test_model_upgrade_requires_new_output_but_preserves_human_draft(assistant_a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
+    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     service.settings.openai_api_key = 'mock-only'
     calls = []
     async def enhance(result, context, settings, **kwargs):
@@ -749,6 +757,7 @@ def test_active_reuse_coalesces_brief_equivalent_and_preserves_owner(assistant_a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
+    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     service.settings.openai_api_key = "mock-only"
     service.settings.assistant_timeout_seconds = 2
     calls = []
@@ -779,6 +788,7 @@ def test_get_currency_is_response_only_and_never_regenerates_historical_output(a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
+    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     service.settings.openai_api_key = "mock-only"
     monkeypatch.setattr(routes_assistant, "visitor", lambda *args: "owner")
     calls = []
@@ -846,6 +856,7 @@ def test_fresh_provider_fallback_is_current_and_retry_does_not_reuse_active_work
     from app.assistant import provider, investigation
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
+    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
     service.settings.openai_api_key = "mock-only"
     monkeypatch.setattr(routes_assistant, "visitor", lambda *args: "owner")
     calls = []

@@ -134,6 +134,7 @@ test("missing replay milestones disable only the affected controls", async ({ pa
 });
 
 test("reduced motion preserves manual replay and unrestricted navigation", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("sidekick-motion", "reduced"));
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/walkthrough?step=replay");
   await expect(page.getByRole("button", { name: "Replay from start", exact: true })).toBeDisabled();
@@ -154,11 +155,14 @@ for (const theme of ["light", "dark"]) {
     const guide = page.getByRole("dialog");
     await expect(guide).toBeVisible();
     await expect(guide).toContainText("When a warning counts");
-    const bounds = await guide.boundingBox();
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
-    expect(bounds!.y).toBeGreaterThanOrEqual(0);
-    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+    // Default-on entrance motion must settle before measuring the drawer's layout.
+    await expect(async () => {
+      const bounds = await guide.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+      expect(bounds!.y).toBeGreaterThanOrEqual(0);
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
+    }).toPass();
     await guide.getByRole("button", { name: /^Take the evidence with you/ }).click();
     await expect(page.getByRole("button", { name: "Download evidence", exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

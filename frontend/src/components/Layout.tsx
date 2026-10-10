@@ -12,6 +12,7 @@ import { DeferredAnalysisLoading } from "./DeferredAnalysisLoading";
 import { ThemeToggle } from "./ThemeToggle";
 import { Toaster } from "@/components/ui/toast";
 import { TrainingNotifications } from "./TrainingNotifications";
+import { WorkspaceAiPermission } from "./WorkspaceAiPermission";
 const AnalysisInspector = lazy(() => import("./AnalysisInspector").then(module => ({ default: module.AnalysisInspector })));
 const CanvasFractalGrid = lazy(() => import("./cult/CanvasFractalGrid").then(module => ({ default: module.CanvasFractalGrid })));
 
@@ -126,7 +127,7 @@ function Workspace() {
               </div>
             </details>
           ) : null}
-            <ThemeToggle /><MotionToggle />
+            {health.data?.mode === "full" && <WorkspaceAiPermission />}<ThemeToggle /><MotionToggle />
           </div>
         </header>
         <div className={`workspace-body${isOverview ? " overview-workspace" : ""}`}>

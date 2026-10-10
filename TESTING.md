@@ -1,5 +1,13 @@
 # Sidekick V2 verification
 
+## Default animations and API startup (10 October 2026)
+
+Animations now default to on even when the operating system requests reduced motion. An explicit saved **Animations** off choice still disables movement and survives refresh; this supersedes the system-derived default in the 9 October follow-up. Motion checks observe intermediate rolling numbers, growing bars, cursor-responsive canvas frames and changing border-beam angles. Analysis and manual walkthrough navigation remain usable with motion disabled.
+
+`tasks.ps1 api` now runs a single foreground server, without the development reload supervisor. Reload is explicit (`-Reload`) and watches backend only; `make api` and `make api-dev` match those modes. Startup runs from the repository folder, supports an alternate port and reports failed native exits. The supplied log records a graceful stop of both server and reloader; it does not identify the signal sender. Removing default reload avoids its Windows console-signalling restart path without masking intentional stops through automatic restarts.
+
+**15 launcher/entry-point checks passed**, including actual launches from another working directory in PowerShell 7 and Windows PowerShell 5. Each used a test-owned workspace and port, served repeated requests for 12 seconds after readiness with one server process, rejected an occupied-port launch, and shut down only when explicitly signalled. **30 affected browser checks are green across the initial and corrected-file runs**: 15 analysis/UI checks passed initially, and all 15 motion/walkthrough checks passed after correcting a fixture that reset the saved preference on reload and waiting for animated mobile drawer bounds to settle. Exact viewport limits and persistence assertions remain unchanged. Ruff, frontend lint, TypeScript, **7 protocol tests** and the production build passed; the existing chunk-size advisory remains. No training, reserved scoring, paid AI, saved-data edits, commit or deployment occurred.
+
 ## Backup, startup and engineer pack (10 October 2026)
 
 The local recovery tool uses SQLite snapshots (including WAL), the existing server lock and database writer locks, file checksums, and a new destination only. Focused Windows checks passed **21 recovery tests**, with one native source-symlink test skipped because Windows did not permit creating it. Crafted ZIP symlink and traversal defenses run independently. The fixtures verify IDs, evidence bytes, saved mapping, folder labels, briefs, ownership, cloud provenance, revocation, original public expiry, pilot records and the exposure ledger across recovery/store restart. Environment-file exclusions handle Windows filename casing. An actual `tasks.ps1 verify-backup` / `restore` fixture check passed in the project's OneDrive location; a directory-rename failure led to copy-based publication into the exclusively reserved destination. No user workspace was restored or overwritten. Isolated Linux container checks cover WAL, `flock`, preserved bytes, no-overwrite, uppercase environment-file exclusion and native source-symlink rejection. [Backup usage and snapshot limits](docs/workspace-backup.md).
@@ -143,6 +151,22 @@ docker rm -f sidekick-memory
 ```
 
 The script requires cgroup v2. It checks the hosted sample, its export and browser isolation, and fails if sampled working-set memory reaches 450 MiB.
+
+## Local workspace AI permission verification
+
+The 10 October permission update uses one explicit server-persisted approval for all local analysis contexts. Legacy scoped approvals are not silently promoted. Hosted demo and replay retain their existing restrictions, and saved analysis ownership remains unchanged. Turning permission off atomically clears cloud/unknown output and cancels active jobs while preserving evidence-only drafts; reapproval cannot resurrect revoked output.
+
+Verification uses mocked provider responses and isolated browser workspaces, with no paid AI, training or reserved-validation requests. The focused assistant API/workspace suite passed 55 tests. The 38 relevant browser checks cover permission persistence, failures, one-time upgrade and reuse, cross-window revocation, analysis recovery, animations, both themes and 390 px layout. Restart persistence and all-owner revocation are covered at the SQLite/service boundary, including historical contracts and late writes. Dialog screenshots are saved locally under ignored `output/playwright/workspace-ai-*.png`.
+
+Repeat the focused checks from the repository root:
+
+```powershell
+$env:SIDEKICK_ASSISTANT_LIVE_ENABLED = '0'
+.venv\Scripts\python.exe -m pytest tests/test_workspace_ai_consent.py tests/test_assistant_api.py -q
+$env:SIDEKICK_TEST_PYTHON = (Resolve-Path '.venv/Scripts/python.exe').Path
+Set-Location frontend
+npm test -- tests/workspace-ai-permission.spec.ts tests/analysis-recovery.spec.ts tests/investigation.spec.ts tests/ui-regressions.spec.ts tests/motion-preference.spec.ts --reporter=line
+```
 
 ## Evidence boundaries
 

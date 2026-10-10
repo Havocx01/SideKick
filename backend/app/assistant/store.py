@@ -33,6 +33,7 @@ class AssistantStore:
             for statement in (
                 "CREATE TABLE IF NOT EXISTS analyses(id TEXT PRIMARY KEY, owner TEXT NOT NULL, payload TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS consent(owner TEXT, experiment TEXT, allowed INTEGER, PRIMARY KEY(owner,experiment))",
+                "CREATE TABLE IF NOT EXISTS workspace_consent(id INTEGER PRIMARY KEY CHECK(id=1), allowed INTEGER NOT NULL CHECK(allowed IN (0,1)))",
                 "CREATE TABLE IF NOT EXISTS sessions(owner TEXT PRIMARY KEY, unlocked_until REAL NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS attempts(address TEXT NOT NULL, created REAL NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS analysis_provenance(id TEXT PRIMARY KEY, result_origin TEXT NOT NULL, brief_origin TEXT NOT NULL)",
@@ -201,6 +202,15 @@ class AssistantStore:
             row = db.execute("SELECT allowed FROM consent WHERE owner=? AND experiment=?", (owner, experiment)).fetchone()
         return bool(row and row[0])
 
+    def workspace_consent(self) -> bool | None:
+        with self.connect() as db:
+            row = db.execute("SELECT allowed FROM workspace_consent WHERE id=1").fetchone()
+        return bool(row[0]) if row else None
+
+    def set_workspace_consent(self, allowed: bool):
+        with self.connect() as db:
+            db.execute("INSERT OR REPLACE INTO workspace_consent VALUES(1,?)", (int(allowed),))
+
     def latest_scoped(self, owner, draft_fingerprint):
         """A version change does not authorise a new paid analysis of identical evidence."""
         with self.connect() as db:
@@ -266,18 +276,39 @@ class AssistantStore:
                 raise ValueError("Too many access attempts. Try again in 15 minutes.")
             db.execute("INSERT INTO attempts VALUES(?,?)", (address, time.time()))
 
-    def revoke_results(self, owner: str, experiment: str):
+    def revoke_results(self, owner: str | None = None, experiment: str | None = None, *, workspace=False):
         """Discard cloud interpretations so opting in later never resurrects old output."""
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            db.execute("INSERT OR REPLACE INTO consent VALUES(?,?,0)", (owner, experiment))
-            for id, payload in db.execute("SELECT id,payload FROM analyses WHERE owner=?", (owner,)).fetchall():
+            if workspace:
+                db.execute("INSERT OR REPLACE INTO workspace_consent VALUES(1,0)")
+                db.execute("UPDATE consent SET allowed=0")
+                rows = db.execute("SELECT id,payload FROM analyses").fetchall()
+            else:
+                db.execute("INSERT OR REPLACE INTO consent VALUES(?,?,0)", (owner, experiment))
+                rows = db.execute("SELECT id,payload FROM analyses WHERE owner=?", (owner,)).fetchall()
+            for id, payload in rows:
                 try:
                     record = AnalysisRecord.model_validate_json(payload)
                 except ValidationError:
+                    if workspace:
+                        # Historical contracts may not validate today. Clear their cloud
+                        # fields without discarding recorded identifiers or ownership.
+                        raw = json.loads(payload)
+                        origins = db.execute("SELECT result_origin,brief_origin FROM analysis_provenance WHERE id=?", (id,)).fetchone() or ("unknown", "unknown")
+                        if origins[0] != "evidence":
+                            raw["result"] = None
+                        if origins[1] != "evidence":
+                            raw["brief_text"] = raw["brief_saved_at"] = None
+                        if raw.get("status") in {"queued", "running"}:
+                            raw["status"] = "cancelled"
+                        raw["error"] = "Cloud consent was revoked. Showing recorded evidence."
+                        raw["updated_at"] = time.time()
+                        db.execute("UPDATE analyses SET payload=? WHERE id=?", (json.dumps(raw), id))
+                        db.execute("UPDATE analysis_provenance SET revoked=1 WHERE id=?", (id,))
                     continue
                 origins = db.execute("SELECT result_origin,brief_origin FROM analysis_provenance WHERE id=?", (id,)).fetchone() or ("unknown", "unknown")
-                if record.context.consent_scope == experiment:
+                if workspace or record.context.consent_scope == experiment:
                     tainted = origins[0] != "evidence" or (record.brief_text is not None and origins[1] != "evidence") or record.status in {"queued", "running"}
                     if origins[0] != "evidence":
                         record.result = None

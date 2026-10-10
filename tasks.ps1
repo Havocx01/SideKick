@@ -9,6 +9,11 @@ param(
     # pipeline: fewer folds and the required fault set only, for a quick loop.
     [switch]$Fast,
 
+    # api: reload is for development only; normal launches stay in one process.
+    [switch]$Reload,
+    [ValidateRange(1, 65535)]
+    [int]$Port = 8140,
+
     # backup / evaluation-pack: optional destination; restore / verify-backup: archive path.
     [string]$OutputPath,
     [string]$Archive,
@@ -43,7 +48,7 @@ Tasks:
   data        Download the NASA C-MAPSS dataset into data\cmapss
   pipeline    Full evaluation, then write the evidence bundle (-Fast for a quick run)
   bundle      Rebuild evidence\bundle.json from the recorded runs
-  api         Serve the API on http://127.0.0.1:8140
+  api         Serve the API on http://127.0.0.1:8140 (-Port to change; -Reload for development)
   web         Serve the frontend on http://127.0.0.1:5173
   build       Regenerate types and build the frontend into frontend\dist
   types       Regenerate frontend types from the Pydantic schemas
@@ -93,12 +98,21 @@ Tasks:
 
     'api' {
         Use-Venv
-        $serverArgs = @('app.main:app', '--reload', '--host', '127.0.0.1', '--port', '8140', '--app-dir', (Join-Path $root 'backend'))
+        $serverArgs = @('app.main:app', '--host', '127.0.0.1', '--port', "$Port", '--app-dir', (Join-Path $root 'backend'))
+        if ($Reload) {
+            $serverArgs += @('--reload', '--reload-dir', (Join-Path $root 'backend'))
+        }
         $envFile = Join-Path $root '.env'
         if (Test-Path -LiteralPath $envFile -PathType Leaf) {
             $serverArgs += @('--env-file', $envFile)
         }
-        & $py -m uvicorn @serverArgs
+        Write-Host "Sidekick: http://127.0.0.1:$Port - keep this window open; press Ctrl+C to stop."
+        if ($Reload) { Write-Host 'Development reload enabled; watching backend only.' }
+        Push-Location $root
+        try {
+            & $py -m uvicorn @serverArgs
+            if ($LASTEXITCODE -ne 0) { throw "Sidekick server exited with code $LASTEXITCODE. Read the server messages above." }
+        } finally { Pop-Location }
     }
 
     'web' { Push-Location (Join-Path $root 'frontend'); try { npm run dev } finally { Pop-Location } }

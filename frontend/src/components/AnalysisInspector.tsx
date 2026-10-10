@@ -55,7 +55,7 @@ function AnalysisContents() {
   }
   function follow() { close(false); requestAnimationFrame(() => document.getElementById("main-content")?.focus()); }
   const scopeLabel = context.partition === "holdout" ? "Final validation" : "Development";
-  const consentLabel = context.task === "data" ? "dataset" : "experiment";
+  const consentLabel = capabilities?.mode === "full" ? "workspace" : context.task === "data" ? "dataset" : "experiment";
   const thinking = running && !verifying && !error && !record?.error;
   const stages = record?.stages ?? [];
   return <div className={`analysis-body${thinking ? " analysis-loading-body" : ""}`}>
@@ -63,7 +63,7 @@ function AnalysisContents() {
     <div className="analysis-context">{context.task === "data" ? <strong>Current column mapping</strong> : candidates.map(key => <strong key={key}>{candidateLabel(...key.split("/") as [string, string])}</strong>)}<span><span>{context.task === "data" ? "Draft data checks" : scopeLabel}{context.equipment_id ? ` · History ${context.equipment_id}` : ""}{context.cycle != null ? ` · Cycle ${context.cycle}` : ""}</span>{result && <span className="analysis-mode">{result.mode === "ai" ? <Cpu size={14} strokeWidth={1.75} aria-hidden="true" /> : <Database size={14} strokeWidth={1.75} aria-hidden="true" />}{result.mode === "ai" ? "AI analysis" : context.task === "data" ? "Local checks" : "Recorded evidence"}</span>}</span></div>
     {capabilities && !thinking && ((capabilities.unlock_available && !capabilities.unlocked) || (consent && !consent.allowed)) && <div className="analysis-ai-setup" role="group" aria-label="AI analysis access">
       {capabilities.unlock_available && !capabilities.unlocked && <form onSubmit={event => { event.preventDefault(); void act(async () => { await unlock(code); setCode(""); }); }}><label htmlFor="presenter-code">Presenter access code</label><input id="presenter-code" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} required maxLength={200} /><Button size="sm" variant="secondary" type="submit" loading={busy}>Unlock live AI</Button></form>}
-      {consent && !consent.allowed && <div className="analysis-consent"><h3>AI analysis for this {consentLabel}</h3><p>{consent.disclosure}</p><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(async () => { await setConsent(true); retry(); })}>Enable AI analysis</Button></div>}
+      {consent && !consent.allowed && <div className="analysis-consent"><h3>AI analysis for this {consentLabel}</h3>{capabilities?.mode === "full" && <p>Enable once for all existing and future experiments. Saved answers are reused.</p>}<details><summary>What AI receives</summary><p>{consent.disclosure}</p></details><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(async () => { await setConsent(true); retry(); })}>Enable AI analysis</Button></div>}
     </div>}
     </div>
     {verifying && <p className="note" role="status">{record ? "Opening saved analysis…" : "Checking analysis access…"}</p>}

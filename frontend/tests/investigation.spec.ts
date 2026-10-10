@@ -38,6 +38,10 @@ for (const scenario of [
     await page.keyboard.press("Enter");
     await expect(progress.getByRole("list", { name: "Analysis steps" })).toBeVisible();
     await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.evaluate(() => {
+      localStorage.setItem("sidekick-motion", "reduced");
+      window.dispatchEvent(new StorageEvent("storage", { key: "sidekick-motion" }));
+    });
     await expect(progress.locator(".assistant-thinking-label")).toHaveCSS("animation-name", "none");
     expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBeTruthy();
     await page.screenshot({ path: testInfo.outputPath(`thinking-${scenario.theme}.png`), animations: "disabled" });
@@ -69,6 +73,10 @@ test("answer reveal settles once, preserves layout and respects reduced motion",
   await page.screenshot({ path: testInfo.outputPath("streamed-answer-desktop.png"), animations: "disabled" });
   await page.getByRole("button", { name: "Close analysis", exact: true }).click();
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.evaluate(() => {
+    localStorage.setItem("sidekick-motion", "reduced");
+    window.dispatchEvent(new StorageEvent("storage", { key: "sidekick-motion" }));
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Investigate failure", exact: true }).click();
   await expect(answer).toHaveAttribute("aria-busy", "false");
