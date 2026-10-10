@@ -8,7 +8,8 @@ import { Button } from "@/registry/components/button/button";
 import type { ButtonProps } from "@/registry/components/button/button";
 
 export { Button } from "@/registry/components/button/button";
-export { Select } from "@/registry/components/select/select";
+// Import heavier controls such as Select at their use sites, so Overview
+// does not load form-only primitives through this shared module.
 
 export function IconButton({ label, className, variant = "ghost", ...props }: ButtonProps & { label: string }) {
   return <Button {...props} variant={variant} className={`action-icon${className ? ` ${className}` : ""}`} aria-label={label} title={label} />;

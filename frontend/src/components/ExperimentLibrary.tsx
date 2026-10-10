@@ -1,3 +1,4 @@
+import { Select } from "@/registry/components/select/select";
 import { useMotionPreference } from "../hooks/useMotionPreference";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
 import { LayoutGroup, motion } from "motion/react";
@@ -10,7 +11,7 @@ import { Archive, Check, ChevronRight, FlaskConical, Folder, FolderOpen, FolderP
 import { api, ApiError, library } from "../api/client";
 import type { LibraryFolder, LibraryItem, LibraryItemRef, LibrarySnapshot } from "../api/types";
 import { useApi } from "../hooks/useApi";
-import { Button, Select, StateBlock } from "./Chrome";
+import { Button, StateBlock } from "./Chrome";
 import { Expandable, ExpandableContent, ExpandableTrigger } from "./cult/Expandable";
 import { FilterDropdown } from "./cult/FilterDropdown";
 import { InlineLibraryName } from "./InlineLibraryName";

@@ -1,6 +1,7 @@
+import { Select } from "@/registry/components/select/select";
 import { useState } from "react";
 import type { ExperimentProtocol, FaultSpec, FaultScenario, PilotBrief } from "../api/types";
-import { Button, IconButton, Select } from "./Chrome";
+import { Button, IconButton } from "./Chrome";
 import { Pencil, Trash2 } from "lucide-react";
 import { NumberField } from "@/registry/components/number-field/number-field";
 import { Input } from "@/components/arc/input/input";

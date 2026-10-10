@@ -1,3 +1,4 @@
+import { Select } from "@/registry/components/select/select";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
@@ -5,7 +6,7 @@ import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { useAnalysis } from "../components/AnalysisProvider";
 import { DecisionDetails, DecisionSummary } from "../components/DecisionSummary";
 import type { CandidateVerdict, ScenarioResult } from "../api/types";
-import { Badge, Button, Callout, IconButton, Panel, Select, StateBlock, Stat } from "../components/Chrome";
+import { Badge, Button, Callout, IconButton, Panel, StateBlock, Stat } from "../components/Chrome";
 import { ValidationPanel } from "../components/ValidationPanel";
 import { IntervalBar } from "../components/IntervalBar";
 import { ReliabilityPlot } from "../components/ReliabilityPlot";

@@ -3,11 +3,16 @@
 param(
     [Parameter(Position = 0)]
     [ValidateSet('help', 'setup', 'setup-full', 'data', 'pipeline', 'bundle', 'api', 'web',
-        'build', 'types', 'docker')]
+        'build', 'types', 'docker', 'backup', 'verify-backup', 'restore', 'evaluation-pack')]
     [string]$Task = 'help',
 
     # pipeline: fewer folds and the required fault set only, for a quick loop.
-    [switch]$Fast
+    [switch]$Fast,
+
+    # backup / evaluation-pack: optional destination; restore / verify-backup: archive path.
+    [string]$OutputPath,
+    [string]$Archive,
+    [string]$Destination
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +48,10 @@ Tasks:
   build       Regenerate types and build the frontend into frontend\dist
   types       Regenerate frontend types from the Pydantic schemas
   docker      Build the hosted demo image locally
+  backup      Back up the stopped local workspace into output\backups (or -OutputPath)
+  verify-backup  Verify a backup ZIP specified with -Archive
+  restore     Restore -Archive into a new workspace specified with -Destination
+  evaluation-pack  Generate offline engineer review materials (or -OutputPath)
 '@ | Write-Host
     }
 
@@ -112,5 +121,39 @@ Tasks:
 
     'docker' {
         Invoke-Step 'building the demo image' { docker build -t sidekick:local $root }
+    }
+
+    'backup' {
+        Use-Venv
+        $backupArgs = @('create')
+        if ($OutputPath) { $backupArgs += @('--output', $OutputPath) }
+        Invoke-Step 'backing up the stopped local workspace' {
+            & $py (Join-Path $root 'scripts\workspace_backup.py') @backupArgs
+        }
+    }
+
+    'verify-backup' {
+        Use-Venv
+        if (-not $Archive) { throw 'Specify the backup ZIP with -Archive.' }
+        Invoke-Step 'verifying backup checksums' {
+            & $py (Join-Path $root 'scripts\workspace_backup.py') verify $Archive
+        }
+    }
+
+    'restore' {
+        Use-Venv
+        if (-not $Archive -or -not $Destination) { throw 'Specify -Archive and a new directory with -Destination.' }
+        Invoke-Step 'restoring into a new workspace' {
+            & $py (Join-Path $root 'scripts\workspace_backup.py') restore $Archive --destination $Destination
+        }
+    }
+
+    'evaluation-pack' {
+        Use-Venv
+        $evaluationArgs = @()
+        if ($OutputPath) { $evaluationArgs += @('--output', $OutputPath) }
+        Invoke-Step 'preparing offline engineer review materials' {
+            & $py (Join-Path $root 'scripts\prepare_engineer_evaluation.py') @evaluationArgs
+        }
     }
 }
