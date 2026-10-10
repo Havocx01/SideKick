@@ -75,18 +75,18 @@ def profile_dataset(dataset: Dataset, *, config: ExperimentConfig | None = None)
                 detail={"non_increasing_steps": int((within <= 0).sum())},
             )
         )
-    gaps = int((within > 1).sum())
+    sorted_steps = frame.sort_values([CANONICAL_EQUIPMENT, CANONICAL_CYCLE]).groupby(CANONICAL_EQUIPMENT)[CANONICAL_CYCLE].diff().dropna()
+    gaps = int((sorted_steps > 1).sum())
     if gaps:
         findings.append(
             ProfileFinding(
                 code="CYCLE_GAPS",
-                severity=Severity.warning,
+                severity=Severity.blocker,
                 message=(
-                    f"{gaps} gaps in the cycle index. Trailing windows treat the "
-                    "readings as consecutive, so gaps widen the real time span of a "
-                    "window."
+                    f"{gaps} gaps in the cycle index. New experiments require consecutive operating cycles. "
+                    "Supply the missing cycle rows; missing sensor readings can remain empty."
                 ),
-                detail={"gap_steps": gaps, "largest_gap": int(within.max())},
+                detail={"gap_steps": gaps, "largest_gap": int(sorted_steps.max())},
             )
         )
 

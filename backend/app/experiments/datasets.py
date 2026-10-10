@@ -74,6 +74,8 @@ def validated_dataset(path, mapping, complete_histories, *, id, source, config=E
         raise ValueError(
             "Censored histories are unsupported: each history must include its known failure cycle. Supply complete histories; do not label the last reading as failure unless it really failed."
         )
+    from app.experiments.preflight import validate_histories
+    validate_histories(dataset)
     profile = profile_dataset(dataset, config=config)
     if not profile.usable:
         raise ValueError(" ".join(f.message for f in profile.findings if f.severity.value == "blocker"))

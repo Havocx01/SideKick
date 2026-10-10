@@ -1,0 +1,8 @@
+{
+  "source": "Regression reconstructed from the saved metered failing-result output: its inspected finding, displayed claims, and generic first action. No provider call is needed.",
+  "model": "gpt-4.1-mini-2025-04-14",
+  "candidate": "logistic_regression/lr3",
+  "finding_ids": ["inspected-model-1-case-37"],
+  "claim_ids": ["limits-model-1", "detection-model-1-case-37", "loss-model-1-case-37"],
+  "action_id": "a0"
+}

@@ -12,6 +12,7 @@ import type {
   DatasetRegistration,
   DatasetConfirmation,
   ExperimentRecord,
+  ExperimentDetail,
   ExperimentCreate,
   DecisionReport,
   FrozenModelRecord,
@@ -210,7 +211,7 @@ export const experiments = {
   confirm: (id: string, body: DatasetConfirmation) => post<DatasetRegistration>(`/api/datasets/${id}/confirm`, body),
   create: (body: ExperimentCreate) => post<ExperimentRecord>("/api/experiments", body),
   list: () => request<ExperimentRecord[]>("/api/experiments"),
-  get: (id: string) => request<ExperimentRecord>(`/api/experiments/${id}`),
+  get: (id: string) => request<ExperimentDetail>(`/api/experiments/${id}`),
   cancel: (id: string) => post<ExperimentRecord>(`/api/experiments/${id}/cancel`)
 };
 

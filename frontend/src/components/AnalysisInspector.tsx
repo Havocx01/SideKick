@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, CircleAlert, Cpu, Database, Download, FileText, RotateCcw, ScanLine, X } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, Cpu, Database, Download, FileText, ScanLine, X } from "lucide-react";
 import { assistant } from "../api/assistant";
 import type { AnalysisFinding, AnalysisResult, EvidenceReference } from "../api/types";
 import { candidateLabel } from "../format";
@@ -10,8 +10,7 @@ import { AssistantThinkingState, EvidenceCitation, EvidenceContextCards, Streami
 import "./analysis.css";
 
 export function AnalysisInspector() {
-  const { open, close, context, record, pending, error } = useAnalysis();
-  const loading = !error && !record?.error && (pending || record?.status === "queued" || record?.status === "running");
+  const { open, close, context } = useAnalysis();
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -23,33 +22,30 @@ export function AnalysisInspector() {
   if (!open || !context) return null;
   const isBrief = context.task === "brief";
   const content = <>
-    <header className="analysis-header"><div>{isBrief ? <FileText size={19} aria-hidden="true" /> : <ScanLine size={19} aria-hidden="true" />}<h2 id="analysis-title" tabIndex={-1} ref={title}>{isBrief ? "Review brief" : context.task === "data" ? "Data review" : "Analysis"}</h2></div><IconButton label={loading ? "Cancel analysis" : "Close analysis"} onClick={() => close()}><X size={17} aria-hidden="true" /></IconButton></header>
+    <header className="analysis-header"><div>{isBrief ? <FileText size={19} aria-hidden="true" /> : <ScanLine size={19} aria-hidden="true" />}<h2 id="analysis-title" tabIndex={-1} ref={title}>{isBrief ? "Review brief" : context.task === "data" ? "Data review" : "Analysis"}</h2></div><IconButton label="Close analysis" onClick={() => close()}><X size={17} aria-hidden="true" /></IconButton></header>
     <AnalysisContents key={JSON.stringify(context)} />
   </>;
   return <dialog ref={dialog} className={`analysis-inspector analysis-dialog${isBrief ? " review-dialog" : ""}`} aria-labelledby="analysis-title" onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}><div className="analysis-dialog-inner">{content}</div></dialog>;
 }
 
 function AnalysisContents() {
-  const { context, record, capabilities, consent, error, pending, retry, setConsent, unlock, close, saveBrief, editBrief, applyMapping, prepareReview, enabled } = useAnalysis();
+  const { context, record, capabilities, consent, error, pending, verifying, canRetry, retry, refreshStatus, statusRecovery, cancel, setConsent, unlock, close, saveBrief, editBrief, applyMapping, prepareReview, enabled } = useAnalysis();
   const [elapsed, setElapsed] = useState(0);
   const [operationError, setOperationError] = useState("");
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState("");
   const [draft, setDraft] = useState("");
-  const [saved, setSaved] = useState(false);
-  const edited = useRef(false);
+  const saved = Boolean(record?.brief_saved_at && record.brief_text === draft);
   const running = pending || record?.status === "queued" || record?.status === "running";
-  const result = !running && record?.status === "completed" ? record.result : undefined;
+  const result = !running && !verifying && record?.status === "completed" ? record.result : undefined;
   useEffect(() => {
     if (!record) return;
     const sync = () => setElapsed(Math.max(0, Math.floor((running ? Date.now() / 1000 : record.updated_at) - record.created_at)));
     sync(); if (!running) return;
     const timer = window.setInterval(sync, 1000); return () => window.clearInterval(timer);
   }, [record, running]);
-  useEffect(() => { edited.current = false; }, [record?.id]);
   useEffect(() => {
-    if (edited.current && !record?.brief_saved_at) return;
-    setDraft(record?.brief_text ?? record?.result?.brief_draft ?? ""); setSaved(Boolean(record?.brief_saved_at));
+    setDraft(record?.brief_text ?? record?.result?.brief_draft ?? "");
   }, [record?.id, record?.brief_text, record?.brief_saved_at, record?.result?.brief_draft]);
   if (!context) return null;
   const candidates = context.candidates ?? [];
@@ -60,33 +56,33 @@ function AnalysisContents() {
   function follow() { close(false); requestAnimationFrame(() => document.getElementById("main-content")?.focus()); }
   const scopeLabel = context.partition === "holdout" ? "Final validation" : "Development";
   const consentLabel = context.task === "data" ? "dataset" : "experiment";
-  const thinking = running && !error && !record?.error;
+  const thinking = running && !verifying && !error && !record?.error;
   const stages = record?.stages ?? [];
   return <div className={`analysis-body${thinking ? " analysis-loading-body" : ""}`}>
     <div className="analysis-meta">
     <div className="analysis-context">{context.task === "data" ? <strong>Current column mapping</strong> : candidates.map(key => <strong key={key}>{candidateLabel(...key.split("/") as [string, string])}</strong>)}<span><span>{context.task === "data" ? "Draft data checks" : scopeLabel}{context.equipment_id ? ` · History ${context.equipment_id}` : ""}{context.cycle != null ? ` · Cycle ${context.cycle}` : ""}</span>{result && <span className="analysis-mode">{result.mode === "ai" ? <Cpu size={14} strokeWidth={1.75} aria-hidden="true" /> : <Database size={14} strokeWidth={1.75} aria-hidden="true" />}{result.mode === "ai" ? "AI analysis" : context.task === "data" ? "Local checks" : "Recorded evidence"}</span>}</span></div>
-    {capabilities?.live_available && !running && <div className="analysis-rerun"><Button size="sm" variant="secondary" onClick={retry} aria-label="Rerun with AI" title="Rerun with AI"><RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" /></Button></div>}
     {capabilities && !thinking && ((capabilities.unlock_available && !capabilities.unlocked) || (consent && !consent.allowed)) && <div className="analysis-ai-setup" role="group" aria-label="AI analysis access">
       {capabilities.unlock_available && !capabilities.unlocked && <form onSubmit={event => { event.preventDefault(); void act(async () => { await unlock(code); setCode(""); }); }}><label htmlFor="presenter-code">Presenter access code</label><input id="presenter-code" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} required maxLength={200} /><Button size="sm" variant="secondary" type="submit" loading={busy}>Unlock live AI</Button></form>}
       {consent && !consent.allowed && <div className="analysis-consent"><h3>AI analysis for this {consentLabel}</h3><p>{consent.disclosure}</p><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(async () => { await setConsent(true); retry(); })}>Enable AI analysis</Button></div>}
     </div>}
     </div>
+    {verifying && <p className="note" role="status">{record ? "Opening saved analysis…" : "Checking analysis access…"}</p>}
     {(thinking || (result && stages.length > 0)) ? <AssistantThinkingState stages={stages} working={thinking} label={context.task === "brief" ? "Preparing review brief" : "Analyzing evidence"} doneLabel={`${context.task === "brief" ? "Prepared brief" : "Analyzed evidence"}${elapsed > 0 ? ` in ${elapsed}s` : ""}`} /> : null}
-    {!thinking && <>
-    {!result && record && <section className="analysis-progress" aria-label="Analysis status"><div className="analysis-progress-head"><strong>{record.status === "cancelled" ? "Analysis cancelled" : record.status === "interrupted" ? "Analysis interrupted" : "Analysis stopped"}</strong><span>{elapsed}s</span></div><Button variant="secondary" size="sm" onClick={retry}>Try again</Button></section>}
-    {(error || record?.error || operationError) && <div className="analysis-error" role="alert"><CircleAlert size={16} /><p>{operationError || error || record?.error}</p>{error && <Button size="sm" variant="ghost" onClick={retry}>Try again</Button>}</div>}
-    {!running && !record && !error && <Button variant="secondary" onClick={retry}>Run analysis</Button>}
-    {!running && result?.fallback_reason && capabilities?.live_available && <div className="analysis-fallback" role="status"><CircleAlert size={16} aria-hidden="true" /><p>{result.fallback_reason}</p></div>}
+    {!thinking && !verifying && <>
+    {!result && record && !running && <section className="analysis-progress" aria-label="Analysis status"><div className="analysis-progress-head"><strong>{record.status === "cancelled" ? "Analysis cancelled" : record.status === "interrupted" ? "Analysis interrupted" : "Analysis stopped"}</strong><span>{elapsed}s</span></div>{canRetry && <Button variant="secondary" size="sm" onClick={retry}>Retry analysis</Button>}</section>}
+    {(error || record?.error || operationError) && <div className="analysis-error" role="alert"><CircleAlert size={16} /><p>{operationError || error || record?.error}</p>{statusRecovery === "refresh" ? <Button size="sm" variant="secondary" onClick={refreshStatus}>Refresh status</Button> : !running && canRetry && ((!record && error) || (record?.status === "completed" && record.error)) ? <Button size="sm" variant="ghost" onClick={retry}>Retry analysis</Button> : null}{running && <Button size="sm" variant="ghost" onClick={() => void act(cancel)}>Cancel analysis</Button>}</div>}
+    {!running && result?.fallback_reason && capabilities?.live_available && <div className="analysis-fallback" role="status"><CircleAlert size={16} aria-hidden="true" /><p>{result.fallback_reason}</p>{canRetry && <Button size="sm" variant="secondary" onClick={retry}>Retry analysis</Button>}</div>}
     {result && <>
+      {record?.output_currency === "historical" && <p className="note">Previously saved analysis</p>}
       <span className="sr-only" role="status">{context.task === "brief" ? "Review brief ready." : "Analysis complete."}</span>
       {context.task === "brief" && record ? <div className="review-workspace">
         <section className="analysis-brief" aria-label="Review draft">
           <div className="review-editor-heading"><div><FileText size={16} aria-hidden="true" /><h3>Review draft</h3></div><span className="review-draft-status">{saved && <Check size={13} aria-hidden="true" />}{saved ? "Saved" : "Draft"}</span></div>
           <label className="sr-only" htmlFor="analysis-review">Edit before saving</label>
-          <textarea id="analysis-review" value={draft} maxLength={12000} rows={14} onChange={event => { edited.current = true; setDraft(event.target.value); setSaved(false); editBrief(event.target.value); }} />
+          <textarea id="analysis-review" value={draft} maxLength={12000} rows={14} onChange={event => { setDraft(event.target.value); editBrief(event.target.value); }} />
           <div className="review-save-row">
             <p className="note" role="status">{saved ? "Saved as an engineer review draft." : "Save before exporting."}</p>
-            <div className="analysis-brief-actions"><Button variant="secondary" loading={busy} disabled={!draft.trim() || saved} onClick={() => void act(async () => { await saveBrief(draft); setSaved(true); })}>{saved ? "Saved" : "Save draft"}</Button><Button variant="secondary" disabled={!saved || busy} loading={busy} onClick={() => void act(() => assistant.export(record.id))}><Download size={16} aria-hidden="true" />Export brief</Button></div>
+            <div className="analysis-brief-actions"><Button variant="secondary" loading={busy} disabled={!draft.trim() || saved} onClick={() => void act(() => saveBrief(draft))}>{saved ? "Saved" : "Save draft"}</Button><Button variant="secondary" disabled={!saved || busy} loading={busy} onClick={() => void act(() => assistant.export(record.id))}><Download size={16} aria-hidden="true" />Export brief</Button></div>
           </div>
         </section>
         <details className="review-reference analysis-disclosure disclosure-plain"><summary>Supporting evidence</summary><div className="analysis-disclosure-content"><EvidenceDetails result={result} /><ResultLimits result={result} /></div></details>
@@ -127,7 +123,7 @@ function ResultContent({ result, follow, candidates, task, reused }: { result: A
     </section>
     <NextChecks result={result} follow={follow} />
     <div className="analysis-more">
-      <details className="analysis-evidence analysis-disclosure disclosure-plain"><summary>Evidence and test details</summary><div className="analysis-disclosure-content"><EvidenceDetails result={result} /></div></details>
+      <details className="analysis-evidence analysis-disclosure disclosure-plain"><summary>Evidence and test details</summary><div className="analysis-disclosure-content" role="region" aria-label="Evidence and test details"><EvidenceDetails result={result} /></div></details>
       <ResultLimits result={result} />
     </div>
     {task !== "data" && <p className="analysis-boundary">Test evidence, not deployment approval.</p>}

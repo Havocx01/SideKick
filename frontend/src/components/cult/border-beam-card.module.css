@@ -22,6 +22,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  @scope (:root:not([data-motion="full"])) {
   .beam[data-beam] {
     animation: none !important;
   }
@@ -31,5 +32,7 @@
   .beam [data-beam-bloom] {
     display: none !important;
     animation: none !important;
+  }
+
   }
 }

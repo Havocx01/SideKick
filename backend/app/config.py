@@ -131,6 +131,10 @@ class Settings:
     assistant_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_ENABLED", True))
     assistant_live_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_LIVE_ENABLED", True))
     assistant_timeout_seconds: float = field(default_factory=lambda: float(os.environ.get("SIDEKICK_ASSISTANT_TIMEOUT", "45")))
+    demo_analysis_max_records: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_ANALYSIS_MAX_RECORDS", "2000")))
+    demo_analysis_max_bytes: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_ANALYSIS_MAX_BYTES", str(32 * 1024 * 1024))))
+    demo_folder_max_records: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_FOLDER_MAX_RECORDS", "2000")))
+    demo_folder_max_per_visitor: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_FOLDER_MAX_PER_VISITOR", "100")))
     assistant_tasks: tuple[str, ...] = field(default_factory=lambda: tuple(
         t.strip() for t in os.environ.get("SIDEKICK_ASSISTANT_TASKS", "investigate,compare,warning,brief,data").split(",") if t.strip()))
 
@@ -147,6 +151,8 @@ class Settings:
             raise ValueError("SIDEKICK_MODE must be full, replay or demo")
         if self.assistant_timeout_seconds <= 0:
             raise ValueError("Assistant timeout must be positive")
+        if min(self.demo_analysis_max_records, self.demo_analysis_max_bytes, self.demo_folder_max_records, self.demo_folder_max_per_visitor) <= 0:
+            raise ValueError("Demo storage limits must be positive")
         if not set(self.assistant_tasks) <= {"investigate", "compare", "warning", "brief", "data"}:
             raise ValueError("SIDEKICK_ASSISTANT_TASKS accepts investigate, compare, warning, brief and data")
 

@@ -662,6 +662,12 @@ class ExperimentRecord(Strict):
     pilot_brief: PilotBrief | None = None
 
 
+class ExperimentDetail(ExperimentRecord):
+    """Read-only library label, absent from recorded job and evidence payloads."""
+
+    display_name: str | None = Field(default=None, json_schema_extra={"readOnly": True})
+
+
 class LibraryFolderInput(Strict):
     name: str = Field(min_length=1, max_length=80)
 

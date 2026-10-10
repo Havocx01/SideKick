@@ -19,6 +19,7 @@ from app.schemas import (
     DecisionReport,
     EvidenceBundle,
     ExperimentCreate,
+    ExperimentDetail,
     ExperimentRecord,
     Partition,
     ValidationCreate,
@@ -169,13 +170,16 @@ def experiments(request: Request, jobs: Jobs = Depends(local_jobs)):
     return records
 
 
-@router.get("/experiments/{experiment_id}", response_model=ExperimentRecord)
+@router.get("/experiments/{experiment_id}", response_model=ExperimentDetail)
 def experiment(experiment_id: str, request: Request, jobs: Jobs = Depends(local_jobs)):
+    from app.experiments.library import Library
+
     check_access(request, "experiments", experiment_id)
-    for record in jobs.workspace.list():
-        if record["experiment_id"] == experiment_id:
-            return record
-    raise HTTPException(404, "Experiment not found")
+    try:
+        record = jobs.workspace.get("experiments", experiment_id)
+    except (KeyError, ValueError):
+        raise HTTPException(404, "Experiment not found") from None
+    return {**record, "display_name": Library(jobs.workspace).display_name(library_owner(request), experiment_id)}
 
 
 @router.post("/experiments/{experiment_id}/cancel", response_model=ExperimentRecord)

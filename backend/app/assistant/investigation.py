@@ -124,7 +124,7 @@ class EvidenceTools:
                 "actions": [{"id": action.id, "kind": "replay" if "/replay?" in action.href else "fault_results"} for action in self.result.actions],
                 **(extra or {})}
 
-    def call(self, name, args):
+    def call(self, name, args, *, server_inspection=False):
         spec = next((spec for spec in self.specs if spec["name"] == name), None)
         if spec is None or not isinstance(args, dict) or set(args) != set(spec["parameters"]["properties"]):
             raise ValueError("Unsupported evidence tool or arguments.")
@@ -138,7 +138,8 @@ class EvidenceTools:
                 raise ValueError("Evidence tool argument is outside this analysis.")
         packet = getattr(self, name)(**args)
         sourceIds = [source["id"] for source in packet.get("evidence", [])]
-        self.calls.append(InvestigationCall(name=name, label=TOOL_LABELS[name], source_ids=sourceIds))
+        label = f"Server inspection · {TOOL_LABELS[name]}" if server_inspection else TOOL_LABELS[name]
+        self.calls.append(InvestigationCall(name=name, label=label, source_ids=sourceIds))
         return packet
 
     def get_model_metrics(self, model):
@@ -412,7 +413,23 @@ class EvidenceTools:
                           + [id for finding in self.result.findings[:len(findingIds)] for id in finding.source_ids]))
         references = {source.id: source for source in self.result.sources}
         self.result.sources = [references[id] for id in orderedIds] + [source for source in self.result.sources if source.id not in orderedIds]
-        self.result.actions.sort(key=lambda action: action.id != actionId)
+        # The provider can choose an inspected action, but cannot demote the
+        # concrete fault check behind a generic navigation link. Prefer selected
+        # cases, then other cases actually inspected inside this exact context.
+        selectedSources = {id for claim in self.result.assessment for id in claim.source_ids}
+        selectedSources.update(id for findingId in findingIds for id in findings[findingId].source_ids)
+        relevantCases = {(source.candidate, source.scenario_id) for source in self.result.sources
+                         if source.id in selectedSources and source.scenario_id is not None}
+        specificActions = {f"inspect-{model}-{case}" for model, candidate in self.models.items()
+                           for case, scenario in self.cases.items() if (candidate, scenario) in relevantCases}
+        inspectedSources = {id for call in self.calls if call.name == "inspect_fault_case" for id in call.source_ids}
+        inspectedCases = {(source.candidate, source.scenario_id) for source in self.result.sources if source.id in inspectedSources}
+        inspectedActions = {f"inspect-{model}-{case}" for model, candidate in self.models.items()
+                            for case, scenario in self.cases.items() if (candidate, scenario) in inspectedCases}
+        self.result.actions.sort(key=lambda action: (
+            0 if action.id in specificActions and action.id in inspectedActions else
+            1 if action.id in inspectedActions and action.id in self.seenActions else 2,
+            action.id != actionId))
         self.result.interpretation = None
         self.result.mode = "ai" if model else "evidence"
         self.result.model = model

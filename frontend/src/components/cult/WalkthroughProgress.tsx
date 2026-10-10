@@ -1,10 +1,11 @@
+import { useMotionPreference } from "../../hooks/useMotionPreference";
 // Adapted from Cult UI's onboarding StepIndicator primitive.
 // https://www.cult-ui.com/r/onboarding.json. MIT license: see LICENSE.
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { motionTokens } from "@/registry/motion-tokens";
 
 export function WalkthroughProgress({ currentStep, totalSteps }: { currentStep: number; totalSteps: number }) {
-  const reduced = useReducedMotion();
+  const reduced = useMotionPreference();
   return <div className="walkthrough-progress" role="progressbar" aria-label={`Step ${currentStep} of ${totalSteps}`}
     aria-valuemin={1} aria-valuemax={totalSteps} aria-valuenow={currentStep} data-slot="onboarding-step-indicator">
     {Array.from({ length: totalSteps }, (_, index) => {

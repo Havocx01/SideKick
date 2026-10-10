@@ -173,6 +173,8 @@ class Workspace:
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             if validation_id:
+                if len(set(histories)) != len(histories):
+                    raise ValueError("Repeated reserved histories cannot count as independent equipment. Supply distinct fresh histories.")
                 for history in histories:
                     if conn.execute("SELECT 1 FROM exposures WHERE history_id=?", (history,)).fetchone():
                         raise ValueError("Reserved equipment has already been used or scored. Use genuinely fresh histories.")

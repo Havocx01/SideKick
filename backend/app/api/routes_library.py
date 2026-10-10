@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.api.routes_experiments import local_jobs
+from app.assistant.store import AnalysisCapacityError
 from app.config import get_settings
 from app.experiments.demo import owner
 from app.experiments.jobs import Jobs
@@ -29,6 +30,8 @@ def execute(action):
         raise HTTPException(404, "This item or folder is unavailable. Refresh the library and try again.") from None
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+    except AnalysisCapacityError as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @router.get("", response_model=LibrarySnapshot)
@@ -40,7 +43,9 @@ def snapshot(request: Request, jobs: Jobs = Depends(local_jobs)):
 @router.post("/folders", response_model=LibraryFolder, status_code=201)
 def create_folder(payload: LibraryFolderInput, request: Request, jobs: Jobs = Depends(local_jobs)):
     scope, _ = library_scope(request)
-    return execute(lambda: Library(jobs.workspace).create_folder(scope, payload.name))
+    settings = get_settings()
+    return execute(lambda: Library(jobs.workspace).create_folder(scope, payload.name,
+        max_demo_folders=settings.demo_folder_max_records, max_visitor_folders=settings.demo_folder_max_per_visitor))
 
 
 @router.post("/folders/{folder_id}/rename", response_model=LibraryFolder)

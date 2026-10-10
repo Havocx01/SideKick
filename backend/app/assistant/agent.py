@@ -36,8 +36,17 @@ async def investigate(tools, settings):
     elif task == "brief" and len(tools.context.candidates) == 2:
         sequence = ["compare_models"]
     overhead = len(json.dumps(tools.specs).encode()) + len(json.dumps(InvestigationChoices.model_json_schema()).encode())
+    if sequence:
+        if len(sequence) > maxCalls:
+            raise ValueError("Investigation exceeded its tool-call limit.")
+        # These contexts have no adaptive decision to delegate. Inspect the scoped
+        # records locally, then pay for selection once, without fake model calls.
+        for name in sequence:
+            packet = tools.call(name, {}, server_inspection=True)
+            history.append({"role": "user", "content": json.dumps(
+                {"server_inspection": {"name": name, "result": packet}}, separators=(",", ":"))})
     async with AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0, timeout=40) as client:
-        for roundIndex in range(maxCalls):
+        for roundIndex in range(0 if sequence else maxCalls):
             completed = {call.name for call in tools.calls}
             if sequence and set(sequence) <= completed:
                 break

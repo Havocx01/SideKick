@@ -1,5 +1,6 @@
+import { useMotionPreference } from "../hooks/useMotionPreference";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
-import { LayoutGroup, motion, useReducedMotion } from "motion/react";
+import { LayoutGroup, motion } from "motion/react";
 import { motionTokens } from "@/registry/motion-tokens";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Dialog } from "@base-ui/react/dialog";
@@ -57,7 +58,7 @@ function FolderNavigationItem({ folder, active, count, saving, choose, edit, nam
 
 export function ExperimentLibrary() {
   const tabLayoutId = useId();
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useMotionPreference();
   const health = useApi(() => api.health(), []);
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -140,7 +141,10 @@ export function ExperimentLibrary() {
     if (busy) return;
     setNameEditor(null);
     const next = new URLSearchParams(currentParams.current);
-    for (const [key, value] of Object.entries(changes)) value && value !== "all" ? next.set(key, value) : next.delete(key);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value && value !== "all") next.set(key, value);
+      else next.delete(key);
+    }
     currentParams.current = next;
     setParams(next, { replace });
     fileSelection.clear(); setActionError(""); setMessage("");
@@ -164,7 +168,7 @@ export function ExperimentLibrary() {
   const dateGroups = useMemo(() => {
     const groups = new Map<string, { date: Date | null; items: LibraryItem[] }>();
     for (const item of items) {
-      const date = item.created_at === null ? null : new Date(item.created_at * 1000);
+      const date = item.created_at == null ? null : new Date(item.created_at * 1000);
       const day = date ? dateKey(date) : "unknown";
       if (!groups.has(day)) groups.set(day, { date, items: [] });
       groups.get(day)!.items.push(item);
@@ -213,7 +217,7 @@ export function ExperimentLibrary() {
       if (!alive.current) return;
       setMessage(confirmation);
       try { await refresh(true); } catch { /* A failed refresh must not report the successful save as failed. */ }
-    } catch (error) { throw new Error(errorText(error)); }
+    } catch (error) { throw new Error(errorText(error), { cause: error }); }
     finally { mutating.current = false; if (alive.current) setSaving(false); }
   }
   async function mutate(operation: () => Promise<unknown>, confirmation: string) {
@@ -254,6 +258,7 @@ export function ExperimentLibrary() {
   }
   async function uploadFile(file: File, targetFolder: string | null) {
     if (mutating.current || uploadController.current) return;
+    setActionError(""); setMessage("");
     const invalid = csvValidationError(file);
     if (invalid) { setUpload({ file, folderId: targetFolder, state: "error", error: invalid }); return; }
     const controller = new AbortController(); uploadController.current = controller;
@@ -374,7 +379,7 @@ export function ExperimentLibrary() {
             {items.length && !missingFolder ? <div className={styles.list}>
               <div className={styles.listHead} role="row">
                 <label className={styles.selectAll}><input type="checkbox" aria-label="Select visible items" disabled={busy || Boolean(nameEditor) || !visibleItems.length} checked={visibleItems.length > 0 && visibleItems.slice(0, 100).every(item => selected.includes(key(item)))} ref={node => { if (node) node.indeterminate = selection.length > 0 && !visibleItems.slice(0, 100).every(item => selected.includes(key(item))); }} onChange={event => fileSelection.selectAll(event.target.checked)} /></label>
-                <span>Name</span><span className={styles.kindCol}>Kind</span><span className={styles.statusCol}>Status</span><span className={styles.dateCol}>Modified</span><span className={styles.rowActions} aria-hidden="true" />
+                <span>Name</span><span className={styles.kindCol}>Kind</span><span className={styles.statusCol}>Status</span><span className={styles.dateCol}>Added</span><span className={styles.rowActions} aria-hidden="true" />
               </div>
               <div role="grid" aria-label={folder ? `Items in ${folder.name}` : viewLabel} aria-multiselectable="true" aria-describedby="library-keyboard-help">
               {byDate ? dateGroups.map(group => <Expandable key={group.day} className={styles.dateGroup} expanded={isDayOpen(group.day)} onToggle={() => setExpansion(current => ({ scope: groupScope, days: { ...(current.scope === groupScope ? current.days : {}), [group.day]: !isDayOpen(group.day) } }))}>

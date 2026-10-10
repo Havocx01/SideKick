@@ -8,7 +8,7 @@ services:
     working_dir: /app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       SIDEKICK_MODE: full
       SIDEKICK_DATA_DIR: /data
@@ -29,7 +29,7 @@ services:
     working_dir: /app
     command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
       SIDEKICK_API_URL: http://api:8000
     volumes:

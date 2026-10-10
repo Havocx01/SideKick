@@ -1,3 +1,4 @@
+import { useMotionPreference } from "../../hooks/useMotionPreference";
 // Adapted from Cult UI's Border Beam Card. MIT attribution: ./LICENSE.
 // https://www.cult-ui.com/docs/components/border-beam-card
 import { BorderBeam } from "border-beam";
@@ -7,6 +8,7 @@ import styles from "./border-beam-card.module.css";
 
 export function BorderBeamCard({ children, cardClassName }: { children: ReactNode; cardClassName?: string }) {
   const [theme, setTheme] = useState<Theme>("light");
+  const reduced = useMotionPreference();
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,10 @@ export function BorderBeamCard({ children, cardClassName }: { children: ReactNod
     <div className={styles.shell} data-hidden={hidden || undefined}>
       <BorderBeam
         className={styles.beam}
+        active={!reduced}
+        css={`html[data-motion="full"] [data-beam="{id}"][data-active] {
+          animation: beam-spin-{id} 8s linear infinite, beam-fade-in-{id} .6s ease forwards !important;
+        }`}
         size="md"
         colorVariant="ocean"
         staticColors

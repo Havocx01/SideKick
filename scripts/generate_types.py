@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ HEADER = """\
 #: Emitted in dependency-free order; the generator resolves nested models itself.
 ROOTS: list[type[BaseModel]] = [
     assistant.AnalysisRecord,
+    assistant.AnalysisDetail,
     assistant.AssistantCapabilities,
     assistant.ConsentState,
     assistant.BriefUpdate,
@@ -35,6 +37,13 @@ ROOTS: list[type[BaseModel]] = [
     schemas.PilotOutcomeCreate,
     schemas.PilotState,
     schemas.ExperimentRecord,
+    schemas.ExperimentDetail,
+    schemas.LibraryFolderInput,
+    schemas.LibraryFolder,
+    schemas.LibraryItemRef,
+    schemas.LibraryItem,
+    schemas.LibrarySnapshot,
+    schemas.LibraryUpdate,
     schemas.DecisionReport,
     schemas.DatasetProfile,
     schemas.SplitAssignment,
@@ -130,7 +139,7 @@ def collect() -> tuple[dict[str, dict], list[str]]:
     return defs, order
 
 
-def main() -> int:
+def render() -> str:
     defs, order = collect()
     # Enums first so the interfaces that reference them read top-down.
     enums = [name for name in order if "enum" in defs[name]]
@@ -143,9 +152,16 @@ def main() -> int:
     for name in sorted(interfaces):
         chunks.append(emit_definition(name, defs[name], defs))
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text("\n".join(chunks), encoding="utf-8")
-    print(f"wrote {OUTPUT.relative_to(REPO_ROOT)}: {len(enums)} enums, {len(interfaces)} interfaces")
+    return "\n".join(chunks)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    output = parser.parse_args().output
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render(), encoding="utf-8", newline="\n")
+    print(f"wrote {output}")
     return 0
 
 

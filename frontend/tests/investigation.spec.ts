@@ -105,36 +105,33 @@ test("analysis explains evidence inline and reuses it in a review", async ({ pag
   expect(mutations.every(path => path.startsWith("/api/assistant/"))).toBeTruthy();
 });
 
-test("analysis and briefs reopen saved evidence, preserve edits and rerun only on request", async ({ page }) => {
-  await page.route("**/api/assistant/capabilities*", async route => {
-    const caps = await (await route.fetch()).json();
-    await route.fulfill({ json: { ...caps, live_available: true } });
-  });
+test("analysis and briefs reopen saved evidence without another start", async ({ page }) => {
+  let starts = 0;
+  page.on("request", request => { if (request.method() === "POST" && new URL(request.url()).pathname === "/api/assistant/analyses") starts += 1; });
   await page.goto("/comparison?candidate=logistic_regression%2Flr2");
-  const open = async (name: string) => {
-    const response = page.waitForResponse(reply => new URL(reply.url()).pathname === "/api/assistant/analyses" && reply.request().method() === "POST");
+  const open = async (name: string, admitted = false) => {
+    const response = page.waitForResponse(reply => reply.request().method() === (admitted ? "POST" : "GET") && (admitted ? new URL(reply.url()).pathname === "/api/assistant/analyses" : /\/api\/assistant\/analyses\/[^/]+$/.test(new URL(reply.url()).pathname)));
     await page.getByRole("button", { name, exact: true }).click();
-    return await (await response).json() as AnalysisRecord;
+    const record = await (await response).json() as AnalysisRecord;
+    if (name === "Prepare review brief") await expect(page.getByRole("textbox", { name: "Edit before saving" })).toBeVisible();
+    else await expect(page.getByRole("region", { name: "Assessment", exact: true })).toHaveAttribute("aria-busy", "false");
+    return record;
   };
   const close = async () => { await page.getByRole("button", { name: "Close analysis", exact: true }).click(); };
-  const first = await open("Investigate failure");
-  await expect(page.getByRole("region", { name: "Assessment", exact: true })).toHaveAttribute("aria-busy", "false");
+  const first = await open("Investigate failure", true);
   await close();
-  const restored = await open("Investigate failure");
-  expect(restored.id).toBe(first.id);
-  expect(restored.reused).toBe(true);
-  expect(restored.result).toEqual(first.result);
-  await expect(page.getByRole("region", { name: "Assessment", exact: true })).toHaveAttribute("aria-busy", "false");
+  expect((await open("Investigate failure")).id).toBe(first.id);
+  expect(starts).toBe(1);
   await close();
-  const brief = await open("Prepare review brief");
-  expect(brief.id).toBe(first.id);
+  expect((await open("Prepare review brief")).id).toBe(first.id);
   const editor = page.getByRole("textbox", { name: "Edit before saving" });
   await editor.fill("Engineer notes: inspect sensor 8 before a supervised trial.");
   await close();
   expect((await open("Prepare review brief")).id).toBe(first.id);
   await expect(editor).toHaveValue("Engineer notes: inspect sensor 8 before a supervised trial.");
+  expect(starts).toBe(1);
   await page.reload();
-  expect((await open("Prepare review brief")).id).toBe(first.id);
+  expect((await open("Prepare review brief", true)).id).toBe(first.id);
   await expect(editor).toHaveValue("Engineer notes: inspect sensor 8 before a supervised trial.");
   await editor.fill("");
   await close();
@@ -148,33 +145,32 @@ test("analysis and briefs reopen saved evidence, preserve edits and rerun only o
   await page.getByRole("button", { name: "Add to review brief", exact: true }).click();
   await expect(editor).toHaveValue("Final engineer notes.");
   await close();
-  await page.getByRole("button", { name: "Inspect Logistic regression · lr1", exact: true }).click();
-  expect((await open("Investigate failure")).id).not.toBe(first.id);
+  await page.getByRole("button", { name: "Inspect Logistic regression \u00b7 lr1", exact: true }).click();
+  expect((await open("Investigate failure", true)).id).not.toBe(first.id);
   await close();
-  await page.getByRole("button", { name: "Inspect Logistic regression · lr2", exact: true }).click();
-  expect((await open("Investigate failure")).id).toBe(first.id);
-  const rerunResponse = page.waitForResponse(reply => new URL(reply.url()).pathname === "/api/assistant/analyses" && reply.request().method() === "POST");
-  await page.getByRole("button", { name: "Rerun with AI", exact: true }).click();
-  const rerun = await (await rerunResponse).json() as AnalysisRecord;
-  expect(rerun.id).not.toBe(first.id);
-  expect(rerun.reused).toBe(false);
+  await page.getByRole("button", { name: "Inspect Logistic regression \u00b7 lr2", exact: true }).click();
+  expect((await open("Investigate failure", true)).id).toBe(first.id);
+  expect(starts).toBe(4);
+  await expect(page.getByRole("button", { name: "Rerun with AI", exact: true })).toHaveCount(0);
 });
 
 test("starting with a review brief reuses that evidence for analysis", async ({ page }) => {
+  let starts = 0;
+  page.on("request", request => { if (request.method() === "POST" && new URL(request.url()).pathname === "/api/assistant/analyses") starts += 1; });
   await page.goto("/comparison?candidate=xgboost_augmented%2Faug3");
   const briefResponse = page.waitForResponse(reply => new URL(reply.url()).pathname === "/api/assistant/analyses" && reply.request().method() === "POST");
   await page.getByRole("button", { name: "Prepare review brief", exact: true }).click();
   const brief = await (await briefResponse).json() as AnalysisRecord;
   await expect(page.getByRole("textbox", { name: "Edit before saving" })).toHaveValue(/^Engineer review draft/);
   await page.getByRole("button", { name: "Close analysis", exact: true }).click();
-  const analysisResponse = page.waitForResponse(reply => new URL(reply.url()).pathname === "/api/assistant/analyses" && reply.request().method() === "POST");
+  const analysisResponse = page.waitForResponse(reply => new URL(reply.url()).pathname === `/api/assistant/analyses/${brief.id}` && reply.request().method() === "GET");
   await page.getByRole("button", { name: "Analyze result", exact: true }).click();
   const analysis = await (await analysisResponse).json() as AnalysisRecord;
   expect(analysis.id).toBe(brief.id);
-  expect(analysis.reused).toBe(true);
   expect(analysis.result?.assessment).toEqual(brief.result?.assessment);
   await expect(page.getByRole("region", { name: "Verdict", exact: true })).toContainText("64 / 64");
   await expect(page.getByRole("region", { name: "Assessment", exact: true })).toHaveAttribute("aria-busy", "false");
+  expect(starts).toBe(1);
 });
 
 test("data review explains missing failure confirmation and applies a draft only", async ({ page }) => {

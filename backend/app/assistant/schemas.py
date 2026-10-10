@@ -125,6 +125,7 @@ class AnalysisRecord(Strict):
     brief_text: str | None = None
     brief_saved_at: float | None = None
     cache_fingerprint: str | None = None
+    draft_fingerprint: str | None = Field(default=None, description="Exact scoped evidence identity, independent of generated-result versions.")
     reused: bool = False
 
 
@@ -137,6 +138,10 @@ class AssistantCapabilities(Strict):
     consent_granted: bool
     mode: Literal["full", "demo", "replay"]
     note: str
+
+
+class AnalysisDetail(AnalysisRecord):
+    output_currency: Literal["current", "historical"] = Field(description="Response-only comparison with current scoped evidence and output contract.")
 
 
 class ConsentUpdate(Strict):

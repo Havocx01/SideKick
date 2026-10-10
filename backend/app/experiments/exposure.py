@@ -26,7 +26,8 @@ def seed_known_exposure(workspace):
     """Recorded benchmark and legacy local development records cannot become fresh."""
     from app.config import ExperimentConfig, get_settings
     from app.data.loader import load_dataset
-    from app.experiments.datasets import validated_dataset
+    from app.data.contract import build_dataset
+    from app.experiments.datasets import read_csv
     from app.schemas import ColumnMapping
 
     with workspace.connect() as conn:
@@ -57,9 +58,11 @@ def seed_known_exposure(workspace):
         if record["status"] != "completed" and not legacy_incomplete:
             continue
         registration = workspace.get("datasets", record["dataset_id"])
-        data = validated_dataset(workspace.directory("datasets", record["dataset_id"]) / "data.csv",
-                                 ColumnMapping.model_validate(registration["mapping"]), registration["complete_histories"],
-                                 id=record["dataset_id"], source=record["source"], config=ExperimentConfig(**record["config"]))
+        # This is an identity-only read of previously admitted evidence. New admission
+        # blockers must not hide legacy histories from the exposure ledger.
+        mapping = ColumnMapping.model_validate(registration["mapping"])
+        data = build_dataset(read_csv(workspace.directory("datasets", record["dataset_id"]) / "data.csv", mapping.equipment_id),
+                             mapping, dataset_id=record["dataset_id"], source=record["source"], config=ExperimentConfig(**record["config"]))
         bundle_path = workspace.directory("experiments", record["experiment_id"]) / "bundle.json"
         if legacy_incomplete:
             workspace.expose(history_ids(data, data.equipment_ids).values(), record["experiment_id"],
