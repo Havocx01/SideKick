@@ -34,8 +34,8 @@ pipeline-fast: ## Same pipeline with fewer folds and the required faults only
 bundle: ## Rebuild evidence/bundle.json from the recorded runs
 	$(BIN)/python scripts/export_bundle.py
 
-api: ## Serve the API with reload on http://127.0.0.1:8000
-	$(BIN)/uvicorn app.main:app --reload --app-dir backend
+api: ## Serve the API with reload on http://127.0.0.1:8140
+	$(BIN)/uvicorn app.main:app --reload --app-dir backend --host 127.0.0.1 --port 8140
 
 web: ## Serve the frontend with hot reload on http://127.0.0.1:5173
 	cd frontend && npm run dev

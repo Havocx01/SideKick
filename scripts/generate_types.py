@@ -42,6 +42,7 @@ ROOTS: list[type[BaseModel]] = [
     schemas.LibraryFolder,
     schemas.LibraryItemRef,
     schemas.LibraryItem,
+
     schemas.LibrarySnapshot,
     schemas.LibraryUpdate,
     schemas.DecisionReport,
