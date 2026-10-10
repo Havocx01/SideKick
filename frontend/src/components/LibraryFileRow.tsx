@@ -65,7 +65,7 @@ export function LibraryFileRow({ item, folderName, selected, tabStop, disabled, 
       </div>
       <div role="gridcell" className={styles.kindCol}>{item.kind === "upload" ? "CSV" : "Run"}</div>
       <div role="gridcell" className={`${styles.rowStatus} ${styles.statusCol}`}><Badge tone={item.status === "completed" ? "ok" : ["failed", "timed_out", "interrupted"].includes(item.status) ? "bad" : active(item.status) ? "info" : "neutral"}>{item.status === "ready_to_train" ? <Play size={12} aria-hidden="true" /> : item.status === "completed" ? <Check size={12} aria-hidden="true" /> : null}{statusText}</Badge></div>
-      {showDate && <div role="gridcell" className={styles.dateCol}>{item.created_at !== null ? <time dateTime={new Date(item.created_at * 1000).toISOString()}>{new Date(item.created_at * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time> : "—"}</div>}
+      {showDate && <div role="gridcell" className={styles.dateCol}>{item.created_at != null ? <time dateTime={new Date(item.created_at * 1000).toISOString()}>{new Date(item.created_at * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time> : "—"}</div>}
       <div role="gridcell" className={styles.rowActions}><LibraryActions label={`Actions for ${item.display_name}`} disabled={disabled || editing} finalFocus={finalFocus}>{() => menuItems(Menu.Item)}</LibraryActions></div>
     </ContextMenu.Trigger>
     <ContextMenu.Portal><ContextMenu.Positioner className={styles.layer} anchor={keyboardContext ? row : undefined}>

@@ -35,6 +35,8 @@ ROOTS: list[type[BaseModel]] = [
     schemas.PilotOutcomeCreate,
     schemas.PilotState,
     schemas.ExperimentRecord,
+    schemas.LibrarySnapshot,
+    schemas.LibraryUpdate,
     schemas.DecisionReport,
     schemas.DatasetProfile,
     schemas.SplitAssignment,

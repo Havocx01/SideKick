@@ -164,7 +164,7 @@ export function ExperimentLibrary() {
   const dateGroups = useMemo(() => {
     const groups = new Map<string, { date: Date | null; items: LibraryItem[] }>();
     for (const item of items) {
-      const date = item.created_at === null ? null : new Date(item.created_at * 1000);
+      const date = item.created_at == null ? null : new Date(item.created_at * 1000);
       const day = date ? dateKey(date) : "unknown";
       if (!groups.has(day)) groups.set(day, { date, items: [] });
       groups.get(day)!.items.push(item);
