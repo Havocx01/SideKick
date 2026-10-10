@@ -97,10 +97,12 @@ function Workspace() {
         </nav>
         {/* {id && <Link className="benchmark-return" to="/comparison" aria-label="Recorded benchmark" title="Recorded benchmark"><ArrowLeft size={14} aria-hidden="true" /><span>Recorded benchmark</span></Link>} */}
         <div className="sidebar-foot">
-          <div className="workspace-status"><span aria-hidden="true" className={health.data ? "status-dot connected" : "status-dot"} /><span>{health.data ? workspace : health.error ? "Server unavailable" : "Connecting"}</span></div>
-          {health.data?.mode !== "full" && <p>{health.data?.mode === "replay" ? "Recorded results only" : "Synthetic sample · results expire"}</p>}
-          {health.error && <a href="">Retry connection</a>}
-          <a href="https://github.com/Havocx01/SideKick" target="_blank" rel="noreferrer" className="repo-link">Sidekick v2.0 · Source <ArrowUpRight size={12} aria-hidden="true" /></a>
+          <div className="workspace-summary" role="status">
+            <div className="workspace-status"><span aria-hidden="true" className={health.data ? "status-dot connected" : "status-dot"} /><span>{health.data ? workspace : health.error ? "Server unavailable" : "Connecting"}</span></div>
+            {health.data && health.data.mode !== "full" && <p className="workspace-description">{health.data.mode === "replay" ? "Recorded results only" : <>Synthetic sample<span>Results expire</span></>}</p>}
+          </div>
+          {health.error && <a className="workspace-retry" href="">Retry connection</a>}
+          <div className="sidebar-meta"><span>Sidekick v2.0</span><a href="https://github.com/Havocx01/SideKick" target="_blank" rel="noreferrer" className="repo-link" aria-label="Sidekick source on GitHub">Source <ArrowUpRight size={14} aria-hidden="true" /></a></div>
         </div>
       </aside>
       <div className="workspace">
