@@ -23,7 +23,7 @@ def pilot_case(tmp_path):
     loaded.final_evaluation = None
     workspace = Workspace(tmp_path)
     workspace.reserve({"experiment_id": loaded.experiment_id, "dataset_id": loaded.dataset_id,
-        "source": "upload", "status": "completed", "source_digest": loaded.source_digest})
+        "source": "upload", "status": "completed", "source_digest": loaded.source_digest, "created_at": 1})
     payload = {"brief": {"equipment_family": "Motor family A", "reviewing_engineer": "Engineer A",
         "current_procedure": "Review spreadsheets", "intended_decision": "Choose a supervised trial candidate",
         "success_measure": "Review minutes and missed fault cases", "data_classification": "field"},

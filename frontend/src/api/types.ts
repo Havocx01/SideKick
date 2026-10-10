@@ -383,28 +383,6 @@ export interface ExperimentRecord {
   pilot_brief?: PilotBrief | null;
 }
 
-export interface LibraryFolder { id: string; name: string }
-export interface LibraryItemRef { kind: "run" | "upload"; id: string }
-export interface LibraryItem extends LibraryItemRef {
-  dataset_id: string;
-  display_name: string;
-  original_name: string;
-  source: "synthetic" | "upload";
-  folder_id: string | null;
-  archived: boolean;
-  created_at: number | null;
-  status: string;
-  run_count: number;
-  row_count: number | null;
-}
-export interface LibrarySnapshot { folders: LibraryFolder[]; items: LibraryItem[] }
-export interface LibraryUpdate {
-  items: LibraryItemRef[];
-  action: "rename" | "move" | "archive" | "restore";
-  display_name?: string;
-  folder_id?: string | null;
-}
-
 export interface FaultScenario {
   fault: FaultSpec;
   required?: boolean;
@@ -449,6 +427,43 @@ export interface InvestigationCall {
   name: string;
   label: string;
   source_ids?: string[];
+}
+
+export interface LibraryFolder {
+  id: string;
+  name: string;
+}
+
+export interface LibraryItem {
+  kind: "run" | "upload";
+  id: string;
+  dataset_id: string;
+  display_name: string;
+  original_name: string;
+  source: "synthetic" | "upload";
+  folder_id?: string | null;
+  archived?: boolean;
+  created_at?: number | null;
+  status: string;
+  run_count?: number;
+  row_count?: number | null;
+}
+
+export interface LibraryItemRef {
+  kind: "run" | "upload";
+  id: string;
+}
+
+export interface LibrarySnapshot {
+  folders: LibraryFolder[];
+  items: LibraryItem[];
+}
+
+export interface LibraryUpdate {
+  items: LibraryItemRef[];
+  action: "rename" | "move" | "archive" | "restore";
+  display_name?: string | null;
+  folder_id?: string | null;
 }
 
 export interface NumericClaim {
