@@ -57,7 +57,7 @@ class Jobs:
             from app.schemas import ColumnMapping
 
             hosted = get_settings().mode == "demo"
-            if hosted and (request.protocol is not None or request.pilot_brief is not None):
+            if hosted and (request.protocol is not None or request.pilot_brief is not None or request.engineer_context is not None):
                 raise ValueError("Custom protocols and pilot briefs are local only.")
             protocol = resolve_protocol(request, dataset)
             config = protocol_config(protocol, hosted=hosted)
@@ -88,7 +88,8 @@ class Jobs:
             directory = self.workspace.directory("experiments", record.experiment_id)
             self.workspace.reserve(record.model_dump(mode="json"), library_owner=library_owner,
                                    folder_id=str(request.folder_id) if request.folder_id else None,
-                                   folder_explicit="folder_id" in request.model_fields_set)
+                                   folder_explicit="folder_id" in request.model_fields_set,
+                                   engineer_context=request.engineer_context.model_dump(mode="json") if request.engineer_context else None)
             try:
                 directory.mkdir(parents=True)
                 self.thread = threading.Thread(target=self._run, args=(record.experiment_id,), daemon=True)

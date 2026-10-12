@@ -1,0 +1,124 @@
+{
+  "parsed": {
+    "hypotheses": [
+      {
+        "title": "Sensitivity to sensor dropout patterns",
+        "explanation": "The warning model may be insufficiently robust to persistent dropout faults on specific channels, causing late or missed warnings in those traces. This could result from model input handling that treats missing data naively or thresholds that do not compensate for signal absence.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-2",
+          "pattern-3",
+          "pattern-6"
+        ],
+        "alternative": "The warning model detects dropout faults reliably but thresholds are set high, causing detection delay or misses under normal variance around dropout events."
+      },
+      {
+        "title": "Reduced sensitivity to persistent stuck sensor faults",
+        "explanation": "The warning model might underperform on persistent stuck sensor faults for certain channels, resulting in lower timely detection rates and failures. This may stem from weak feature extraction or thresholding that fails to distinguish stuck conditions early enough.",
+        "observation_ids": [
+          "pattern-4",
+          "pattern-5",
+          "pattern-7"
+        ],
+        "alternative": "The model's detection logic correctly flags stuck faults, but fault severity or feature representation leads to later detections rather than actual model failure."
+      },
+      {
+        "title": "Model sensitivity varies between drift and abrupt faults",
+        "explanation": "High detection fractions on drift faults versus lower detection on dropout and stuck faults suggest the model's input representation or learned thresholds are tuned better for gradual deviation than abrupt signal loss or fixed-value faults.",
+        "observation_ids": [
+          "pattern-10",
+          "pattern-15",
+          "pattern-20",
+          "pattern-1"
+        ],
+        "alternative": "Drift faults produce more consistent model features enabling easier detection, while abrupt faults inherently have variable signatures making early detection more difficult independently of model tuning."
+      }
+    ],
+    "gaps": [
+      "The current data lacks detailed timing distribution of late versus missed warnings to separate detection delay from detection failure.",
+      "There is no direct evidence if missing data is imputed or handled explicitly in the model input pipeline, affecting dropout fault detection.",
+      "Threshold tuning differences between the models are not detailed, limiting insight into their impact on warning shortfalls."
+    ],
+    "next_tests": [
+      {
+        "title": "Compare detection timing distributions for dropout faults with and without imputation",
+        "procedure": "Replay dropout fault traces using model-2 with median imputation replaced by explicit missing data flagging, then compare detection timing histograms and late/missed warning counts.",
+        "expected_signal": "Improved timely detection and fewer missed warnings when missing data is flagged rather than imputed for dropout faults.",
+        "if_signal_observed": "Supports hypothesis that naive input handling of dropout faults causes late or missed warnings (hypothesis 1).",
+        "if_signal_absent": "Suggests threshold/decision logic or feature extraction rather than input handling cause dropout detection shortfalls.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-2",
+          "pattern-3",
+          "pattern-6"
+        ]
+      },
+      {
+        "title": "Threshold sensitivity sweep on stuck fault traces",
+        "procedure": "Systematically vary detection thresholds for stuck faults in model-2 and observe effects on timely detection fraction and false alarm rate in replayed stuck fault simulations.",
+        "expected_signal": "Lowering thresholds reduces missed or late warnings on stuck faults but may increase false alarms.",
+        "if_signal_observed": "Supports that threshold setting influences stuck fault detection shortfalls rather than model input features (hypothesis 2 alternative).",
+        "if_signal_absent": "Indicates possible feature representation or model inability to detect stuck faults timely (hypothesis 2 direct).",
+        "observation_ids": [
+          "pattern-4",
+          "pattern-5",
+          "pattern-7"
+        ]
+      },
+      {
+        "title": "Feature-response comparison between drift and abrupt faults",
+        "procedure": "Analyze model feature activations or decision scores on fault traces exhibiting drift versus abrupt dropout or stuck faults to quantify sensitivity differences.",
+        "expected_signal": "Features or scores show stronger, more consistent responses on drift fault traces than abrupt faults.",
+        "if_signal_observed": "Supports that model is tuned or inherently more sensitive to gradual drift faults over abrupt faults (hypothesis 3).",
+        "if_signal_absent": "Indicates factors beyond feature sensitivity affect detection differences between fault types, such as fault signature variability.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-10",
+          "pattern-15",
+          "pattern-20"
+        ]
+      }
+    ]
+  },
+  "inspected_ids": [
+    "pattern-1",
+    "pattern-2",
+    "pattern-3",
+    "pattern-4",
+    "pattern-5",
+    "pattern-6",
+    "pattern-7",
+    "pattern-8",
+    "pattern-9",
+    "pattern-10",
+    "pattern-11",
+    "pattern-12",
+    "pattern-13",
+    "pattern-14",
+    "pattern-15",
+    "pattern-16",
+    "pattern-17",
+    "pattern-18",
+    "pattern-19",
+    "pattern-20",
+    "pattern-21",
+    "pattern-22",
+    "pattern-23",
+    "pattern-24"
+  ],
+  "aliases": [
+    "channel-12",
+    "channel-14",
+    "channel-15",
+    "channel-16",
+    "channel-3",
+    "channel-4",
+    "channel-5",
+    "channel-6",
+    "channel-7",
+    "channel-8",
+    "channel-9",
+    "model-1",
+    "model-2"
+  ]
+}

@@ -214,6 +214,18 @@ class ExperimentProtocol(Strict):
         return self
 
 
+class ExperimentEngineerContext(Strict):
+    """Optional editable descriptions. Never training inputs or verified evidence."""
+    equipment_type: str = Field(default="", max_length=200)
+    sensor_meaning: str = Field(default="", max_length=500)
+    decision: str = Field(default="", max_length=2000)
+
+    @field_validator("equipment_type", "sensor_meaning", "decision", mode="before")
+    @classmethod
+    def trim(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
 class PilotBrief(Strict):
     equipment_family: str = Field(default="", max_length=200)
     reviewing_engineer: str = Field(default="", max_length=200)
@@ -561,6 +573,28 @@ class ReproducibilityCheck(Strict):
     reproduced: bool
 
 
+class RecordedPreprocessing(Strict):
+    partition: Partition = Partition.out_of_fold
+    feature_window: int
+    feature_kinds: list[str]
+    imputation: str
+    missingness: str
+    all_missing_fill: str
+    fitting_scope: str
+    scaling: dict[str, str]
+
+
+class FoldFaultSummary(Strict):
+    candidate: str
+    scenario_id: str
+    partition: Partition = Partition.out_of_fold
+    fold: int
+    equipment_count: int
+    detected: int
+    late: int
+    missed: int
+
+
 class EvidenceBundle(Strict):
     schema_version: int = 1
     experiment_id: str | None = None
@@ -592,6 +626,8 @@ class EvidenceBundle(Strict):
     frozen_model: FrozenModelRecord | None = None
     validation: ValidationRecord | None = None
     pilot_review: PilotReviewRecord | None = None
+    preprocessing: RecordedPreprocessing | None = None
+    fold_fault_summaries: list[FoldFaultSummary] = Field(default_factory=list)
 
 
 class JobStatus(str, Enum):
@@ -631,6 +667,7 @@ class ExperimentCreate(Strict):
     max_early_alarm_burden: float = Field(default=0.10, ge=0, le=1)
     protocol: ExperimentProtocol | None = None
     pilot_brief: PilotBrief | None = None
+    engineer_context: ExperimentEngineerContext | None = None
 
 
 class ValidationCreate(Strict):

@@ -121,7 +121,7 @@ export interface AnalysisRecord {
 }
 
 export interface AnalysisRequest {
-  task: "investigate" | "compare" | "warning" | "brief" | "data";
+  task: "investigate" | "compare" | "warning" | "brief" | "data" | "deep";
   experiment_id?: string | null;
   dataset_id?: string | null;
   mapping?: ColumnMapping | null;
@@ -131,6 +131,8 @@ export interface AnalysisRequest {
   scenario_id?: string | null;
   equipment_id?: string | null;
   cycle?: number | null;
+  engineer_context?: DeepEngineerContext | null;
+  investigation_focus?: string | null;
 }
 
 export interface AnalysisResult {
@@ -152,6 +154,7 @@ export interface AnalysisResult {
   assessment?: AnalysisClaim[];
   investigation?: InvestigationCall[];
   suggested_mapping?: ColumnMapping | null;
+  deep_report?: DeepReport | null;
 }
 
 export interface AnalysisStage {
@@ -169,6 +172,7 @@ export interface AssistantCapabilities {
   consent_granted: boolean;
   mode: "full" | "demo" | "replay";
   note: string;
+  deep_available?: boolean;
 }
 
 export interface BriefUpdate {
@@ -299,6 +303,58 @@ export interface DecisionReport {
   partition?: Partition;
 }
 
+export interface DeepEngineerContext {
+  equipment_type?: string;
+  sensor_meaning?: string;
+  decision?: string;
+}
+
+export interface DeepHypothesis {
+  title: string;
+  explanation: string;
+  observation_ids: string[];
+  alternative: string;
+}
+
+export interface DeepObservation {
+  kind?: "fault_pattern" | "supporting";
+  id: string;
+  title: string;
+  text: string;
+  source_ids: string[];
+  /** Concise server-owned recorded facts, separate from AI hypotheses. */
+  summary?: string | null;
+  related_pattern_ids?: string[];
+}
+
+export interface DeepReport {
+  summary: string;
+  hypotheses: DeepHypothesis[];
+  gaps: string[];
+  next_tests: DeepTest[];
+  explanation_status?: "retained" | "abstained" | "rejected" | null;
+  observations: DeepObservation[];
+  inspected_cases: number;
+  pattern_count: number;
+  request_count?: number;
+  latency_seconds: number;
+  limitations: string[];
+}
+
+export interface DeepTest {
+  title: string;
+  procedure: string;
+  expected_signal: string;
+  interpretation: string;
+  observation_ids: string[];
+  model?: string | null;
+  check_type?: "score_persistence" | "preprocessing_audit" | "sensor_quality" | "threshold_sensitivity" | "recorded_attribution" | "fold_variation" | null;
+  focus?: string | null;
+  readiness?: "inspect_now" | "needs_evidence" | null;
+  prerequisites?: string[];
+  controls?: string[];
+}
+
 export interface EngineOutcome {
   equipment_id: string;
   detected: boolean;
@@ -339,6 +395,8 @@ export interface EvidenceBundle {
   frozen_model?: FrozenModelRecord | null;
   validation?: ValidationRecord | null;
   pilot_review?: PilotReviewRecord | null;
+  preprocessing?: RecordedPreprocessing | null;
+  fold_fault_summaries?: FoldFaultSummary[];
 }
 
 export interface EvidenceReference {
@@ -366,6 +424,7 @@ export interface ExperimentCreate {
   max_early_alarm_burden?: number;
   protocol?: ExperimentProtocol | null;
   pilot_brief?: PilotBrief | null;
+  engineer_context?: ExperimentEngineerContext | null;
 }
 
 export interface ExperimentDetail {
@@ -392,6 +451,12 @@ export interface ExperimentDetail {
   operation_id?: string | null;
   pilot_brief?: PilotBrief | null;
   display_name?: string | null;
+}
+
+export interface ExperimentEngineerContext {
+  equipment_type?: string;
+  sensor_meaning?: string;
+  decision?: string;
 }
 
 export interface ExperimentProtocol {
@@ -448,6 +513,17 @@ export interface FaultSpec {
   /** Transient length in cycles. */
   length?: number | null;
   seed?: number | null;
+}
+
+export interface FoldFaultSummary {
+  candidate: string;
+  scenario_id: string;
+  partition?: Partition;
+  fold: number;
+  equipment_count: number;
+  detected: number;
+  late: number;
+  missed: number;
 }
 
 export interface FrozenModelRecord {
@@ -622,6 +698,17 @@ export interface ProfileFinding {
   severity: Severity;
   message: string;
   detail?: Record<string, unknown>;
+}
+
+export interface RecordedPreprocessing {
+  partition?: Partition;
+  feature_window: number;
+  feature_kinds: string[];
+  imputation: string;
+  missingness: string;
+  all_missing_fill: string;
+  fitting_scope: string;
+  scaling: Record<string, string>;
 }
 
 export interface ReliabilityBin {

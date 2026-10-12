@@ -1,7 +1,8 @@
-"""Evaluate every assistant task for usefulness without training or changing evidence.
+"""Evaluate local analysis and the retired claim-selection engine.
 
 Offline by default. --live explicitly enables provider calls with the server's .env.
 CSV fixtures use a temporary workspace; no uploaded data or training jobs are used.
+This is legacy regression coverage, not evaluation of a replacement deep investigation.
 """
 from __future__ import annotations
 
@@ -206,7 +207,7 @@ async def evaluate(live, selected):
                 agent.AsyncOpenAI = meter.original
         with workspace.connect() as db:
             no_training = db.execute("SELECT COUNT(*) FROM experiments").fetchone()[0] == 0
-    return {"mode": "live" if live else "offline", "model": settings.assistant_model if live else None,
+    return {"engine": "legacy_claim_selection" if live else "local_evidence", "mode": "live" if live else "offline", "model": settings.assistant_model if live else None,
         "prompt_version": PROMPT_VERSION, "evidence_unchanged": bundle.model_dump_json() == original,
         "no_training_jobs": no_training, "cases": report}
 

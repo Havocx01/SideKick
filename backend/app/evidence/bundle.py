@@ -59,6 +59,8 @@ def build_bundle(
         replaySeries.extend(_build_replay(result, name, result.thresholds[name], min(3, replay_engines), replay_fault, config))
     explanations = _build_explanations(result, candidateName, replaySeries)
     from app.scoring.paired import paired_comparisons
+    from app.evidence.diagnostics import recorded_diagnostics
+    preprocessing, fold_summaries = recorded_diagnostics(result)
 
     return EvidenceBundle(
         schema_version=3,
@@ -85,6 +87,8 @@ def build_bundle(
         reproducibility=reproducibility,
         limitations=list(LIMITATIONS),
         paired_comparisons=paired_comparisons(result),
+        preprocessing=preprocessing,
+        fold_fault_summaries=fold_summaries,
         protocol=ExperimentProtocol(
             min_useful_lead=config.min_useful_lead, horizon_cycles=config.horizon_cycles,
             transition_band_end=config.transition_band_end, min_detection_fraction=config.min_detection_fraction,

@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from openai import APIConnectionError, APIStatusError, AuthenticationError, PermissionDeniedError, RateLimitError
 
+from app.assistant.deep import DeepVerificationError
 from app.assistant.schemas import AnalysisRecord, AnalysisStage
 from app.assistant.store import AssistantStore, RESULT_GROWTH_BYTES, AnalysisRevokedError
 
@@ -75,10 +76,24 @@ class AssistantService:
             result = loaded.result
         else:
             result = build_analysis(loaded, normalized_context(context))
+        deep_digest = None
+        if context.task == "deep":
+            from app.assistant.deep import collect_deep_evidence
+            from app.assistant.investigation import EvidenceTools
+            _, packet, _, _ = collect_deep_evidence(EvidenceTools(loaded, context, result))
+            deep_digest = hashlib.sha256(json.dumps(packet, sort_keys=True).encode()).hexdigest()
+        context_data = normalized_context(context).model_dump(mode="json")
+        if context.engineer_context is None:
+            context_data.pop("engineer_context")
+        if context.investigation_focus is None:
+            context_data.pop("investigation_focus")
         draft = hashlib.sha256(json.dumps({"evidence": result.evidence_digest,
-            "context": normalized_context(context).model_dump(mode="json")}, sort_keys=True).encode()).hexdigest()
+            **({"diagnostics": deep_digest} if deep_digest else {}),
+            "context": context_data}, sort_keys=True).encode()).hexdigest()
         # Hash the actual prompt and server tool/output contracts, including task-specific data rules.
         contracts = ["agent.py", "investigation.py", "evidence.py", "schemas.py"]
+        if context.task == "deep":
+            contracts.extend(["deep.py", "deep_support.py", "diagnostic_checks.py"])
         if context.task == "data":
             contracts.append("data_review.py")
         version = hashlib.sha256(b"".join((Path(__file__).parent / name).read_bytes() for name in contracts)).hexdigest()
@@ -87,6 +102,16 @@ class AssistantService:
                     "prompt": investigation.PROMPT_VERSION, "instruction": agent.INSTRUCTION,
                     "provider": "openai" if live else "evidence", "model": self.settings.assistant_model if live else None}
         return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(), draft, result.evidence_digest
+
+    def historical_deep(self, loaded, context, owner):
+        """Adding recorded inputs must not automatically pay to replace old reports."""
+        if context.engineer_context is not None or context.investigation_focus is not None or context.task != "deep":
+            return None
+        from app.assistant.evidence import build_analysis
+        result = build_analysis(loaded, context)
+        context_data = normalized_context(context).model_dump(mode="json", exclude={"engineer_context", "investigation_focus"})
+        legacy = hashlib.sha256(json.dumps({"evidence": result.evidence_digest, "context": context_data}, sort_keys=True).encode()).hexdigest()
+        return self.store.latest_scoped(owner, legacy)
 
     @staticmethod
     def restore(record, context, title):
@@ -99,15 +124,42 @@ class AssistantService:
         return restored
 
     async def create(self, loaded, context, owner, consent_required, reuse=False):
+        """Routine app actions use recorded evidence; permission never admits paid work."""
+        if reuse and self.settings.mode == "full" and context.task == "brief" and not context.equipment_id and not context.scenario_id and context.cycle is None:
+            deep_context = context.model_copy(update={"task": "deep"})
+            fingerprint, draft, _ = self.identities(loaded, deep_context, True)
+            saved = self.store.latest(owner, fingerprint) or self.store.latest_scoped(owner, draft) or self.historical_deep(loaded, deep_context, owner)
+            if saved and not self.output_access_reason(owner, context.consent_scope, consent_required):
+                if saved.status in {"running", "queued"} and saved.context.task == "deep":
+                    return saved.model_copy(update={"reused": True})
+                if saved.result and saved.result.deep_report:
+                    converted = self.restore(saved, context, "Review brief")
+                    return self.store.convert_review(converted, owner)
+        if context.task == "deep":
+            if self.settings.mode != "full":
+                raise PermissionError("Deep investigation is available in a local workspace. Recorded evidence remains available here.")
+            reason = self.output_access_reason(owner, context.consent_scope, consent_required)
+            if reason:
+                raise PermissionError(reason)
+            return await self._create(loaded, context, owner, consent_required, reuse=reuse, live=True)
+        return await self._create(loaded, context, owner, consent_required, reuse=reuse, live=False)
+
+    async def _create_legacy_live(self, loaded, context, owner, consent_required, reuse=False):
+        """Internal legacy regression seam. Never expose through application routes."""
+        return await self._create(loaded, context, owner, consent_required, reuse=reuse, live=True)
+
+    async def _create(self, loaded, context, owner, consent_required, *, reuse, live):
         from app.assistant.investigation import EvidenceTools
         if self.settings.mode in {"demo", "replay"}:
             self.store.expire_public()
         tools = loaded if context.task == "data" else EvidenceTools(loaded, context)
-        reason = self.live_reason(owner, context.consent_scope, consent_required)
-        fingerprint, draft_fingerprint, evidence_digest = self.identities(loaded, context, not reason)
+        reason = self.live_reason(owner, context.consent_scope, consent_required) if live else None
+        fingerprint, draft_fingerprint, evidence_digest = self.identities(loaded, context, live and not reason)
         if reuse:
-            saved = self.store.latest(owner, fingerprint) or self.store.latest_scoped(owner, draft_fingerprint)
-            if saved and not reason and saved.result and saved.result.mode == "evidence" and saved.result.fallback_reason in {
+            saved = self.store.latest(owner, fingerprint) or self.store.latest_scoped(owner, draft_fingerprint) or self.historical_deep(loaded, context, owner)
+            if not live and saved and saved.status in {"queued", "running"}:
+                saved = None  # A routine action never joins legacy provider work.
+            if live and saved and not reason and saved.result and saved.result.mode == "evidence" and saved.result.fallback_reason in {
                 "Enable AI analysis for this workspace.", "Cloud analysis is off for this experiment.",
             }:
                 saved = None  # Explicit approval upgrades a permission fallback once.
@@ -121,7 +173,10 @@ class AssistantService:
                         saved.brief_text = None
                         saved.brief_saved_at = None
                     return self.restore(saved, context, tools.result.title)
-        liveTools = tools.fresh()
+        if context.task == "deep" and reason:
+            if not self.settings.assistant_live_enabled or not self.settings.openai_api_key:
+                reason = "Deep investigation needs OPENAI_API_KEY and SIDEKICK_ASSISTANT_LIVE_ENABLED=1 in the server environment. Restart Sidekick after changing them."
+            raise PermissionError(reason)
         result = tools.local()
         now = time.time()
         record = AnalysisRecord(id=str(uuid4()), context=context, status="completed", created_at=now, updated_at=now,
@@ -138,14 +193,15 @@ class AssistantService:
             if draft.brief_text != generated:
                 record.brief_text = draft.brief_text
                 record.brief_saved_at = draft.brief_saved_at
-        if not reason and self.tasks:
+        if live and not reason and self.tasks:
             reason = "Another live analysis is running. Recorded evidence is ready."
-        if reason:
+        if reason or not live:
             record.result.fallback_reason = reason
             record.cache_fingerprint = self.identities(loaded, context, False)[0]
             self.store.save(record, owner, public=self.settings.mode in {"demo", "replay"}, brief_origin=draft_origin if record.brief_text is not None else None)
             return record
         record.status = "running"
+        liveTools = tools.fresh()
         record.stages[1].status = "running"
         record.stages[2].status = "pending"
         self.store.save(record, owner, public=self.settings.mode in {"demo", "replay"}, brief_origin=draft_origin if record.brief_text is not None else None)
@@ -177,6 +233,9 @@ class AssistantService:
         except TimeoutError:
             record.status = "completed"
             record.result.fallback_reason = "Live analysis timed out. Showing recorded evidence."
+        except DeepVerificationError as error:
+            record.status = "completed"
+            record.result.fallback_reason = f"AI response failed verification: {error.reason}. Showing recorded evidence."
         except ValueError:
             record.status = "completed"
             record.result.fallback_reason = "Live analysis failed verification. Showing recorded evidence."

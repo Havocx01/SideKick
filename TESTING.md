@@ -154,6 +154,8 @@ The script requires cgroup v2. It checks the hosted sample, its export and brows
 
 ## Local workspace AI permission verification
 
+The automatic generation behavior verified on 10 October was retired on 11 October. The permission persistence and revocation checks still apply; public routine actions now remain local regardless of permission. See the current checks below.
+
 The 10 October permission update uses one explicit server-persisted approval for all local analysis contexts. Legacy scoped approvals are not silently promoted. Hosted demo and replay retain their existing restrictions, and saved analysis ownership remains unchanged. Turning permission off atomically clears cloud/unknown output and cancels active jobs while preserving evidence-only drafts; reapproval cannot resurrect revoked output.
 
 Verification uses mocked provider responses and isolated browser workspaces, with no paid AI, training or reserved-validation requests. The focused assistant API/workspace suite passed 55 tests. The 38 relevant browser checks cover permission persistence, failures, one-time upgrade and reuse, cross-window revocation, analysis recovery, animations, both themes and 390 px layout. Restart persistence and all-owner revocation are covered at the SQLite/service boundary, including historical contracts and late writes. Dialog screenshots are saved locally under ignored `output/playwright/workspace-ai-*.png`.
@@ -167,6 +169,136 @@ $env:SIDEKICK_TEST_PYTHON = (Resolve-Path '.venv/Scripts/python.exe').Path
 Set-Location frontend
 npm test -- tests/workspace-ai-permission.spec.ts tests/analysis-recovery.spec.ts tests/investigation.spec.ts tests/ui-regressions.spec.ts tests/motion-preference.spec.ts --reporter=line
 ```
+
+## Routine local analysis verification
+
+The 11 October cleanup enforces zero provider admission on every routine action: result analysis, comparison, replay explanation, CSV review and brief creation/conversion. A key, presenter unlock, workspace permission or retry cannot enable paid generation through those routine tasks. The subsequent deep-investigation update below adds an explicit `deep` action; the earlier cleanup did not include it.
+
+Verification passed 268 offline backend tests (one native Windows symlink permission skip and three integration tests deselected), including 17 new routine boundary cases. Those cases cover all model actions in full/demo/replay, actual synthetic CSV registration without training, unchanged mapping/dataset records, denied request fields, permission toggling, saved cloud reuse/brief/export/revocation and separation from an active mocked legacy job. Existing legacy-provider safeguards are exercised explicitly internally rather than treating public generation as supported.
+
+The 39 relevant browser checks passed with fixture records, including saved AI labels, access recovery using GET only, absent AI setup in ordinary panels, brief reuse, failure recovery, keyboard/settings behavior, both themes, 390 px layout and animations. Ruff, lint, TypeScript, exact generated-type comparison, seven protocol tests and the production build passed. Twelve offline explanation cases retained essential facts, concrete checks and scope with zero provider requests. Existing bundle-size/dependency deprecation advisories remain. No paid provider requests, training or reserved-validation jobs were launched.
+
+```powershell
+$env:SIDEKICK_ASSISTANT_LIVE_ENABLED = '0'
+$env:SIDEKICK_ASSISTANT_LIVE_EVAL = '0'
+.venv\Scripts\python.exe -m pytest tests/test_routine_analysis.py tests/test_assistant_api.py tests/test_workspace_ai_consent.py tests/test_assistant_data.py -q
+.venv\Scripts\python.exe scripts/evaluate_assistant.py --output output/routine-analysis-offline-evaluation.json
+$env:SIDEKICK_TEST_PYTHON = (Resolve-Path '.venv/Scripts/python.exe').Path
+Set-Location frontend
+npm test -- tests/workspace-ai-permission.spec.ts tests/analysis-recovery.spec.ts tests/investigation.spec.ts tests/ui-regressions.spec.ts tests/motion-preference.spec.ts --reporter=line
+```
+
+The legacy evaluation script's explicit live switches still send paid provider requests and require separate authorization. Its output identifies the evaluated engine; successful legacy selection is not proof of the new deep report's usefulness. Saved schemas, IDs, evidence, ownership and provenance were preserved, with no migration or data deletion.
+
+## Deep investigation verification
+
+The explicit local-workspace `deep` task uses server-computed fault patterns followed by one structured model request. Mocked-provider tests cover consent admission, replay restrictions, aliased inputs, quantitative/URL/approval rejection, tentative explanations, conditional next tests, cited observations, missing coverage, comparisons, active-job reuse with brief switching, server restart, key removal, historical currency, editing, export and revocation. Ordinary tasks remain evidence-only. The frontend uses fixture reports for permission failures, loading, close/reopen without incidental cancellation, references, brief conversion, theme and mobile layout checks.
+
+```powershell
+$env:SIDEKICK_ASSISTANT_LIVE_ENABLED = '0'
+$env:SIDEKICK_ASSISTANT_LIVE_EVAL = '0'
+.venv\Scripts\python.exe -m pytest tests/test_deep_investigation.py tests/test_routine_analysis.py -q
+$env:SIDEKICK_TEST_PYTHON = (Resolve-Path '.venv/Scripts/python.exe').Path
+Set-Location frontend
+npm test -- tests/deep-investigation.spec.ts tests/analysis-recovery.spec.ts tests/investigation.spec.ts tests/workspace-ai-permission.spec.ts --reporter=line
+```
+
+Run browser checks after the production build completes, and do not replace built assets while the fixture server is serving a suite. These offline checks establish contract and lifecycle behavior, not actual model usefulness or improved engineer decisions. No paid provider evaluation belongs in normal CI.
+
+11 October closeout: 284 backend tests passed (one Windows symlink permission skip, three integration tests excluded), including 16 deep cases and the long-brief size boundary; generated types, Ruff, frontend lint/types, seven protocol cases, production build and twelve offline routine cases passed. The broad browser run passed 40 of 45 cases. Four new route-fixture failures were fixed, and the animation fixture now prepares its real response before releasing the animation gate. The fresh nine-case deep/motion rerun passed, verifying all 45 relevant cases across runs. A concurrent fixture-startup attempt timed out; the final ordinary configuration started successfully after the backend checks finished. Application animations were unchanged. No paid AI, training, reserved scoring, commit or deployment occurred.
+
+## Analysis and brief presentation repair (11 October 2026)
+
+The review editor fills its card and uses the current themed surface. Completed traces omit elapsed time because the record update timestamp also changes on saves, conversion and permission updates. Genuine revoked AI output has a neutral notice; unrelated request and save errors still show inline alerts. Only a permitted deep investigation offers a retry from that notice.
+
+Revocation leaves completed, proven evidence-only results and drafts unchanged. Startup repairs the old false consent notice only for compatible completed local records with proven local draft provenance and no revocation tombstone. Cloud and unknown origins, real tombstones, recorded results, identifiers and timestamps remain intact.
+
+Focused verification uses fixture records and no live provider requests:
+
+```powershell
+.venv/Scripts/python.exe -m pytest tests/test_workspace_ai_consent.py tests/test_assistant_api.py tests/test_deep_investigation.py tests/test_routine_analysis.py -q --tb=short
+npm --prefix frontend run build
+$env:SIDEKICK_TEST_PYTHON = (Resolve-Path .venv/Scripts/python.exe).Path
+npm --prefix frontend run test -- analysis-presentation.spec.ts analysis-recovery.spec.ts deep-investigation.spec.ts workspace-ai-permission.spec.ts investigation.spec.ts
+```
+
+Build before browser checks and leave the built files unchanged while the fixture server is running. Presentation coverage includes full editor width, themed background, keyboard focus and no horizontal overflow at 390 and 1280 pixels in both themes. Lifecycle suites cover permission checks, saved IDs, draft revision races and explicit retries. Session results are recorded in `output/analysis-presentation-verification.json`.
+
+## Deep investigation verification repair (11 October 2026)
+
+Offline regression fixtures reproduce alias-prefix rejection (`channel-10` versus `channel-1`), capitalization differences, and rejection of legitimate diagnostic checks. Verification now masks and resolves only complete known aliases, consistently ignores alias casing, and distinguishes a diagnostic check from an asserted diagnosis. Unknown references, invented numbers, unsupported conclusions and invalid citations remain rejected. Provider validation failures return fixed safe explanations without saving or exposing provider prose. Fallback traces say **Recorded evidence ready** rather than implying that an AI report completed.
+
+The screenshot's original rejected provider output was not retained, so these reproduced defects cannot establish which rule rejected that particular response. No live requests or automatic retries were used to investigate or verify the repair. Actual provider quality remains unmeasured.
+
+The focused backend command above covers the repair and access/lifecycle boundaries. Browser verification runs `npm --prefix frontend run test -- deep-investigation.spec.ts analysis-presentation.spec.ts` after the production build, with offline route fixtures. Session results are recorded in `output/deep-verification-fix-verification.json`.
+
+## Deep test outcome contract repair (11 October 2026)
+
+The subsequent failure identified the conditional-outcome verifier. Its prose keyword check could reject useful outcome explanations that omitted its small list of recognized words. The `sidekick-deep-v3` provider-only contract now requires separate `if_signal_observed` and `if_signal_absent` explanations. The server supplies explicit conditional framing and stores the existing `interpretation` field, preserving saved reports, review briefs, exports and generated public types. No migration or model change is needed. This follows the SDK's [structured-output schema guidance](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses).
+
+Offline coverage includes both the recorded recommended augmented model and a logistic model, useful wording without the old keywords, required outcome fields, whitespace and duplicate rejection, unsupported causal conclusions, and the stored-text length boundary. Existing citation, numerical-claim, alias, privacy, consent, restart and brief checks remain in force. Exactly one mocked request is admitted; no provider retry was added. The original rejected prose was not retained, and actual provider success and usefulness are not established by these fixtures. Session results are recorded in `output/deep-outcomes-fix-verification.json`.
+
+## Deep citation contract repair (11 October 2026)
+
+The next screenshot identified a citation rejection. The previous provider schema allowed arbitrary strings for `observation_ids`; the prompt alone asked the model to choose inspected patterns. `sidekick-deep-v4` now builds a request-scoped response schema whose allowed citation values are exactly the observation IDs in the bounded evidence packet. Both hypotheses and proposed tests use those choices. The stored/public report shape remains unchanged. Repeated valid citations are deduplicated in their original order before verification; invented or out-of-scope IDs remain rejected, with a safe citation error and no automatic retry. Citations establish relevance to inspected observations, not the truth of a hypothesis.
+
+Regression coverage inspects the SDK's strict schema for single and multiple observation sets, checks request isolation, accepts repeated valid citations, and rejects unknown references in both report sections. An additional test uses the installed `AsyncOpenAI` SDK with an HTTP mock transport to serialize the actual Responses request and parse a recommended augmented-model report. It checks the sent citation choices, one request, `store=false`, and the existing conditional-outcome conversion. This goes beyond replacing the provider client with a fake parser. The transport uses only a fixture key and cannot reach the provider.
+
+Run the focused backend command in the presentation-repair section plus Ruff and generated-type consistency. The frontend and stored report schemas did not change in this repair, so the prior production build and eleven presentation/deep browser checks remain applicable; they are not newly claimed live-provider evidence. The original rejected prose was not retained, and these offline checks do not establish live success or engineer usefulness. Session results are recorded in `output/deep-citations-fix-verification.json`.
+
+## Live deep-investigation repair (11 October 2026)
+
+The user authorized at most five paid diagnostic requests. All five were recorded before admission, with SDK retries disabled, the existing model snapshot and `store=false`. They cost an estimated **$0.0123196** using the model's published input/output token prices, before any caching discount. The hard request limit was not exceeded; subsequent checks replayed captured responses without constructing a provider client.
+
+Actual responses exposed brittle wording checks: legitimate uncertainty about deployment was treated as approval, and a procedure describing missing readings caused by simulated dropout was treated as a physical diagnosis. The tentative-explanation check also depended on particular words. `sidekick-deep-v7` supplies explicit hypothesis framing on the server, requires structured conditional outcomes and scoped citation choices, and reserves the summary/verdict for the server. It supplies recorded protocol boundaries, metric definitions and the actual warning-shortfall focus so the model does not confuse passing case limits with perfect detection or early-alarm burden with useful lead. Only the known missing-readings/dropout relationship is exempted from the causal wording check when dropout is present in the inspected evidence. Physical failure diagnoses, deployment approval, invented numbers/links and invalid references remain rejected.
+
+The recommended **Augmented XGBoost · aug3** completed live in **5.31 seconds**, with no fallback, preserved evidence, saved-report reuse and review-brief conversion. The fifth response, for the failing **logistic regression · lr2**, exposed the remaining dropout false rejection. After that final narrow repair, both exact captured responses completed through the real API/save/reopen/brief pipeline without further paid requests. The latter is captured-response verification, not a sixth live request. Two pseudonymous qualitative provider responses are retained as offline regression fixtures; credentials and raw readings are excluded.
+
+The fresh relevant backend gate passed **124 tests**. Ruff and exact generated-type comparison passed; stored/public types and database schema did not change. Playwright CLI displayed both captured real reports and their unchanged AI content in review briefs, checked visible expanded evidence, absence of errors and horizontal overflow at 1280 px dark and 390 px light. All assistant endpoints were intercepted during these four UI checks, admitting zero additional provider requests and making no changes to the user's saved jobs. The earlier frontend build remains applicable because this repair changes only backend behavior and tests.
+
+Receipts and the five-request ledger are in ignored `output/deep-live-repair-20261011/`. Existing evidence and user data were preserved; no training, reserved scoring, commit or deployment occurred. Ordinary `tasks.ps1 api` does not reload backend source, so restart it to load this repair. Existing saved failures remain historical and do not automatically regenerate. These checks establish the repaired contract and observed provider success, not improved engineer decisions or a guarantee that every future provider response will pass verification.
+
+## Deep report layout polish (11 October 2026)
+
+Deep investigation now opens with the tentative explanation associated with the server's highest-priority test, followed by that visible recommended check. The alternative explanation remains visible. Conditional outcomes, other explanations/checks, uncertainty and full recorded patterns stay available through keyboard-accessible disclosures. Stored reports, briefs, exports, provider admission and hypothesis ordering on the server are unchanged.
+
+Every deep disclosure uses the shared inset content wrapper, including recorded references, pattern lists and scope. The shared analysis-panel padding also covers ordinary evidence, limitations, analysis records and review supporting evidence. Pattern text no longer touches the panel edge. Long content wraps, conditional outcome line breaks remain readable, and the existing theme/motion controls are retained.
+
+Fresh lint, TypeScript/production build and **15 browser tests** passed: deep report, analysis/brief presentation and motion-preference suites. New assertions check the visible first finding/check order, priority association without treating hypotheses as proven, collapsed supporting content, keyboard access and at least 16 px of left/right pattern inset at 390/1280 px in both themes. The initial desktop inset failures were corrected by increasing the shared padding, with no weaker assertion. Four additional intercepted UI checks used both captured provider reports; no new paid requests, training or scoring occurred. Build retained the existing large-chunk advisory. The design scan's existing neutral loading-shimmer warning is outside this refinement and was preserved intentionally. Receipt and screenshots: ignored `output/deep-ui-polish-20261011/`.
+
+## Deep comparison repair (11 October 2026)
+
+The user authorized four paid diagnostic requests for the aug3/lr2 comparison. Exactly four were admitted, with no provider retries and an estimated token cost of $0.0103096. The second request reproduced the screenshot's rejection: valid references such as `hypothesis 1` were mistaken for invented measurements. Verification now accepts only references to existing hypotheses in the same report. Unknown indices, decimal/percentage values, invented measurements, links and unsupported conclusions remain rejected.
+
+The comparison evidence packet also previously selected all 24 patterns from lr2. Prompt v8 reserves space for both selected models, retaining failure-first ranking within the balanced subset and the existing input ceiling. Unused slots transfer to models with available patterns; no missing evidence is invented. Per-model supplied/available counts disclose the subset. Single-model ordering, stored/public schemas and recorded metrics remain unchanged.
+
+The final two requests completed live in both selection orders (5.56 and 5.20 seconds), each with 12 recorded patterns per model, unchanged evidence, saved-report reopen and brief conversion. Their exact packets and qualitative responses are offline regression fixtures. The original rejected response has a separate validator-only fixture with its original citation scope; it is never reinterpreted against the new packet.
+
+Fresh verification: **136 relevant backend tests passed**, Ruff passed across backend/app, tests and scripts, and generated types match exactly. Four Playwright CLI checks displayed captured real comparison reports and briefs at dark 1280 px and light 390 px, with no error or horizontal overflow. These checks intercepted every assistant route, admitted zero additional paid requests and changed no user records. Two browser fixture setup issues (missing compare capability and saved-record GET) were repaired before the successful rerun. Frontend source and built assets were unchanged by this backend repair.
+
+Receipts, captures, screenshots and the hard four-request ledger are in ignored `output/deep-comparison-repair-20261011/`. No training, reserved scoring, migration, commit or deployment. Restart `tasks.ps1 api` to load the fix, then explicitly retry the failed comparison; saved failures do not regenerate automatically. Observed provider success does not establish causal truth or improved engineer decisions.
+
+## Richer deep investigation inputs (11 October 2026)
+
+Deep prompt v9 uses bounded supporting records: clean/faulted outcomes for an exactly matched model, history, partition, threshold and cycle axis; useful-window score margins, threshold crossings, streaks and warning transitions; recorded preprocessing methods; affected-channel quality; recorded fold outcomes; and matched clean-prediction contributions. History and fold identities use aliases. No raw reading arrays, feature reading values or serialized fitted models enter the provider packet. Examples are selected, repeated fault outcomes are not independent equipment, original profile statistics may include reserved records, and clean contributions do not explain faulted predictions or physical causes. Missing historical preprocessing/fold metadata is explicitly unavailable. New bundles capture those methods and already computed outcomes without launching execution or changing recorded scalar results.
+
+Optional equipment type, sensor meaning and decision fields use existing Arc controls beside the deep action. They are deliberately sent, unverified context; automatic pilot/contact copying remains excluded. Empty fields preserve context identity; changed context has a separate identity. Supporting evidence can be cited and inspected under **Additional recorded inputs**. Supplemental facts participate in currency checks. Legacy saved reports reuse their existing IDs without paid regeneration, including conversion to a brief.
+
+Fresh verification: **347 offline backend tests passed**, one skipped and three integration cases excluded. Fifteen new regression cases cover pairing mismatches, actual capture, fold partition scope, matched contributions, missing values, streak gaps, input bounds, context validation/identity, legacy reuse and one mocked provider request through brief conversion. Ruff, exact generated types, frontend lint, TypeScript/production build and all seven protocol tests passed. Browser checks covered 36 distinct deep/presentation/recovery/permission/motion cases: 35 first-run passes, then all seven deep cases passed after fixing a new test-only async request-capture race. Context inputs and supporting panels fit at 390/1280 px in light/dark themes; focus and saved IDs/request counts remain asserted. The mobile report screenshot was inspected. Existing deprecation/chunk advisories remain.
+
+No paid requests, actual training jobs, reserved-validation jobs, data migrations, historical evidence edits, commits or deployment. The isolated browser server disabled live AI. Receipts are in ignored `output/deep-evidence-inputs-20261011/`; restart `tasks.ps1 api` to load the backend. Enriched evidence is available to new investigations. This verification establishes input correctness and lifecycle behavior; improved engineer decisions remain unmeasured.
+
+## Final deep checks and polish (11 October 2026)
+
+The minimal live check used exactly **two paid requests**, with SDK retries disabled and a hard two-request/$0.10 admission ledger. Estimated total cost was **$0.006958**. Both ran against the recorded aug3/lr2 comparison with sample engineer context in isolated temporary storage. The first v9 answer invented augmented input features and confirmed a hypothetical test outcome. The v10 verification call still contained unsupported superiority and raw-score comparison claims, plus numbered pattern references in prose. No third request was made.
+
+Prompt/verification v11 distinguishes augmentation of training examples from added feature columns. It accepts only bounded prose references to the same item's exact cited patterns, while retaining the guards against measurements, unknown references, physical diagnoses and approval. Independently safe sections may be retained; unsafe sections are omitted and disclosed in report limitations. A partial report requires a safe hypothesis, a relevant safe next check and evidence gaps. Otherwise the recorded-evidence fallback remains. Missing historical records can explain why a mechanism cannot be confirmed; that is not affirmative proof. Cross-model raw score ordering is not accepted as a mechanism check.
+
+The exact second provider response passed the repaired API, saved reuse, service restart, brief conversion, explicit draft save and HTML/JSON export pipeline **offline**, retaining one persistence/input-handling explanation and one useful next check. Missing-reading flags, median imputation and late/missed warnings remain in that check; both historical evidence gaps remain visible. This is captured-response verification, not a fresh paid generation under the final repair. The two-call sample does not establish an overall provider success rate or improved engineer decisions.
+
+Supporting details now show readable percentages, yes/no values, method labels and compact decimals; full precision stays in the source records and provider packet. Two batched Playwright CLI visual rounds inspected actual captured context/report/support/brief content at dark 1440/390 px and light 390/1024 px. All assistant endpoints were intercepted, with no browser errors or horizontal overflow and zero additional paid calls. The important finding and next check remain first.
+
+Fresh gate: **357 backend tests passed**, one optional test skipped and three training integration tests deselected. Ruff, exact generated types, frontend lint, TypeScript/production build, all seven protocol tests and **36 affected browser tests** passed. Existing deprecation and bundle-size advisories remain. The evidence bundle hash is unchanged. Receipts, ledger, captures and screenshots are in ignored `output/deep-final-check-20261011/`. No user consent/data changes, training, reserved scoring, subagents, commit or deployment. Restart `tasks.ps1 api` to load the repair; previously saved failures do not automatically regenerate.
 
 ## Evidence boundaries
 
@@ -186,3 +318,25 @@ Frozen artifacts are local trusted files, not an interface for importing arbitra
 - Evaluate on real equipment and document operating conditions, maintenance costs and missed-warning consequences.
 
 The equipment pilot additions are local and have not been deployed. Hosted uploads, custom protocols, model freezing, reserved scoring and engineer review remain disabled. This version does not monitor equipment, approve deployment or establish field reliability.
+# Deep diagnostic contract and semantic evaluation (11 October 2026)
+
+`tests/test_deep_checks.py` covers model capabilities, request-scoped typed checks, observable/conditional pairing, invalid cross-model experiments, unavailable evidence, partial question-only output, and immutable paid captures. The existing deep/API/privacy suites cover saved identity, historical currency, consent, revocation, restart, brief conversion and export. Frontend deep tests check explicit evidence prerequisites and question-only presentation at 390/1280 px in both themes.
+
+Run `.venv/Scripts/python.exe -m pytest tests -m "not integration" -q`, Ruff, generated-type consistency, frontend lint/build/protocol tests and the deep/presentation/recovery browser suites. Browser tests use intercepted fixtures; live AI evaluation stays outside CI.
+
+Four explicitly authorized provider requests cost an estimated $0.015192. Structural acceptance concealed content defects in earlier attempts; those were scored as failures. Final processing verified the exact last capture offline, retaining one scoped question and no generated explanation. Detailed limitations and the actual method are recorded in [the diagnostic-contract evaluation](docs/arc/audits/2026-10-11-deep-check-contract-evaluation.md). This is not proof of engineer benefit or fresh generation after final postprocessing.
+
+## Shared context and refined reasoning (11 October 2026)
+
+`tests/test_experiment_context.py` checks separate metadata, restart/clearing, origin and mode boundaries, unknown records, immutable request snapshots, empty-focus identity compatibility and no AI admission on edits. Context is seeded with the pretraining request without entering the recorded experiment payload. The optional Pilot brief and later investigation setup share bounded equipment/decision capacities; only explicit context fields reach AI.
+
+The affected browser gate includes `experiment-context.spec.ts`: the experiment POST is intercepted before job creation, so the tests inspect entered context and failure recovery without training. Deep setup covers saved context, failed saves, focus, reopen/request counts and abstention at 390/1280 px in both themes. The mechanical design detector returned no findings; rendered screenshots are also inspected.
+
+Two additional paid requests cost an estimated **$0.0065304**, with no retries. The first exposed unqualified score assertions following a tentative opening. Current processing removes that explanation. The final paid answer retained one tentative mechanism, a competing alternative and a scoped diagnostic; exact-capture offline reuse/restart/brief/export checks pass. [Content review and limits](docs/arc/audits/2026-10-11-context-ai-refinement-evaluation.md). This still does not demonstrate consistent usefulness or better engineer decisions.
+
+
+## Matched traces and deep added value
+
+Run `.venv/Scripts/python.exe -m pytest tests/test_warning_traces.py tests/test_deep_checks.py tests/test_deep_evaluation.py -q` for paired excerpt/persistence semantics, scope, warning-state wording, exact captured answers, paid admission ceilings and honest benefit reporting. `npm --prefix frontend run test -- deep-investigation.spec.ts` covers recorded facts versus hypotheses/prerequisites in both themes at 390/1280 px. Fixtures never admit paid requests or start jobs.
+
+`.venv/Scripts/python.exe scripts/evaluate_deep.py --output output/deep-review-new` is offline by default and prepares regular-analysis baselines, exact historical/fresh capture reviews, A/B HTML, a blank score sheet and facilitator key. Output directories must be new to preserve reviewer annotations. Two paid checks were authorized for this implementation; their durable `output/matched-traces-20261011/paid-ledger.json` is exhausted. Do not reset it to repeat calls. See [actual results and limitations](docs/arc/audits/2026-10-11-matched-traces-added-value.md). Generation latency is measured; engineer decision time and benefit remain unmeasured.

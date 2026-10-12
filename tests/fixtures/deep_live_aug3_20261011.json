@@ -1,0 +1,54 @@
+{
+  "hypotheses": [
+    {
+      "title": "Threshold Sensitivity Variation",
+      "explanation": "Warning shortfalls arise due to detection thresholds calibrated for typical fault progressions missing late-developing or subtle fault signature variations in some traces.",
+      "observation_ids": [
+        "pattern-1",
+        "pattern-2",
+        "pattern-3"
+      ],
+      "alternative": "Input noise or dropout disrupts continuity of signals, causing late or missed warnings independent of threshold settings."
+    },
+    {
+      "title": "Input Dropout Impact",
+      "explanation": "Persistent dropout faults reduce effective feature values, leading to model uncertainty or failure to produce early warnings in affected histories.",
+      "observation_ids": [
+        "pattern-3",
+        "pattern-5",
+        "pattern-8"
+      ],
+      "alternative": "Model thresholds or scoring do not robustly handle signal dropouts, and adjusting thresholds alone might not recover timely warnings."
+    }
+  ],
+  "gaps": [
+    "No explicit metadata on model threshold settings and adjustments across channels.",
+    "Lack of detailed timing data for late warnings distinguishing threshold issues from input dropout effects."
+  ],
+  "next_tests": [
+    {
+      "title": "Threshold Adjustment Robustness Test",
+      "procedure": "Simulate a controlled sweep of detection thresholds on development data for patterns with late warnings, comparing warning timing and detection fraction.",
+      "expected_signal": "Improvement in timely warnings with lowered thresholds suggests threshold sensitivity causes warning shortfalls.",
+      "if_signal_observed": "Threshold calibration inadequacy is plausible; model decisions likely threshold-bound.",
+      "if_signal_absent": "Input dropout or feature corruption likely primary cause, as altered thresholds do not improve timing.",
+      "observation_ids": [
+        "pattern-1",
+        "pattern-2",
+        "pattern-3"
+      ]
+    },
+    {
+      "title": "Input Dropout Robustness Replay",
+      "procedure": "Replay fault traces with synthetic dropout events replaced by median-imputed values or flag indicators to test model response changes on dropout patterns.",
+      "expected_signal": "Restoration of timely warnings after input imputation or additional dropout flags indicates dropout handling weakness.",
+      "if_signal_observed": "Input dropout limits feature availability causing late/missed warnings; improving input handling may help.",
+      "if_signal_absent": "Warning shortfalls stem from other mechanisms such as thresholding or fault severity variation not dropout alone.",
+      "observation_ids": [
+        "pattern-3",
+        "pattern-5",
+        "pattern-8"
+      ]
+    }
+  ]
+}

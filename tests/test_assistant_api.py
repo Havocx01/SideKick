@@ -126,14 +126,14 @@ def test_reuse_shares_live_ai_in_both_directions_without_another_provider_call(a
     async def check():
         for first_task, second_task in [("investigate", "brief"), ("brief", "investigate")]:
             owner = first_task
-            original = await service.create(loaded, AnalysisRequest(**{**payload(), "task": first_task}), owner, False)
+            original = await service._create_legacy_live(loaded, AnalysisRequest(**{**payload(), "task": first_task}), owner, False)
             await asyncio.gather(*service.tasks.values())
-            reopened = await service.create(loaded, AnalysisRequest(**{**payload(), "task": second_task}), owner, False, reuse=True)
+            reopened = await service._create_legacy_live(loaded, AnalysisRequest(**{**payload(), "task": second_task}), owner, False, reuse=True)
             assert reopened.id == original.id and reopened.reused and reopened.result.mode == "ai"
             assert reopened.context.task == second_task and not service.tasks
             assert reopened.result.interpretation == "Inspect the weakest recorded case."
             changed = loaded.model_copy(update={"source_digest": "changed-source"})
-            fresh = await service.create(changed, original.context, owner, False, reuse=True)
+            fresh = await service._create_legacy_live(changed, original.context, owner, False, reuse=True)
             assert fresh.id != original.id and not fresh.reused
             await asyncio.gather(*service.tasks.values())
     asyncio.run(check())
@@ -268,7 +268,7 @@ def test_rejected_ai_output_falls_back_to_recorded_evidence(assistant_app, monke
     loaded = load_bundle(get_settings().bundle_path)
 
     async def run():
-        record = await assistant.create(loaded, AnalysisRequest(**payload()), "owner", False)
+        record = await assistant._create_legacy_live(loaded, AnalysisRequest(**payload()), "owner", False)
         await asyncio.gather(*assistant.tasks.values())
         done = assistant.store.get(record.id, "owner")
         assert done.status == "completed" and done.result.mode == "evidence"
@@ -300,7 +300,7 @@ def test_provider_errors_are_actionable_without_leaking_responses(assistant_app,
     loaded = load_bundle(get_settings().bundle_path)
 
     async def run():
-        record = await assistant.create(loaded, AnalysisRequest(**payload()), "owner", False)
+        record = await assistant._create_legacy_live(loaded, AnalysisRequest(**payload()), "owner", False)
         await asyncio.gather(*assistant.tasks.values())
         done = assistant.store.get(record.id, "owner")
         assert done.status == "completed" and done.result.mode == "evidence"
@@ -326,23 +326,23 @@ def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
     context = AnalysisRequest(**payload())
 
     async def run():
-        record = await assistant.create(loaded, context, "owner", False)
+        record = await assistant._create_legacy_live(loaded, context, "owner", False)
         await asyncio.wait_for(asyncio.gather(*assistant.tasks.values()), timeout=1)
         done = assistant.store.get(record.id, "owner")
         assert done.status == "completed"
         assert "timed out" in done.result.fallback_reason
-        record = await assistant.create(loaded, context, "owner", False)
+        record = await assistant._create_legacy_live(loaded, context, "owner", False)
         await asyncio.sleep(0)
         cancelled = await assistant.cancel(record.id, "owner")
         assert cancelled.status == "cancelled"
         assistant.store.set_workspace_consent(False)
-        record = await assistant.create(loaded, context, "owner", True)
+        record = await assistant._create_legacy_live(loaded, context, "owner", True)
         assert record.status == "completed"
         assert "Enable AI analysis" in record.result.fallback_reason
         assistant.store.set_consent("owner", "uploaded", True)
         assistant.store.set_workspace_consent(True)
         upload_context = context.model_copy(update={"experiment_id": "uploaded"})
-        record = await assistant.create(loaded.model_copy(update={"experiment_id": "uploaded"}), upload_context, "owner", True)
+        record = await assistant._create_legacy_live(loaded.model_copy(update={"experiment_id": "uploaded"}), upload_context, "owner", True)
         await asyncio.sleep(0)
         await assistant.revoke("owner", "uploaded")
         assert assistant.store.get(record.id, "owner").status == "cancelled"
@@ -373,13 +373,15 @@ def test_demo_unlock_is_browser_bound_and_replay_never_live(assistant_app):
     headers = {"X-Sidekick-Request": "1"}
     with TestClient(assistant_app) as client:
         before = client.get("/api/assistant/capabilities").json()
-        assert before["unlock_available"] and not before["live_available"]
+        assert not before["unlock_available"] and not before["live_available"]
         assert client.post("/api/assistant/access", headers=headers, json={"code": "bad"}).status_code == 403
         assert client.post("/api/assistant/access", headers=headers, json={"code": "presenter"}).status_code == 200
-        assert client.get("/api/assistant/capabilities").json()["live_available"]
+        unlocked = client.get("/api/assistant/capabilities").json()
+        assert unlocked["unlocked"] and not unlocked["live_available"]
         with TestClient(assistant_app) as other:
             other.cookies.set("sidekick_demo", "another-test-session")
-            assert not other.get("/api/assistant/capabilities").json()["live_available"]
+            other_caps = other.get("/api/assistant/capabilities").json()
+            assert not other_caps["unlocked"] and not other_caps["live_available"]
         settings.mode = "replay"
         assert not client.get("/api/assistant/capabilities").json()["live_available"]
 
@@ -515,7 +517,7 @@ def test_live_analysis_ignores_legacy_usage_and_has_no_session_or_daily_cap(assi
 
     async def run():
         for _ in range(27):
-            record = await assistant.create(loaded, AnalysisRequest(**payload()), "owner", False)
+            record = await assistant._create_legacy_live(loaded, AnalysisRequest(**payload()), "owner", False)
             assert record.status == "running"
             await asyncio.gather(*assistant.tasks.values())
             done = assistant.store.get(record.id, "owner")
@@ -538,19 +540,19 @@ def test_model_upgrade_requires_new_output_but_preserves_human_draft(assistant_a
     loaded = load_bundle(get_settings().bundle_path)
     context = AnalysisRequest(**payload())
     async def check():
-        old = await service.create(loaded, context, 'owner', False)
+        old = await service._create_legacy_live(loaded, context, 'owner', False)
         await asyncio.gather(*service.tasks.values())
         old = service.store.get(old.id, 'owner')
         old.brief_text = 'Human review retained'
         service.store.save(old, 'owner')
         service.settings.assistant_model = 'new-model'
-        reused = await service.create(loaded, context, 'owner', False, reuse=True)
+        reused = await service._create_legacy_live(loaded, context, 'owner', False, reuse=True)
         assert reused.id == old.id and reused.result.model == 'test'
-        new = await service.create(loaded, context, 'owner', False, reuse=False)
+        new = await service._create_legacy_live(loaded, context, 'owner', False, reuse=False)
         assert new.id != old.id and new.brief_text == old.brief_text
         assert new.draft_fingerprint == old.draft_fingerprint
         await asyncio.gather(*service.tasks.values())
-        again = await service.create(loaded, context.model_copy(update={'task': 'brief'}), 'owner', False, reuse=True)
+        again = await service._create_legacy_live(loaded, context.model_copy(update={'task': 'brief'}), 'owner', False, reuse=True)
         assert again.id == new.id
     asyncio.run(check())
     assert calls == ['test', 'new-model']
@@ -660,7 +662,7 @@ def test_demo_result_growth_is_bounded_and_full_draft_reservation_survives(assis
         return result.model_copy(update={'summary': '😀' * 20000, 'mode': 'ai'})
     monkeypatch.setattr(provider, 'enhance_analysis', oversized)
     async def check():
-        record = await service.create(load_bundle(get_settings().bundle_path), AnalysisRequest(**payload()), 'owner', False)
+        record = await service._create_legacy_live(load_bundle(get_settings().bundle_path), AnalysisRequest(**payload()), 'owner', False)
         await asyncio.gather(*service.tasks.values())
         done = service.store.get(record.id, 'owner')
         assert done.status == 'completed' and done.result.mode == 'evidence'
@@ -770,12 +772,12 @@ def test_active_reuse_coalesces_brief_equivalent_and_preserves_owner(assistant_a
         monkeypatch.setattr(provider, "enhance_analysis", enhance)
         loaded = load_bundle(get_settings().bundle_path)
         context = AnalysisRequest(**payload())
-        first = await service.create(loaded, context, "owner", False, reuse=True)
+        first = await service._create_legacy_live(loaded, context, "owner", False, reuse=True)
         await asyncio.sleep(0)
-        same = await service.create(loaded, context, "owner", False, reuse=True)
-        brief = await service.create(loaded, context.model_copy(update={"task": "brief"}), "owner", False, reuse=True)
+        same = await service._create_legacy_live(loaded, context, "owner", False, reuse=True)
+        brief = await service._create_legacy_live(loaded, context.model_copy(update={"task": "brief"}), "owner", False, reuse=True)
         assert same.id == brief.id == first.id and same.status == brief.status == "running"
-        other = await service.create(loaded, context, "other", False, reuse=True)
+        other = await service._create_legacy_live(loaded, context, "other", False, reuse=True)
         assert other.id != first.id and other.result.mode == "evidence"
         gate.set()
         await asyncio.gather(*service.tasks.values())
@@ -797,7 +799,7 @@ def test_get_currency_is_response_only_and_never_regenerates_historical_output(a
         return result.model_copy(update={"mode": "ai", "model": service.settings.assistant_model})
     monkeypatch.setattr(provider, "enhance_analysis", enhance)
     async def make():
-        record = await service.create(load_bundle(get_settings().bundle_path), AnalysisRequest(**payload()), "owner", False)
+        record = await service._create_legacy_live(load_bundle(get_settings().bundle_path), AnalysisRequest(**payload()), "owner", False)
         await asyncio.gather(*service.tasks.values())
         return record.id
     id = asyncio.run(make())
@@ -867,9 +869,9 @@ def test_fresh_provider_fallback_is_current_and_retry_does_not_reuse_active_work
     async def make():
         loaded = load_bundle(get_settings().bundle_path)
         context = AnalysisRequest(**payload())
-        record = await service.create(loaded, context, "owner", False)
+        record = await service._create_legacy_live(loaded, context, "owner", False)
         await asyncio.gather(*service.tasks.values())
-        same = await service.create(loaded, context, "owner", False, reuse=True)
+        same = await service._create_legacy_live(loaded, context, "owner", False, reuse=True)
         assert same.id == record.id and same.result.mode == "evidence"
         return record.id
     id = asyncio.run(make())

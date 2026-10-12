@@ -12,12 +12,16 @@ from app.assistant.exports import export_brief
 from app.assistant.schemas import AnalysisRequest, AnalysisRecord, AnalysisDetail, AssistantAccess, AssistantCapabilities, BriefUpdate, ConsentState, ConsentUpdate
 from app.assistant.store import AnalysisCapacityError, AnalysisRevokedError
 from app.experiments.demo import owner as demo_owner, public_origin
+from app.schemas import ExperimentEngineerContext
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 COOKIE = "sidekick_assistant"
-DISCLOSURE = ("Sent to OpenAI: the task type, pseudonymous model and fault-case aliases, evaluation partition, finding categories, "
-              "pseudonymous column types and missing-value counts for data review, verified generic claims, and recorded metric values with their units, such as detection rates, early alarm time, passed-case counts and summarized "
-              "warning events. Not sent: CSV files, raw sensor readings, equipment IDs, model names, filenames and pilot contact details. "
+DISCLOSURE = ("Sent to OpenAI for deep investigation: pseudonymous model and channel aliases, model families, evaluation partition, simulated fault types, "
+              "duration, onset and severity settings, recorded limits, healthy metrics, fault-pattern detection ranges, early alarm time, case counts and coverage flags. "
+              "Also sent when recorded: paired clean/faulted score and warning summaries and short aligned excerpts in cycles before failure using history/fold aliases, thresholds and persistence rules, preprocessing methods, "
+              "sensor quality statistics, fold outcome summaries and clean-prediction contribution summaries without feature reading values. "
+              "Saved equipment type, sensor meaning, decision context and the investigation focus you explicitly enter are sent as unverified context. Other pilot text and contact details are not included. "
+              "Routine analysis and data checks run locally. Excluded from automatic evidence: CSV files, raw sensor readings, equipment IDs, model names, channel names, filenames and pilot contact details. "
               "Requests use store=false, but OpenAI may retain API abuse-monitoring logs for up to 30 days, and exceptions may apply.")
 
 
@@ -75,6 +79,34 @@ def load_context(request, context):
     dataset = dataset_context(request, context.dataset_id)
     result, descriptors, columns = reviewData(request.app.state.jobs.workspace, context)
     return DataTools(result, context, descriptors, columns), dataset["source"] == "upload"
+
+
+def context_workspace(request):
+    if service(request).settings.mode != "full":
+        raise HTTPException(403, "Experiment context is editable only in a local workspace.")
+    jobs = getattr(request.app.state, "jobs", None)
+    if jobs is None:
+        raise HTTPException(503, "The local workspace is not ready.")
+    return jobs.workspace
+
+
+@router.get("/experiment-context", response_model=ExperimentEngineerContext)
+def get_engineer_context(request: Request, response: Response, experiment_id: str | None = None):
+    response.headers["Cache-Control"] = "no-store"
+    workspace = context_workspace(request)
+    try:
+        return workspace.engineer_context(experiment_id) or ExperimentEngineerContext()
+    except (KeyError, ValueError):
+        raise HTTPException(404, "Experiment not found.") from None
+
+
+@router.post("/experiment-context", response_model=ExperimentEngineerContext, dependencies=[Depends(guard)])
+def save_engineer_context(payload: ExperimentEngineerContext, request: Request, experiment_id: str | None = None):
+    workspace = context_workspace(request)
+    try:
+        return workspace.save_engineer_context(experiment_id, payload.model_dump(mode="json"))
+    except (KeyError, ValueError):
+        raise HTTPException(404, "Experiment not found.") from None
 
 
 def check_consent_context(request, scope):
@@ -149,12 +181,13 @@ def capabilities(request: Request, response: Response, experiment_id: str | None
     who = visitor(request, response)
     scope = f"dataset:{dataset_id}" if dataset_id else experiment_id
     required = dataset["source"] == "upload" if dataset else upload_context(request, experiment_id)
-    reason = assistant.live_reason(who, scope, required)
-    return AssistantCapabilities(tasks=list(assistant.settings.assistant_tasks), live_available=reason is None,
-        unlock_available=assistant.settings.mode == "demo" and bool(assistant.settings.assistant_presenter_code),
+    return AssistantCapabilities(tasks=[task for task in assistant.settings.assistant_tasks if task != "deep" or assistant.settings.mode == "full"], live_available=False,
+        unlock_available=False,
         unlocked=assistant.settings.mode == "full" or assistant.store.unlocked(who), consent_required=assistant.settings.mode == "full" or required,
         consent_granted=bool(assistant.store.workspace_consent()) if assistant.settings.mode == "full" else not required or assistant.store.consent(who, scope), mode=assistant.settings.mode,
-        note=reason or "Live analysis is available.")
+        note="Routine analysis uses recorded evidence and makes no AI requests.",
+        deep_available=not dataset_id and "deep" in assistant.settings.assistant_tasks and assistant.settings.mode == "full"
+            and assistant.settings.assistant_live_enabled and bool(assistant.settings.openai_api_key))
 
 
 @router.post("/analyses", response_model=AnalysisRecord, dependencies=[Depends(guard)])
@@ -163,9 +196,17 @@ async def create(payload: AnalysisRequest, request: Request, response: Response,
         raise HTTPException(403, "This analysis is not enabled.")
     try:
         loaded, required = load_context(request, payload)
+        if payload.task == "deep" and payload.engineer_context is None and service(request).settings.mode == "full":
+            jobs = getattr(request.app.state, "jobs", None)
+            fields = jobs.workspace.engineer_context(payload.experiment_id) if jobs else None
+            if fields and any(fields.values()):
+                from app.assistant.schemas import DeepEngineerContext
+                payload = payload.model_copy(update={"engineer_context": DeepEngineerContext.model_validate(fields)})
         return await service(request).create(loaded, payload, visitor(request, response), required, reuse=reuse)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(403, str(error)) from error
     except AnalysisCapacityError as error:
         raise HTTPException(503, str(error)) from error
 
@@ -176,7 +217,8 @@ def get_analysis(id: str, request: Request, response: Response):
     loaded, _ = load_context(request, record.context)
     origin = service(request).store.provenance(id, who)[0]
     try:
-        fingerprint, _, _ = service(request).identities(loaded, record.context, origin == "cloud")
+        identity_context = record.context.model_copy(update={"task": "deep"}) if record.result and record.result.deep_report else record.context
+        fingerprint, _, _ = service(request).identities(loaded, identity_context, origin == "cloud")
         currency = "current" if origin != "unknown" and fingerprint == record.cache_fingerprint else "historical"
     except ValueError:
         # A retired configuration can still have readable, ownership-checked saved evidence.

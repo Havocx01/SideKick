@@ -136,7 +136,7 @@ class Settings:
     demo_folder_max_records: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_FOLDER_MAX_RECORDS", "2000")))
     demo_folder_max_per_visitor: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_FOLDER_MAX_PER_VISITOR", "100")))
     assistant_tasks: tuple[str, ...] = field(default_factory=lambda: tuple(
-        t.strip() for t in os.environ.get("SIDEKICK_ASSISTANT_TASKS", "investigate,compare,warning,brief,data").split(",") if t.strip()))
+        t.strip() for t in os.environ.get("SIDEKICK_ASSISTANT_TASKS", "investigate,compare,warning,brief,data,deep").split(",") if t.strip()))
 
     cors_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
@@ -153,8 +153,8 @@ class Settings:
             raise ValueError("Assistant timeout must be positive")
         if min(self.demo_analysis_max_records, self.demo_analysis_max_bytes, self.demo_folder_max_records, self.demo_folder_max_per_visitor) <= 0:
             raise ValueError("Demo storage limits must be positive")
-        if not set(self.assistant_tasks) <= {"investigate", "compare", "warning", "brief", "data"}:
-            raise ValueError("SIDEKICK_ASSISTANT_TASKS accepts investigate, compare, warning, brief and data")
+        if not set(self.assistant_tasks) <= {"investigate", "compare", "warning", "brief", "data", "deep"}:
+            raise ValueError("SIDEKICK_ASSISTANT_TASKS accepts investigate, compare, warning, brief, data and deep")
 
     @property
     def runs_dir(self) -> Path:

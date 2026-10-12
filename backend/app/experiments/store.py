@@ -37,6 +37,8 @@ class Workspace:
                     reason TEXT NOT NULL, exposed_at REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS pilot_reviews (
                     experiment_id TEXT PRIMARY KEY, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS engineer_contexts (
+                    scope TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS library_folders (
                     id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL,
                     name_key TEXT NOT NULL, created_at REAL NOT NULL, UNIQUE(owner,name_key));
@@ -84,7 +86,7 @@ class Workspace:
                 (record["dataset_id"], json.dumps(record, allow_nan=False)),
             )
 
-    def reserve(self, record: dict, *, library_owner="local", folder_id=None, folder_explicit=False):
+    def reserve(self, record: dict, *, library_owner="local", folder_id=None, folder_explicit=False, engineer_context=None):
         try:
             with self.connect() as conn:
                 conn.execute("BEGIN IMMEDIATE")
@@ -100,10 +102,30 @@ class Workspace:
                 )
                 conn.execute("INSERT INTO library_items (owner,kind,id,folder_id,created_at) VALUES (?,?,?,?,?)",
                              (library_owner, "run", record["experiment_id"], folder_id, record["created_at"]))
+                if engineer_context is not None:
+                    conn.execute("INSERT INTO engineer_contexts VALUES (?,?)", (record["experiment_id"], json.dumps(engineer_context, allow_nan=False)))
         except sqlite3.IntegrityError as exc:
             raise ValueError(
                 "The server is already running an experiment. Try again when it finishes, or explore the recorded benchmark."
             ) from exc
+
+    def engineer_context(self, experiment_id):
+        scope = identifier(experiment_id) if experiment_id else "benchmark"
+        if experiment_id:
+            self.get("experiments", scope)
+        with self.connect() as conn:
+            row = conn.execute("SELECT payload FROM engineer_contexts WHERE scope=?", (scope,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_engineer_context(self, experiment_id, context):
+        from app.schemas import ExperimentEngineerContext
+        value = ExperimentEngineerContext.model_validate(context).model_dump(mode="json")
+        scope = identifier(experiment_id) if experiment_id else "benchmark"
+        if experiment_id:
+            self.get("experiments", scope)
+        with self.connect() as conn:
+            conn.execute("INSERT OR REPLACE INTO engineer_contexts VALUES (?,?)", (scope, json.dumps(value, allow_nan=False)))
+        return value
 
     def reserve_operation(self, record, operation, kind):
         try:

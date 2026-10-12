@@ -6,6 +6,7 @@ import time
 import zipfile
 
 from app import __version__
+from app.assistant.evidence import diagnostic_preconditions
 
 PARTITIONS = {"out_of_fold": "Development", "holdout": "Final validation"}
 
@@ -44,6 +45,19 @@ def export_brief(record):
         assessment = "".join(f"<li>{e(claim.text)} <small>[{e(', '.join(claim.source_ids))}]</small></li>" for claim in result.assessment)
         trace = "".join(f"<li>{e(call.label)} <small>[{e(', '.join(call.source_ids))}]</small></li>" for call in result.investigation)
         sections = f"{interpretation}<h2>Assessment</h2><ul>{assessment}</ul><h2>Findings</h2><ul>{findings}</ul><h2>Evidence</h2><ul>{sources}</ul><h2>Proposed next checks</h2><ul>{actions or '<li>Agree a next check with the equipment engineer.</li>'}</ul><h2>Limitations</h2><ul>{limits}</ul><h2>Investigation record</h2><ul>{trace}</ul>"
+        if result.deep_report:
+            report = result.deep_report
+            observations = "".join(f'<li id="{e(item.id)}"><strong>{e(item.title)}</strong>: {e(item.text)} <small>References: {e(", ".join(item.source_ids))}</small></li>' for item in report.observations)
+            explanations = "".join(f"<li><strong>{e(item.title)}</strong><p>{e(item.explanation)}</p><p>Alternative: {e(item.alternative)}</p><small>Observations: {e(', '.join(item.observation_ids))}</small></li>" for item in report.hypotheses)
+            tests = "".join(f"<li><strong>{e(item.title)}</strong><p>{e(diagnostic_preconditions(item))}</p><p>{e(item.procedure)}</p><p>Look for: {e(item.expected_signal)}</p><p>What it would mean: {e(item.interpretation)}</p><small>Observations: {e(', '.join(item.observation_ids))}</small></li>" for item in report.next_tests)
+            gaps = "".join(f"<li>{e(item)}</li>" for item in report.gaps)
+            deep_limits = "".join(f"<li>{e(item)}</li>" for item in report.limitations)
+            no_explanation = "AI did not propose an explanation from the available evidence." if report.explanation_status == "abstained" else "No AI explanation passed verification."
+            explanation_section = (f"<h2>Possible explanations (tentative)</h2><ul>{explanations}</ul>" if report.hypotheses else
+                f"<p>{no_explanation} The retained question guides investigation; it does not explain performance.</p>")
+            sections = (f"<h2>Deep investigation</h2><p>{e(report.summary)}</p>{explanation_section}"
+                f"<h2>Evidence gaps</h2><ul>{gaps}</ul><h2>Proposed next tests</h2><ol>{tests}</ol><h2>Recorded observations</h2><ul>{observations}</ul>"
+                f"<h2>References</h2><ul>{sources}</ul><h2>Limitations</h2><ul>{deep_limits}</ul><h2>Investigation record</h2><ul>{trace}</ul>")
     meta = "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in rows)
     document = (f'<!doctype html><html lang="en"><meta charset="utf-8"><title>{title}</title>'
                 '<style>body{font:16px/1.6 system-ui;max-width:850px;margin:40px auto;padding:24px}pre{white-space:pre-wrap;font:inherit}'

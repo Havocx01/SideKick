@@ -1,0 +1,1297 @@
+{
+  "prompt": "sidekick-deep-v16",
+  "provider_schema": {
+    "type": "json_schema",
+    "strict": true,
+    "name": "ScopedDeepSynthesis",
+    "schema": {
+      "$defs": {
+        "ScopedDeepHypothesis": {
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "description": "Short name of a possible mechanism, not a factual conclusion.",
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "explanation": {
+              "description": "A tentative qualitative mechanism for the cited fault pattern. Explain model behavior, not rates or general robustness. No numbers or established cause.",
+              "maxLength": 670,
+              "minLength": 1,
+              "title": "Explanation",
+              "type": "string"
+            },
+            "observation_ids": {
+              "description": "Supporting pattern IDs from this request's inspected observations only.",
+              "items": {
+                "enum": [
+                  "pattern-1",
+                  "pattern-2",
+                  "pattern-3",
+                  "pattern-4",
+                  "pattern-5",
+                  "pattern-6",
+                  "pattern-7",
+                  "pattern-8",
+                  "pattern-9",
+                  "pattern-10",
+                  "pattern-11",
+                  "pattern-12",
+                  "pattern-13",
+                  "pattern-14",
+                  "pattern-15",
+                  "pattern-16",
+                  "pattern-17",
+                  "pattern-18",
+                  "pattern-19",
+                  "pattern-20",
+                  "pattern-21",
+                  "pattern-22",
+                  "pattern-23",
+                  "pattern-24",
+                  "history-summary-1",
+                  "history-summary-2",
+                  "sensor-quality-1",
+                  "sensor-quality-2",
+                  "sensor-quality-3",
+                  "sensor-quality-4",
+                  "sensor-quality-5",
+                  "sensor-quality-6",
+                  "sensor-quality-7",
+                  "sensor-quality-8",
+                  "sensor-quality-9",
+                  "sensor-quality-10",
+                  "diagnostic-availability"
+                ],
+                "type": "string"
+              },
+              "maxItems": 4,
+              "minItems": 1,
+              "title": "Observation Ids",
+              "type": "array"
+            },
+            "alternative": {
+              "description": "A genuinely different tentative mechanism compatible with the same evidence, distinguishable by the proposed diagnostic. Missing records are an uncertainty, not a mechanism.",
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Alternative",
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "explanation",
+            "observation_ids",
+            "alternative"
+          ],
+          "title": "ScopedDeepHypothesis",
+          "type": "object"
+        },
+        "ScopedDiagnosticTest": {
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "maxLength": 120,
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "model": {
+              "description": "The model whose own score scale and records this check uses.",
+              "enum": [
+                "model-1",
+                "model-2"
+              ],
+              "title": "Model",
+              "type": "string"
+            },
+            "check_type": {
+              "enum": [
+                "score_persistence",
+                "preprocessing_audit",
+                "sensor_quality",
+                "threshold_sensitivity",
+                "recorded_attribution",
+                "fold_variation"
+              ],
+              "title": "Check Type",
+              "type": "string"
+            },
+            "focus": {
+              "description": "Specific question this diagnostic should distinguish. Do not invent a procedure or assert a cause.",
+              "maxLength": 260,
+              "minLength": 1,
+              "title": "Focus",
+              "type": "string"
+            },
+            "signal": {
+              "enum": [
+                "scores_below_own_threshold",
+                "crossings_without_warning",
+                "preprocessing_contract_mismatch",
+                "sensor_quality_anomaly",
+                "attribution_concentration",
+                "fold_outcome_concentration",
+                "threshold_tradeoff"
+              ],
+              "title": "Signal",
+              "type": "string"
+            },
+            "observation_ids": {
+              "description": "Supporting pattern IDs from this request's inspected observations only.",
+              "items": {
+                "enum": [
+                  "pattern-1",
+                  "pattern-2",
+                  "pattern-3",
+                  "pattern-4",
+                  "pattern-5",
+                  "pattern-6",
+                  "pattern-7",
+                  "pattern-8",
+                  "pattern-9",
+                  "pattern-10",
+                  "pattern-11",
+                  "pattern-12",
+                  "pattern-13",
+                  "pattern-14",
+                  "pattern-15",
+                  "pattern-16",
+                  "pattern-17",
+                  "pattern-18",
+                  "pattern-19",
+                  "pattern-20",
+                  "pattern-21",
+                  "pattern-22",
+                  "pattern-23",
+                  "pattern-24",
+                  "history-summary-1",
+                  "history-summary-2",
+                  "sensor-quality-1",
+                  "sensor-quality-2",
+                  "sensor-quality-3",
+                  "sensor-quality-4",
+                  "sensor-quality-5",
+                  "sensor-quality-6",
+                  "sensor-quality-7",
+                  "sensor-quality-8",
+                  "sensor-quality-9",
+                  "sensor-quality-10",
+                  "diagnostic-availability"
+                ],
+                "type": "string"
+              },
+              "maxItems": 4,
+              "minItems": 1,
+              "title": "Observation Ids",
+              "type": "array"
+            }
+          },
+          "required": [
+            "title",
+            "model",
+            "check_type",
+            "focus",
+            "signal",
+            "observation_ids"
+          ],
+          "title": "ScopedDiagnosticTest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "hypotheses": {
+          "description": "Prefer one useful, evidence-compatible mechanism. Return an empty list if none is defensible; do not invent an explanation to satisfy a minimum.",
+          "items": {
+            "$ref": "#/$defs/ScopedDeepHypothesis"
+          },
+          "maxItems": 3,
+          "minItems": 0,
+          "title": "Hypotheses",
+          "type": "array"
+        },
+        "gaps": {
+          "items": {
+            "maxLength": 220,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Gaps",
+          "type": "array"
+        },
+        "next_tests": {
+          "items": {
+            "$ref": "#/$defs/ScopedDiagnosticTest"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Next Tests",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hypotheses",
+        "gaps",
+        "next_tests"
+      ],
+      "title": "ScopedDeepSynthesis",
+      "type": "object"
+    }
+  },
+  "packet": {
+    "partition": "out_of_fold",
+    "models": [
+      {
+        "alias": "model-1",
+        "family": "xgboost_augmented",
+        "required_cases": 64,
+        "required_passed": 64,
+        "coverage_complete": null,
+        "available_patterns": 48,
+        "provided_patterns": 12,
+        "provided_cases": 15,
+        "healthy_detection": 1.0,
+        "healthy_early_alarm": 0.0009809167112537899
+      },
+      {
+        "alias": "model-2",
+        "family": "logistic_regression",
+        "required_cases": 64,
+        "required_passed": 57,
+        "coverage_complete": null,
+        "available_patterns": 48,
+        "provided_patterns": 12,
+        "provided_cases": 14,
+        "healthy_detection": 1.0,
+        "healthy_early_alarm": 0.0
+      }
+    ],
+    "recorded_facts": {
+      "every_history_warned_in_time": false,
+      "faults_reduce_timely_detection": true,
+      "inspection_focus": "Inspect the recorded fault-related warning shortfalls: which traces become late or missed, and which input-handling or threshold mechanism could explain that change. Do not assume perfect detection."
+    },
+    "protocol_boundaries": {
+      "min_useful_lead": 10,
+      "horizon_cycles": 30,
+      "late_window_end": 9,
+      "transition_band_end": 45,
+      "alert_on_consecutive": 2,
+      "alert_off_consecutive": 2
+    },
+    "metric_definitions": {
+      "detection_fraction": "Proportion of recorded histories with an active warning in the useful pre-failure window. It is not fault-onset detection.",
+      "failed_cases": "Cases not meeting recorded limits. No failed cases does not mean every history was detected.",
+      "early_alarm_burden": "Undesirable alarm time among eligible cycles earlier than the transition boundary before failure. Not useful lead time or warning before fault onset.",
+      "coverage_unknown": "The explicit coverage flag was not recorded. Matching expected history counts is checked separately; it cannot establish the missing flag or training completeness.",
+      "scope": "Required simulated fault aggregates plus explicitly scoped stored diagnostic summaries. No raw readings or trace arrays are supplied.",
+      "reserved_histories": "Separate final-check evidence. Never use reserved histories for diagnosis, metadata investigation or tuning.",
+      "augmentation": "Training-example augmentation does not establish added feature columns or learned feature usage. Model-family differences do not isolate augmentation benefit."
+    },
+    "limits": {
+      "min_detection_fraction": 0.7,
+      "max_early_alarm_burden": 0.1,
+      "min_useful_lead": 10,
+      "horizon_cycles": 30
+    },
+    "comparable_coverage": false,
+    "observations": [
+      {
+        "id": "pattern-1",
+        "model": "model-2",
+        "channel": "channel-15",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 1,
+        "minimum_detection": 0.5125,
+        "maximum_detection": 0.5125,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-2",
+        "model": "model-2",
+        "channel": "channel-5",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 1,
+        "minimum_detection": 0.5375,
+        "maximum_detection": 0.5375,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-3",
+        "model": "model-2",
+        "channel": "channel-3",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 1,
+        "minimum_detection": 0.575,
+        "maximum_detection": 0.575,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-4",
+        "model": "model-2",
+        "channel": "channel-15",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 1,
+        "minimum_detection": 0.5875,
+        "maximum_detection": 0.5875,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-5",
+        "model": "model-2",
+        "channel": "channel-3",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 1,
+        "minimum_detection": 0.6375,
+        "maximum_detection": 0.6375,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-6",
+        "model": "model-2",
+        "channel": "channel-4",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 1,
+        "minimum_detection": 0.6875,
+        "maximum_detection": 0.6875,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-7",
+        "model": "model-2",
+        "channel": "channel-5",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 1,
+        "minimum_detection": 0.6875,
+        "maximum_detection": 0.6875,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-8",
+        "model": "model-2",
+        "channel": "channel-6",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.7625,
+        "maximum_detection": 0.7625,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-9",
+        "model": "model-2",
+        "channel": "channel-4",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.7875,
+        "maximum_detection": 0.7875,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-10",
+        "model": "model-2",
+        "channel": "channel-15",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 0.825,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.00017834849295523454,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-11",
+        "model": "model-2",
+        "channel": "channel-8",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 0.8375,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-12",
+        "model": "model-2",
+        "channel": "channel-6",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.85,
+        "maximum_detection": 0.85,
+        "maximum_early_alarm": 0.0,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-13",
+        "model": "model-1",
+        "channel": "channel-3",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0014267879436418763,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-14",
+        "model": "model-1",
+        "channel": "channel-12",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-15",
+        "model": "model-1",
+        "channel": "channel-12",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0007133939718209382,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-16",
+        "model": "model-1",
+        "channel": "channel-12",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0008025682182985554,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-17",
+        "model": "model-1",
+        "channel": "channel-14",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-18",
+        "model": "model-1",
+        "channel": "channel-14",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-19",
+        "model": "model-1",
+        "channel": "channel-1",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-20",
+        "model": "model-1",
+        "channel": "channel-1",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-21",
+        "model": "model-1",
+        "channel": "channel-1",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0008917424647761727,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-22",
+        "model": "model-1",
+        "channel": "channel-2",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-23",
+        "model": "model-1",
+        "channel": "channel-2",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-24",
+        "model": "model-1",
+        "channel": "channel-2",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      }
+    ],
+    "inspected_cases": 128,
+    "total_patterns": 96,
+    "summarized_patterns": 24,
+    "supporting_evidence": {
+      "paired_histories": {
+        "status": "available",
+        "items": [
+          {
+            "observation_id": "history-summary-1",
+            "model": "model-1",
+            "history": "history-1",
+            "fold": "fold-1",
+            "threshold": 0.7049202521214133,
+            "clean": {
+              "outcome": "timely",
+              "lead_cycles": 28,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 19,
+                "above_threshold": 20,
+                "above_threshold_without_active_warning": 1,
+                "maximum_above_threshold_streak": 20,
+                "minimum_score_margin": -0.6892569933900481,
+                "maximum_score_margin": 0.29428646966127103,
+                "warning_switch_offs": 0
+              }
+            },
+            "faulted": {
+              "outcome": "timely",
+              "lead_cycles": 27,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 18,
+                "above_threshold": 19,
+                "above_threshold_without_active_warning": 1,
+                "maximum_above_threshold_streak": 19,
+                "minimum_score_margin": -0.6964758786255365,
+                "maximum_score_margin": 0.2933174769511575,
+                "warning_switch_offs": 0
+              }
+            },
+            "change": "same_outcome",
+            "scope": "stored_example_same_history_same_threshold_same_cycles",
+            "related_pattern_ids": [
+              "pattern-14"
+            ]
+          },
+          {
+            "observation_id": "history-summary-2",
+            "model": "model-1",
+            "history": "history-2",
+            "fold": "fold-2",
+            "threshold": 0.7049202521214133,
+            "clean": {
+              "outcome": "timely",
+              "lead_cycles": 31,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 21,
+                "above_threshold": 20,
+                "above_threshold_without_active_warning": 0,
+                "maximum_above_threshold_streak": 17,
+                "minimum_score_margin": -0.09063156441541964,
+                "maximum_score_margin": 0.29504160090593046,
+                "warning_switch_offs": 0
+              }
+            },
+            "faulted": {
+              "outcome": "timely",
+              "lead_cycles": 28,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 19,
+                "above_threshold": 19,
+                "above_threshold_without_active_warning": 1,
+                "maximum_above_threshold_streak": 17,
+                "minimum_score_margin": -0.40944485858770663,
+                "maximum_score_margin": 0.2948946754565591,
+                "warning_switch_offs": 0
+              }
+            },
+            "change": "same_outcome",
+            "scope": "stored_example_same_history_same_threshold_same_cycles",
+            "related_pattern_ids": [
+              "pattern-14"
+            ]
+          }
+        ],
+        "scope": "stored_examples_only",
+        "selection": "missed_or_late_examples_first",
+        "omitted_pairs_may_exist": true,
+        "warning_rules": {
+          "alert_on_consecutive": 2,
+          "alert_off_consecutive": 2
+        }
+      },
+      "preprocessing": {
+        "status": "unavailable",
+        "items": [],
+        "reason": "No preprocessing record for this partition. Current source code is not evidence of historical fitted preprocessing."
+      },
+      "sensor_quality": {
+        "status": "available",
+        "items": [
+          {
+            "observation_id": "sensor-quality-1",
+            "channel": "channel-15",
+            "mean": 2388.0966516407348,
+            "std": 0.07098375851045081,
+            "minimum": 2387.9,
+            "maximum": 2388.56,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-1",
+              "pattern-4",
+              "pattern-10"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-2",
+            "channel": "channel-5",
+            "mean": 2388.0961523920314,
+            "std": 0.07191717269564056,
+            "minimum": 2387.88,
+            "maximum": 2388.56,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-2",
+              "pattern-7"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-3",
+            "channel": "channel-3",
+            "mean": 47.54116814502448,
+            "std": 0.26708092559826174,
+            "minimum": 46.85,
+            "maximum": 48.53,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-3",
+              "pattern-5",
+              "pattern-13"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-4",
+            "channel": "channel-4",
+            "mean": 521.4134700208425,
+            "std": 0.7375355171108342,
+            "minimum": 518.69,
+            "maximum": 523.38,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-6",
+              "pattern-9"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-5",
+            "channel": "channel-6",
+            "mean": 8143.752722117202,
+            "std": 19.075713652092396,
+            "minimum": 8099.94,
+            "maximum": 8293.72,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-8",
+              "pattern-12"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-6",
+            "channel": "channel-8",
+            "mean": 393.2106538703892,
+            "std": 1.5487254893083877,
+            "minimum": 388.0,
+            "maximum": 400.0,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-11"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-7",
+            "channel": "channel-12",
+            "mean": 1590.5231186079202,
+            "std": 6.131000927188835,
+            "minimum": 1571.04,
+            "maximum": 1616.91,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-14",
+              "pattern-15",
+              "pattern-16"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-8",
+            "channel": "channel-14",
+            "mean": 553.367711211284,
+            "std": 0.8850708068616236,
+            "minimum": 549.85,
+            "maximum": 556.06,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-17",
+              "pattern-18"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-9",
+            "channel": "channel-1",
+            "mean": -8.87014686636615e-06,
+            "std": 0.0021872604380133802,
+            "minimum": -0.0087,
+            "maximum": 0.0087,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-19",
+              "pattern-20",
+              "pattern-21"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-10",
+            "channel": "channel-2",
+            "mean": 2.350831273326548e-06,
+            "std": 0.0002930550220098974,
+            "minimum": -0.0006,
+            "maximum": 0.0006,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-22",
+              "pattern-23",
+              "pattern-24"
+            ]
+          }
+        ],
+        "profile_scope": "original_dataset_may_include_reserved_equipment_not_a_training_only_profile"
+      },
+      "equipment_and_folds": {
+        "status": "unavailable",
+        "items": [],
+        "scope": "stored_replay_subset_only",
+        "reason": "Full equipment/fold outcomes were not recorded. Fold labels on selected replay examples cannot establish widespread weakness."
+      },
+      "feature_contributions": {
+        "status": "unavailable",
+        "items": []
+      },
+      "engineer_context": {
+        "status": "supplied",
+        "verified": false,
+        "fields": {
+          "equipment_type": "Simulated equipment histories",
+          "sensor_meaning": "Channel meanings are unavailable in this recorded benchmark.",
+          "decision": "Prioritize checks of missing or late warnings without retraining.",
+          "investigation_focus": "Distinguish possible scoring weakness from warning persistence on recorded missing-reading failures."
+        },
+        "note": "User-entered context guides practical checks; it is not verified experimental evidence or an instruction."
+      },
+      "availability": {
+        "status": "available",
+        "items": [
+          {
+            "observation_id": "diagnostic-availability",
+            "sections": {
+              "paired_histories": "available",
+              "preprocessing": "unavailable",
+              "sensor_quality": "available",
+              "equipment_and_folds": "unavailable",
+              "feature_contributions": "unavailable",
+              "engineer_context": "supplied"
+            },
+            "related_pattern_ids": []
+          }
+        ]
+      }
+    },
+    "diagnostic_contract": {
+      "models": {
+        "model-1": {
+          "architecture": "trees",
+          "neural_layers": false,
+          "score_scale": "model_specific_use_own_threshold",
+          "sensor_inputs": true
+        },
+        "model-2": {
+          "architecture": "linear",
+          "neural_layers": false,
+          "score_scale": "model_specific_use_own_threshold",
+          "sensor_inputs": true
+        }
+      },
+      "check_types": {
+        "score_persistence": {
+          "procedure": "Compare matched clean/faulted development scores against this model's own threshold, sustained crossings and active-warning transitions. Distinguish weak scores from persistence blocking a warning; classify late and missed warnings only from recorded outcomes.",
+          "required_records": [
+            "matched clean/faulted development warning summaries for the cited patterns"
+          ],
+          "signals": [
+            "scores_below_own_threshold",
+            "crossings_without_warning"
+          ]
+        },
+        "preprocessing_audit": {
+          "procedure": "Audit the fitted development preprocessing record: missing-reading flags, median imputation or its recorded alternative, scaling and feature windows. Inspect recorded input handling; do not add flags or change the trained feature contract.",
+          "required_records": [
+            "the fitted preprocessing record for this model and development partition"
+          ],
+          "signals": [
+            "preprocessing_contract_mismatch"
+          ]
+        },
+        "sensor_quality": {
+          "procedure": "Inspect missingness, flat readings and recorded ranges for the cited channels. This original dataset profile is descriptive, may include reserved equipment, and does not identify faulted-history readings or justify tuning.",
+          "required_records": [
+            "recorded original-dataset quality statistics for the cited channels"
+          ],
+          "signals": [
+            "sensor_quality_anomaly"
+          ]
+        },
+        "threshold_sensitivity": {
+          "procedure": "Only after the required records are available, assess sensitivity around this model's own threshold on development histories. Hold the model, preprocessing and alert persistence fixed; measure timely, late and missed warnings AND early-alarm burden. Never synchronize numeric thresholds across models or tune on reserved histories.",
+          "required_records": [],
+          "signals": [
+            "threshold_tradeoff"
+          ]
+        },
+        "recorded_attribution": {
+          "procedure": "Inspect matched recorded contributions to clean predictions only, using this model's attribution scale. Do not infer faulted feature importance, physical causes or neural intermediate layers from these records.",
+          "required_records": [
+            "matched recorded clean-prediction contributions for the cited patterns"
+          ],
+          "signals": [
+            "attribution_concentration"
+          ]
+        },
+        "fold_variation": {
+          "procedure": "Compare recorded development outcomes across equipment and folds for the cited fault cases. Keep late and missed outcomes separate; repeated fault cases reuse equipment and are not independent samples.",
+          "required_records": [
+            "recorded development fold outcomes for the cited fault cases"
+          ],
+          "signals": [
+            "fold_outcome_concentration"
+          ]
+        }
+      },
+      "scope": "Inspect development evidence only. No new scoring, training or tuning is executed.",
+      "threshold_records": "Complete development score traces, selected threshold, fixed alert rules and eligibility mask are required; compact paired summaries cannot support a threshold sweep.",
+      "availability": "The server derives inspect_now or needs_evidence for the exact model and cited patterns. Never claim unavailable records were inspected."
+    }
+  },
+  "parsed": {
+    "hypotheses": [
+      {
+        "title": "Weak sensor responsiveness limits warning scores below threshold",
+        "explanation": "Model-2 may respond weakly to persistent missing (dropout) or stuck sensor faults, resulting in scoring that fails to surpass its own threshold despite ongoing faults. This low scoring output causes warning shortfalls as the persistence rules do not apply when the threshold is not crossed. The modest scores indicate the model does not register the fault as strongly as expected.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-2",
+          "pattern-3",
+          "pattern-4"
+        ],
+        "alternative": "The warning shortfalls could instead arise from the warning persistence mechanism delaying activation even when scores briefly cross the threshold, causing late or missed warnings despite adequate scoring."
+      }
+    ],
+    "gaps": [
+      "Fitted preprocessing records are unavailable, limiting assessment of input handling during faults.",
+      "Complete fold outcomes are missing, preventing evaluation of variability across equipment."
+    ],
+    "next_tests": [
+      {
+        "title": "Score persistence inspection to distinguish weak scoring from persistence delay in Model-2",
+        "model": "model-2",
+        "check_type": "score_persistence",
+        "focus": "Does Model-2 produce sustained above-threshold scores during faults that fail to trigger warnings, or do scores remain below threshold causing missed/late warnings?",
+        "signal": "scores_below_own_threshold",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-2",
+          "pattern-3",
+          "pattern-4"
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 7128,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 0
+    },
+    "output_tokens": 278,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 7406
+  }
+}
