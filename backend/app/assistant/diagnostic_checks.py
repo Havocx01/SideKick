@@ -76,11 +76,14 @@ PROCEDURES = {
 
 
 def diagnostic_contract(packet):
+    from app.assistant.trace_reasoning import trace_options, explanation_anchor
     architectures = {"logistic_regression": "linear", "xgboost": "trees",
                      "xgboost_augmented": "trees", "age_baseline": "age_only"}
     return {"models": {row["alias"]: {"architecture": architectures.get(row["family"], "unknown"),
                 "neural_layers": False, "score_scale": "model_specific_use_own_threshold",
                 "sensor_inputs": row["family"] != "age_baseline"} for row in packet["models"]},
+        "trace_bases": trace_options(packet),
+        "explanation_anchor": explanation_anchor(packet),
         "check_types": {kind: {"procedure": PROCEDURES[kind],
             "required_records": [RECORD_LABELS[name] for name in REQUIREMENTS[kind]],
             "signals": [name for name, row in SIGNALS.items() if row[0] == kind]} for kind in PROCEDURES},
@@ -136,6 +139,7 @@ def semantic_text(text):
 def compose_checks(provider, packet, observations, aliases):
     from app.assistant.deep import DeepVerificationError, validate_synthesis
     from app.assistant.schemas import DeepSynthesis, DeepTest, DeepHypothesis
+    from app.assistant.trace_reasoning import grounded_title, trace_options
     if packet["partition"] != "out_of_fold":
         raise DeepVerificationError("scope")
     patterns = {row["id"]: row for row in packet["observations"]}
@@ -147,7 +151,7 @@ def compose_checks(provider, packet, observations, aliases):
     partial = False
     for hypothesis in provider.hypotheses:
         mentioned = {alias.lower() for alias in re.findall(r"\bmodel-\d+\b",
-            " ".join([hypothesis.title, hypothesis.explanation, hypothesis.alternative]), re.I)}
+            " ".join([hypothesis.explanation, hypothesis.alternative]), re.I)}
         cited_models = {patterns[id]["model"] for id in hypothesis.observation_ids if id in patterns}
         if not mentioned <= cited_models:
             raise DeepVerificationError("scope")
@@ -172,10 +176,16 @@ def compose_checks(provider, packet, observations, aliases):
         if hypothesis.explanation.strip().casefold() == hypothesis.alternative.strip().casefold():
             partial = True
             continue
-        hypotheses.append(hypothesis.model_copy(update={"explanation": "Possible explanation: " + hypothesis.explanation.strip(),
-            "observation_ids": list(dict.fromkeys(hypothesis.observation_ids))}))
+        title = grounded_title(hypothesis, packet, patterns, records)
+        if title is None:
+            partial = True
+            continue
+        # Private provider trace choices never enter the public/stored report schema.
+        hypotheses.append(DeepHypothesis(title=title, explanation="Possible explanation: " + hypothesis.explanation.strip(),
+            alternative=hypothesis.alternative.strip(), observation_ids=list(dict.fromkeys(hypothesis.observation_ids))))
     raw_tests = []
     metadata = {}
+    bases = trace_options(packet)
     for item in provider.next_tests:
         pattern_ids = {id for id in item.observation_ids if id in patterns}
         if not pattern_ids or any(patterns[id]["model"] != item.model for id in pattern_ids):
@@ -193,6 +203,15 @@ def compose_checks(provider, packet, observations, aliases):
             raise DeepVerificationError("scope")
         if SIGNALS[item.signal][0] != item.check_type:
             raise DeepVerificationError("capability")
+        cited_pairs = [row for row in support['paired_histories']['items'] if row['observation_id'] in item.observation_ids]
+        retained_warning_check = (item.check_type == 'score_persistence' and bool(cited_pairs)
+            and all(bases.get(row['observation_id']) == 'warning_retained' for row in cited_pairs))
+        if retained_warning_check and (item.signal == 'scores_below_own_threshold'
+                or re.search(r'\b(?:missed|missing|absent|disappear\w*)\s+warnings?\b|\bfail\w* to warn\b', text, re.I)):
+            # These directly cited windows contain crossings AND active warnings.
+            # Do not spend an engineer's time on a premise the records already refute.
+            partial = True
+            continue
         for sentence in re.split(r"[.;\n]", text):
             if re.search(r"\b(?:retrain\w*|add\w* (?:new |missing\w* )?(?:features|flags)|chang\w* (?:the )?imputation|adapt\w* thresholds?|recover\w* when missingness is represented)\b", sentence, re.I) and not re.search(r"\b(?:never|do not|don't|without|no)\b", sentence, re.I):
                 raise DeepVerificationError("capability")
@@ -223,6 +242,14 @@ def compose_checks(provider, packet, observations, aliases):
         if item.check_type == "sensor_quality":
             controls[0] = "Inspect the original dataset profile descriptively; it may include reserved equipment. Do not use this profile for tuning."
         procedure = PROCEDURES[item.check_type]
+        expected, present, absent = SIGNALS[item.signal][1:]
+        if retained_warning_check:
+            paired_warning = ("Both cited histories retain warnings" if all(row['clean']['useful_window']['active_cycles'] > 0 for row in cited_pairs)
+                else "The cited faulted histories retain warnings; inspect their clean counterparts' recorded warning states before comparing timing")
+            procedure = f"Compare matched clean/faulted development crossing streaks, prior warning state and recorded warning onset/lead using this model's own threshold and fixed opening/closing rules. {paired_warning}; inspect timing differences without treating retained warnings as missing or changing the model."
+            expected = "The matched faulted history reaches the recorded opening streak later than the clean history while retaining an active warning."
+            present = "This would favor investigating changes in score-crossing timing and recorded input response; it would not identify a physical cause or establish a remedy."
+            absent = "Inspect prior warning state and how recorded onset/lead is assigned before attributing the difference to scoring; retained warnings do not establish unchanged timing."
         if any(patterns[id]["kind"] == "dropout" for id in pattern_ids) and item.check_type == "score_persistence":
             procedure += " Review recorded missing-reading flags and median imputation or its recorded alternative; unavailable fitted preprocessing must be obtained first."
             covered = {id for row in support["preprocessing"]["items"] if row.get("model") == item.model for id in row.get("related_pattern_ids", [])}
@@ -234,8 +261,8 @@ def compose_checks(provider, packet, observations, aliases):
         metadata[title] = {"model": item.model, "check_type": item.check_type,
             "readiness": "needs_evidence" if prerequisites else "inspect_now",
             "prerequisites": prerequisites, "controls": controls, "procedure": procedure,
-            "focus": item.focus, "expected_signal": SIGNALS[item.signal][1],
-            "interpretation": "If observed: " + SIGNALS[item.signal][2] + "\nIf absent: " + SIGNALS[item.signal][3]}
+            "focus": item.focus, "expected_signal": expected,
+            "interpretation": "If observed: " + present + "\nIf absent: " + absent}
         # Validate the model's question. Signals and branches are server-owned.
         raw_tests.append(DeepTest(title=title, observation_ids=list(dict.fromkeys(item.observation_ids)), procedure=item.focus,
             expected_signal="The selected recorded signal needs checking.",

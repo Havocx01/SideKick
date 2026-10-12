@@ -230,6 +230,27 @@ def test_changed_engineer_context_has_distinct_identity_empty_is_compatible(deep
     assert app.state.assistant.identities(bundle, context, True) != app.state.assistant.identities(bundle, entered, True)
 
 
+def test_changed_trace_contract_marks_saved_output_historical_without_regeneration(deep_app, monkeypatch):
+    from pathlib import Path
+    from fastapi.testclient import TestClient
+    app, _ = deep_app
+    app.state.assistant.store.set_workspace_consent(True)
+    calls = fake_provider(monkeypatch)
+    original_read = Path.read_bytes
+    with TestClient(app) as client:
+        record = client.post('/api/assistant/analyses', headers=HEADERS, json=BODY).json()
+        completed(client, record['id'])
+        path = '/api/assistant/analyses/' + record['id']
+        assert client.get(path).json()['output_currency'] == 'current'
+        def changed_contract(source):
+            data = original_read(source)
+            return data + b'\n# revised trace admission contract\n' if source.name == 'trace_reasoning.py' else data
+        monkeypatch.setattr(Path, 'read_bytes', changed_contract)
+        assert client.get(path).json()['output_currency'] == 'historical'
+        assert client.post('/api/assistant/analyses?reuse=true', headers=HEADERS, json=BODY).json()['id'] == record['id']
+    assert len(calls) == 1
+
+
 def test_support_budget_and_missing_sensor_values_are_explicit(deep_app):
     from app.assistant.deep_support import MAX_SUPPORT_BYTES
     from app.assistant.deep import MAX_INPUT_BYTES

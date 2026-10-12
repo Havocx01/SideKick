@@ -93,7 +93,7 @@ class AssistantService:
         # Hash the actual prompt and server tool/output contracts, including task-specific data rules.
         contracts = ["agent.py", "investigation.py", "evidence.py", "schemas.py"]
         if context.task == "deep":
-            contracts.extend(["deep.py", "deep_support.py", "diagnostic_checks.py"])
+            contracts.extend(["deep.py", "deep_support.py", "diagnostic_checks.py", "trace_reasoning.py"])
         if context.task == "data":
             contracts.append("data_review.py")
         version = hashlib.sha256(b"".join((Path(__file__).parent / name).read_bytes() for name in contracts)).hexdigest()
