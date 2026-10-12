@@ -154,7 +154,7 @@ def build_analysis(bundle: EvidenceBundle, context: AnalysisRequest) -> Analysis
             actions.append(AnalysisAction(id=f"a{len(actions)}", label="Inspect fault results", detail=f"Review the recorded fault matrix for {names[key]}.",
                                           href=href(key) + "#fault-results"))
 
-    if context.task == "compare" or (context.task == "brief" and len(context.candidates) == 2):
+    if context.task == "compare" or (context.task in ("brief", "deep") and len(context.candidates) == 2):
         first, second = (candidates[k] for k in context.candidates)
         keys = context.candidates
         outcome = {True: "meets", False: "does not meet"}
@@ -235,14 +235,25 @@ def build_analysis(bundle: EvidenceBundle, context: AnalysisRequest) -> Analysis
         findings.sort(key=lambda f: f.title != primary)
     if context.task == "brief":
         limits.append("Engineer review draft. Verify findings and agree a next check before saving a decision.")
-    titles = {"investigate": "Result investigation", "compare": "Model comparison", "warning": "Warning explanation", "brief": "Review brief"}
-    digest_payload = {"context": context.model_dump(mode="json"), "fingerprint": bundle.config_fingerprint,
+    titles = {"investigate": "Result investigation", "compare": "Model comparison", "warning": "Warning explanation", "brief": "Review brief", "deep": "Deep investigation"}
+    context_data = context.model_dump(mode="json")
+    if context.engineer_context is None:
+        context_data.pop("engineer_context")  # Preserve historical identities when this additive field is absent.
+    digest_payload = {"context": context_data, "fingerprint": bundle.config_fingerprint,
                       "source_digest": bundle.source_digest, "findings": [f.model_dump() for f in findings],
                       "sources": [s.model_dump(mode="json") for s in sources]}
     digest = hashlib.sha256(json.dumps(digest_payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     result = AnalysisResult(title=titles[context.task], summary=findings[0].detail, findings=findings, sources=sources,
                             actions=actions, limitations=limits, evidence_digest=digest)
     return with_brief(result, context)
+
+
+def diagnostic_preconditions(item):
+    """Keep prerequisites visible in review drafts without guessing legacy availability."""
+    if item.readiness is None:
+        return ""
+    label = "Collect evidence first" if item.readiness == "needs_evidence" else "Inspect recorded evidence"
+    return label + ". " + ((item.focus + " ") if item.focus else "") + " ".join(item.prerequisites + item.controls) + " "
 
 
 def with_brief(result: AnalysisResult, context: AnalysisRequest) -> AnalysisResult:
@@ -260,6 +271,34 @@ def with_brief(result: AnalysisResult, context: AnalysisRequest) -> AnalysisResu
              "Test evidence, not deployment approval.", "",
              f"Experiment: {context.experiment_id or 'Recorded benchmark'} · {PARTITIONS[context.partition]}",
              f"Model: {', '.join(models)}", ""]
+    if result.deep_report:
+        report = result.deep_report
+        lines += ["Deep investigation", report.summary, "", "Recorded observations"]
+        focus = {id for item in [*report.hypotheses, *report.next_tests] for id in item.observation_ids}
+        lines += [f"- [{observation.id}] {observation.title}: {observation.text}" for observation in report.observations if observation.id in focus][:6]
+        lines += ["Full pattern measurements and references are retained in the saved investigation."]
+        if report.hypotheses:
+            lines += ["", "Possible explanations (tentative)"]
+            lines += [f"- {item.title}: {item.explanation} Alternative: {item.alternative} Evidence: {', '.join(item.observation_ids)}." for item in report.hypotheses]
+        else:
+            lines += ["", ("AI did not propose an explanation from the available evidence." if report.explanation_status == "abstained" else "No AI explanation passed verification.") + " The retained question guides investigation; it does not explain performance."]
+        lines += ["", "Evidence gaps"] + [f"- {gap}" for gap in report.gaps]
+        lines += ["", "Proposed next tests"]
+        lines += [f"- {item.title}: {diagnostic_preconditions(item)}{item.procedure} Look for: {item.expected_signal} What it means: {item.interpretation} Evidence: {', '.join(item.observation_ids)}." for item in report.next_tests]
+        lines += ["", "Limitations"] + [f"- {item}" for item in report.limitations]
+        draft = "\n".join(lines)
+        if len(draft) > 12000 and report.hypotheses:
+            # Keep the editable draft within its save contract without truncating
+            # hypotheses or tests. The complete report remains in storage/export.
+            hypothesis, check = report.hypotheses[0], report.next_tests[0]
+            draft = "\n".join(["Engineer review draft", "Test evidence, not deployment approval.", "",
+                "Deep investigation", report.summary, "", "Possible explanations (tentative)",
+                f"{hypothesis.title}: {hypothesis.explanation}", f"Alternative: {hypothesis.alternative}",
+                f"Evidence: {', '.join(hypothesis.observation_ids)}", "", "Priority next test",
+                f"{check.title}: {diagnostic_preconditions(check)}{check.procedure}", f"Look for: {check.expected_signal}",
+                f"What it would mean: {check.interpretation}", f"Evidence: {', '.join(check.observation_ids)}", "",
+                "This compact brief includes the leading hypothesis and priority test. All observations, additional explanations, tests and limitations are retained in the saved investigation and exported report."])
+        return result.model_copy(update={"brief_draft": draft})
     if result.interpretation:
         lines += ["AI interpretation (verify against the evidence)", result.interpretation, ""]
     if result.assessment:

@@ -1,5 +1,31 @@
 /* Contextual inspector, adapted from Beautiful UI's task, insight, context,
    recommendation and selection patterns (MIT, see BEAUTIFUL-UI-LICENSE). Sidekick tokens own the visual theme. */
+.deep-report h4 { font-size: var(--text-sm); font-weight: 500; margin: 0; }
+.deep-report .deep-summary { font-size: var(--text-base); line-height: 1.6; margin-block: var(--space-3); }
+.deep-report .deep-main-finding { margin-top: var(--space-4); }
+.deep-recorded-facts { padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-subtle); }
+.deep-recorded-facts > p { font-size: var(--text-sm); color: var(--text-secondary); }
+.deep-main-finding > h4, .deep-priority-check > .deep-item > h4 { font-size: var(--text-base); }
+.deep-report .deep-priority-check { padding-block: var(--space-5); border-block: 1px solid var(--border-subtle); }
+.deep-priority-check > .deep-item { padding: 0; }
+.deep-supporting-details { display: grid; gap: var(--space-3); margin-top: var(--space-5); }
+.analysis-body .deep-supporting-details > details { margin-top: 0; }
+.deep-report .analysis-disclosure-content { min-width: 0; }
+.deep-report .analysis-disclosure-content > :first-child { margin-top: 0; }
+.deep-report .analysis-disclosure-content > .deep-item:first-child { padding-top: 0; }
+.deep-report .analysis-disclosure-content > .deep-item:last-child { padding-bottom: 0; }
+.deep-report .deep-evidence-gaps { margin: 0; }
+.deep-report .deep-outcomes > summary { color: var(--foreground); }
+.deep-report .deep-outcomes .analysis-disclosure-content { padding-block: var(--space-3); border-inline-start: 1px solid var(--border-subtle); }
+.deep-outcomes .deep-test-outcome { margin: 0; }
+.deep-item { padding-block: var(--space-4); }
+.deep-item + .deep-item { border-top: 1px solid var(--border-subtle); }
+.deep-test-outcome { display: grid; gap: var(--space-3); margin-block: var(--space-3); }
+.deep-test-outcome dt { color: var(--text-secondary); font-size: var(--text-xs); }
+.deep-test-outcome dd { margin: 0; white-space: pre-line; }
+.deep-report ul { padding-inline-start: var(--space-5); }
+.deep-report li + li { margin-top: var(--space-2); }
+.deep-report .deep-proof { margin-top: var(--space-3); }
 .analysis-inspector { --text-xs: 1rem; --text-sm: 1.077rem; --text-base: 1.231rem; min-width: 0; background: var(--chrome); overflow-y: auto; scrollbar-gutter: stable; }
 .analysis-header { position: sticky; top: 0; z-index: 2; background: var(--chrome); display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-8); border-bottom: 1px solid var(--border-subtle); }
 .analysis-header > div { display: flex; gap: var(--space-2); align-items: center; }
@@ -18,14 +44,6 @@
 .analysis-body details { padding: 0; border: 0; margin-top: var(--space-3); }
 .analysis-body summary { min-height: 36px; align-content: center; color: var(--text-secondary); font-size: var(--text-xs); }
 .analysis-body summary:hover, .analysis-body summary:focus-visible { color: var(--foreground); background: var(--fill); border-radius: var(--radius-control); }
-.analysis-rerun { justify-self: end; }
-.analysis-ai-setup { grid-column: 1 / -1; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
-.analysis-ai-setup form { display: grid; gap: var(--space-2); max-width: 360px; }
-.analysis-ai-setup form .button { justify-self: start; }
-.analysis-ai-setup input, .analysis-brief textarea { width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: var(--space-3); color: var(--foreground); font: inherit; }
-.analysis-consent { margin: 0; }
-.analysis-ai-setup form + .analysis-consent { margin-top: var(--space-4); }
-.analysis-consent p { font-size: var(--text-xs); color: var(--text-secondary); }
 .analysis-progress { border-bottom: 1px solid var(--border); padding-bottom: var(--space-4); }
 .analysis-progress-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2); }
 .analysis-progress-head strong { font-weight: 500; }
@@ -95,7 +113,7 @@
 .analysis-body .analysis-disclosure > summary { min-height: 44px; margin: 0; padding: var(--space-3) var(--space-4); border-radius: 0; border-bottom: 1px solid transparent; background: color-mix(in srgb, var(--fill) 40%, var(--surface)); color: var(--foreground); }
 .analysis-body .analysis-disclosure > summary:hover, .analysis-body .analysis-disclosure > summary:focus-visible { background: var(--fill); }
 .analysis-body .analysis-disclosure[open] > summary { border-bottom-color: var(--border-subtle); }
-.analysis-disclosure-content { padding: var(--space-4); }
+.analysis-disclosure-content { padding: var(--space-5); }
 .analysis-limits ul { margin: 0; padding-inline-start: var(--space-4); color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.65; }
 .analysis-limits li { padding-inline-start: var(--space-1); }
 .analysis-limits li + li { margin-top: var(--space-3); }
@@ -117,7 +135,8 @@
 .review-editor-heading svg { color: var(--text-secondary); flex-shrink: 0; }
 .review-draft-status { color: var(--text-secondary); font-size: var(--text-xs); }
 .analysis-body .review-editor-heading h3 { margin-bottom: 0; }
-.analysis-brief textarea { display: block; min-height: 320px; height: min(50dvh, 480px); resize: vertical; line-height: 1.7; padding: var(--space-5); border: 0; border-radius: 0; }
+.analysis-brief textarea { display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; background: var(--surface); min-height: 320px; height: min(50dvh, 480px); resize: vertical; line-height: 1.7; padding: var(--space-5); border: 0; border-radius: 0; }
+.analysis-permission-note { color: var(--text-secondary); margin-block: var(--space-4); font-size: var(--text-xs); }
 .analysis-brief textarea:focus-visible { outline-offset: -2px; }
 .review-save-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border); }
 .review-save-row .analysis-brief-actions { margin-top: 0; }
@@ -152,9 +171,6 @@
 .assessment-proof { margin-top: var(--space-3); }
 .analysis-case p { color: var(--text-secondary); }
 .analysis-body .analysis-case h3 { margin-bottom: var(--space-2); }
-.analysis-fallback { display: flex; gap: var(--space-2); align-items: start; padding-block: var(--space-3); margin-top: var(--space-3); color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); font-size: var(--text-xs); }
-.analysis-fallback svg { flex-shrink: 0; margin-top: var(--space-2); color: var(--warn); }
-.analysis-body .analysis-fallback p { margin-block: var(--space-1); }
 .analysis-evidence > summary, .analysis-limits > summary, .review-reference > summary { color: var(--foreground); }
 .analysis-mapping dl { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
 .analysis-mapping dl > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: var(--space-3); }
@@ -296,6 +312,8 @@
   }
 }
 .assistant-context-cards { display: grid; gap: var(--space-3); }
+.deep-prerequisites { margin-block: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-inner); background: var(--fill); font-size: var(--text-sm); }
+.deep-prerequisites ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
 .assistant-context-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-inner); background: var(--surface); }
 .assistant-context-heading {
   display: flex;

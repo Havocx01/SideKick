@@ -37,7 +37,7 @@ def test_workspace_approval_covers_contexts_and_browsers_and_survives_restart(lo
         assert first.post("/api/assistant/consent/workspace", json={"allowed": True}, headers=headers).status_code == 200
         for params in ({}, {"experiment_id": "first"}, {"experiment_id": "future"}, {"dataset_id": "future-upload"}):
             caps = second.get("/api/assistant/capabilities", params=params).json()
-            assert caps["live_available"] and caps["consent_granted"] and caps["consent_required"]
+            assert not caps["live_available"] and caps["consent_granted"] and caps["consent_required"]
         service.store = AssistantStore(service.store.path.parent)
         assert second.get("/api/assistant/consent/workspace").json()["allowed"]
         assert second.post("/api/assistant/consent/workspace", json={"allowed": False}, headers=headers).status_code == 200
@@ -78,12 +78,38 @@ def test_workspace_revocation_clears_all_origins_before_cancellation(local_setti
     restarted = AssistantStore(service.store.path.parent)
     assert restarted.workspace_consent() is False
     assert restarted.get(safe.id, "second-owner").brief_text == "Evidence-only notes"
+    assert restarted.get(safe.id, "second-owner").error is None
+    assert restarted.get(safe.id, "second-owner").updated_at == safe.updated_at
+    assert not restarted.revoked(safe.id, "second-owner")
     assert restarted.revoked(cloud.id, "first-owner") and restarted.revoked(unknown.id, "third-owner")
     restarted.set_workspace_consent(True)
     assert restarted.get(cloud.id, "first-owner").brief_text is None
 
 
-def test_enabling_workspace_upgrades_permission_fallback_once_and_reuses_ai(local_settings, monkeypatch):
+def test_restart_repairs_legacy_consent_notice_only_for_proven_local_records(local_settings):
+    settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
+        assistant_live_enabled=False, openai_api_key="", assistant_model="fixture", assistant_tasks=("investigate",))
+    service = AssistantService(settings)
+    record = asyncio.run(service.create(load_bundle(get_settings().bundle_path),
+        AnalysisRequest(task="investigate", candidates=["logistic_regression/lr1"]), "owner", False))
+    record.brief_text = "Retain engineer edits."
+    record.error = "Cloud consent was revoked. Showing recorded evidence."
+    service.store.save(record, "owner")
+    restarted = AssistantStore(service.store.path.parent)
+    repaired = restarted.get(record.id, "owner")
+    assert repaired.error is None
+    assert repaired.result == record.result and repaired.brief_text == record.brief_text
+    assert repaired.updated_at == record.updated_at
+    # A real tombstone is never removed or reclassified by the repair.
+    with restarted.connect() as db:
+        db.execute("UPDATE analyses SET payload=? WHERE id=?", (record.model_dump_json(), record.id))
+        db.execute("UPDATE analysis_provenance SET revoked=1 WHERE id=?", (record.id,))
+    guarded = AssistantStore(service.store.path.parent)
+    assert guarded.get(record.id, "owner").error == record.error
+    assert guarded.revoked(record.id, "owner")
+
+
+def test_internal_legacy_provider_requires_permission_and_reuses_ai(local_settings, monkeypatch):
     from app.assistant import provider
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
         assistant_live_enabled=True, openai_api_key="mock-only", assistant_model="fixture",
@@ -99,13 +125,13 @@ def test_enabling_workspace_upgrades_permission_fallback_once_and_reuses_ai(loca
     monkeypatch.setattr(provider, "enhance_analysis", enhance)
 
     async def check():
-        local = await service.create(loaded, context, "owner", False, reuse=True)
+        local = await service._create_legacy_live(loaded, context, "owner", False, reuse=True)
         assert local.result.mode == "evidence" and not calls
         service.store.set_workspace_consent(True)
-        active = await service.create(loaded, context, "owner", False, reuse=True)
+        active = await service._create_legacy_live(loaded, context, "owner", False, reuse=True)
         assert active.id != local.id and active.status == "running"
         await service.tasks[active.id]
-        same = await service.create(loaded, context.model_copy(update={"task": "brief"}), "owner", False, reuse=True)
+        same = await service._create_legacy_live(loaded, context.model_copy(update={"task": "brief"}), "owner", False, reuse=True)
         assert same.id == active.id and same.result.mode == "ai" and calls == [1]
     asyncio.run(check())
 
@@ -125,7 +151,7 @@ def test_workspace_revocation_cancels_real_pending_job_without_late_output(local
     monkeypatch.setattr(provider, "enhance_analysis", enhance)
 
     async def check():
-        record = await service.create(load_bundle(get_settings().bundle_path),
+        record = await service._create_legacy_live(load_bundle(get_settings().bundle_path),
             AnalysisRequest(task="investigate", candidates=["logistic_regression/lr1"]), "owner", False)
         await entered.wait()
         await service.revoke_workspace()

@@ -8,6 +8,8 @@ import { Button, IconButton } from "./Chrome";
 import { analysisError, useAnalysis } from "./AnalysisProvider";
 import { AssistantThinkingState, EvidenceCitation, EvidenceContextCards, StreamingText, streamWords, useStreamingReveal } from "./AssistantElements";
 import "./analysis.css";
+import { DeepReportView } from "./DeepReportView";
+import { DeepInvestigationAction } from "./DeepInvestigationAction";
 
 export function AnalysisInspector() {
   const { open, close, context } = useAnalysis();
@@ -22,28 +24,24 @@ export function AnalysisInspector() {
   if (!open || !context) return null;
   const isBrief = context.task === "brief";
   const content = <>
-    <header className="analysis-header"><div>{isBrief ? <FileText size={19} aria-hidden="true" /> : <ScanLine size={19} aria-hidden="true" />}<h2 id="analysis-title" tabIndex={-1} ref={title}>{isBrief ? "Review brief" : context.task === "data" ? "Data review" : "Analysis"}</h2></div><IconButton label="Close analysis" onClick={() => close()}><X size={17} aria-hidden="true" /></IconButton></header>
+    <header className="analysis-header"><div>{isBrief ? <FileText size={19} aria-hidden="true" /> : <ScanLine size={19} aria-hidden="true" />}<h2 id="analysis-title" tabIndex={-1} ref={title}>{isBrief ? "Review brief" : context.task === "data" ? "Data review" : context.task === "deep" ? "Deep investigation" : "Analysis"}</h2></div><IconButton label="Close analysis" onClick={() => close()}><X size={17} aria-hidden="true" /></IconButton></header>
     <AnalysisContents key={JSON.stringify(context)} />
   </>;
   return <dialog ref={dialog} className={`analysis-inspector analysis-dialog${isBrief ? " review-dialog" : ""}`} aria-labelledby="analysis-title" onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}><div className="analysis-dialog-inner">{content}</div></dialog>;
 }
 
 function AnalysisContents() {
-  const { context, record, capabilities, consent, error, pending, verifying, canRetry, retry, refreshStatus, statusRecovery, cancel, setConsent, unlock, close, saveBrief, editBrief, applyMapping, prepareReview, enabled } = useAnalysis();
-  const [elapsed, setElapsed] = useState(0);
+  const { context, record, error, pending, verifying, canRetry, retry, refreshStatus, statusRecovery, cancel, close, saveBrief, editBrief, applyMapping, prepareReview, enabled, consent, capabilities, setConsent, start } = useAnalysis();
   const [operationError, setOperationError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState("");
   const [draft, setDraft] = useState("");
   const saved = Boolean(record?.brief_saved_at && record.brief_text === draft);
   const running = pending || record?.status === "queued" || record?.status === "running";
   const result = !running && !verifying && record?.status === "completed" ? record.result : undefined;
-  useEffect(() => {
-    if (!record) return;
-    const sync = () => setElapsed(Math.max(0, Math.floor((running ? Date.now() / 1000 : record.updated_at) - record.created_at)));
-    sync(); if (!running) return;
-    const timer = window.setInterval(sync, 1000); return () => window.clearInterval(timer);
-  }, [record, running]);
+  // updated_at also changes on saves, conversion and permission updates, so it
+  // cannot represent analysis duration. Completed traces use a factual label.
+  const revokedEvidence = Boolean(result?.mode === "evidence" && record?.error?.startsWith("Cloud consent was revoked."));
+  const recordError = revokedEvidence ? undefined : record?.error;
   useEffect(() => {
     setDraft(record?.brief_text ?? record?.result?.brief_draft ?? "");
   }, [record?.id, record?.brief_text, record?.brief_saved_at, record?.result?.brief_draft]);
@@ -55,25 +53,29 @@ function AnalysisContents() {
   }
   function follow() { close(false); requestAnimationFrame(() => document.getElementById("main-content")?.focus()); }
   const scopeLabel = context.partition === "holdout" ? "Final validation" : "Development";
-  const consentLabel = capabilities?.mode === "full" ? "workspace" : context.task === "data" ? "dataset" : "experiment";
   const thinking = running && !verifying && !error && !record?.error;
   const stages = record?.stages ?? [];
+  const completedLabel = context.task === "deep" && result?.mode === "evidence"
+    ? "Recorded evidence ready" : context.task === "brief" ? "Prepared brief" : "Analyzed evidence";
   return <div className={`analysis-body${thinking ? " analysis-loading-body" : ""}`}>
     <div className="analysis-meta">
     <div className="analysis-context">{context.task === "data" ? <strong>Current column mapping</strong> : candidates.map(key => <strong key={key}>{candidateLabel(...key.split("/") as [string, string])}</strong>)}<span><span>{context.task === "data" ? "Draft data checks" : scopeLabel}{context.equipment_id ? ` · History ${context.equipment_id}` : ""}{context.cycle != null ? ` · Cycle ${context.cycle}` : ""}</span>{result && <span className="analysis-mode">{result.mode === "ai" ? <Cpu size={14} strokeWidth={1.75} aria-hidden="true" /> : <Database size={14} strokeWidth={1.75} aria-hidden="true" />}{result.mode === "ai" ? "AI analysis" : context.task === "data" ? "Local checks" : "Recorded evidence"}</span>}</span></div>
-    {capabilities && !thinking && ((capabilities.unlock_available && !capabilities.unlocked) || (consent && !consent.allowed)) && <div className="analysis-ai-setup" role="group" aria-label="AI analysis access">
-      {capabilities.unlock_available && !capabilities.unlocked && <form onSubmit={event => { event.preventDefault(); void act(async () => { await unlock(code); setCode(""); }); }}><label htmlFor="presenter-code">Presenter access code</label><input id="presenter-code" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} required maxLength={200} /><Button size="sm" variant="secondary" type="submit" loading={busy}>Unlock live AI</Button></form>}
-      {consent && !consent.allowed && <div className="analysis-consent"><h3>AI analysis for this {consentLabel}</h3>{capabilities?.mode === "full" && <p>Enable once for all existing and future experiments. Saved answers are reused.</p>}<details><summary>What AI receives</summary><p>{consent.disclosure}</p></details><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(async () => { await setConsent(true); retry(); })}>Enable AI analysis</Button></div>}
-    </div>}
     </div>
     {verifying && <p className="note" role="status">{record ? "Opening saved analysis…" : "Checking analysis access…"}</p>}
-    {(thinking || (result && stages.length > 0)) ? <AssistantThinkingState stages={stages} working={thinking} label={context.task === "brief" ? "Preparing review brief" : "Analyzing evidence"} doneLabel={`${context.task === "brief" ? "Prepared brief" : "Analyzed evidence"}${elapsed > 0 ? ` in ${elapsed}s` : ""}`} /> : null}
+    {(thinking || (result && stages.length > 0)) ? <AssistantThinkingState stages={stages} working={thinking} label={context.task === "brief" ? "Preparing review brief" : "Analyzing evidence"} doneLabel={completedLabel} /> : null}
+    {thinking && (context.task === "deep" || record?.context.task === "deep") && <div className="analysis-brief-actions"><Button size="sm" variant="ghost" loading={busy} onClick={() => void act(cancel)}>Cancel analysis</Button></div>}
     {!thinking && !verifying && <>
-    {!result && record && !running && <section className="analysis-progress" aria-label="Analysis status"><div className="analysis-progress-head"><strong>{record.status === "cancelled" ? "Analysis cancelled" : record.status === "interrupted" ? "Analysis interrupted" : "Analysis stopped"}</strong><span>{elapsed}s</span></div>{canRetry && <Button variant="secondary" size="sm" onClick={retry}>Retry analysis</Button>}</section>}
-    {(error || record?.error || operationError) && <div className="analysis-error" role="alert"><CircleAlert size={16} /><p>{operationError || error || record?.error}</p>{statusRecovery === "refresh" ? <Button size="sm" variant="secondary" onClick={refreshStatus}>Refresh status</Button> : !running && canRetry && ((!record && error) || (record?.status === "completed" && record.error)) ? <Button size="sm" variant="ghost" onClick={retry}>Retry analysis</Button> : null}{running && <Button size="sm" variant="ghost" onClick={() => void act(cancel)}>Cancel analysis</Button>}</div>}
-    {!running && result?.fallback_reason && capabilities?.live_available && <div className="analysis-fallback" role="status"><CircleAlert size={16} aria-hidden="true" /><p>{result.fallback_reason}</p>{canRetry && <Button size="sm" variant="secondary" onClick={retry}>Retry analysis</Button>}</div>}
+    {context.task === "deep" && !record && !error && consent && !consent.allowed && <section aria-label="Deep investigation permission">
+      <h3>Enable workspace AI</h3><p>Deep investigation connects recorded fault patterns, considers possible explanations and proposes next tests. It uses one AI request, then saves the report for reuse.</p>
+      <details><summary>What AI receives</summary><p>{consent.disclosure}</p></details>
+      <Button loading={busy} onClick={() => void act(async () => { await setConsent(true); start(context); })}>Enable AI and investigate</Button>
+    </section>}
+    {!result && record && !running && <section className="analysis-progress" aria-label="Analysis status"><div className="analysis-progress-head"><strong>{record.status === "cancelled" ? "Analysis cancelled" : record.status === "interrupted" ? "Analysis interrupted" : "Analysis stopped"}</strong></div>{canRetry && <Button variant="secondary" size="sm" onClick={retry}>Retry analysis</Button>}</section>}
+    {(error || recordError || operationError) && <div className="analysis-error" role="alert"><CircleAlert size={16} /><p>{operationError || error || recordError}</p>{statusRecovery === "refresh" ? <Button size="sm" variant="secondary" onClick={refreshStatus}>Refresh status</Button> : !running && canRetry && ((!record && error) || (record?.status === "completed" && recordError)) ? <Button size="sm" variant="ghost" onClick={retry}>Retry analysis</Button> : null}{running && <Button size="sm" variant="ghost" onClick={() => void act(cancel)}>Cancel analysis</Button>}</div>}
+    {revokedEvidence && <p className="analysis-permission-note" role="status">Saved AI output was removed when permission was turned off. Recorded evidence remains available.{context.task === "deep" && canRetry && <Button size="sm" variant="ghost" onClick={retry}>Retry analysis</Button>}</p>}
     {result && <>
-      {record?.output_currency === "historical" && <p className="note">Previously saved analysis</p>}
+      {result.mode === "ai" && !result.deep_report ? <p className="note">Previously saved AI analysis</p> : !revokedEvidence && record?.output_currency === "historical" && <p className="note">Previously saved analysis</p>}
+      {context.task === "deep" && !revokedEvidence && result.fallback_reason && <div className="analysis-error" role="alert"><CircleAlert size={16} /><p>{result.fallback_reason}</p>{canRetry && capabilities?.deep_available && <Button size="sm" variant="secondary" onClick={retry}>Retry analysis</Button>}</div>}
       <span className="sr-only" role="status">{context.task === "brief" ? "Review brief ready." : "Analysis complete."}</span>
       {context.task === "brief" && record ? <div className="review-workspace">
         <section className="analysis-brief" aria-label="Review draft">
@@ -86,10 +88,11 @@ function AnalysisContents() {
           </div>
         </section>
         <details className="review-reference analysis-disclosure disclosure-plain"><summary>Supporting evidence</summary><div className="analysis-disclosure-content"><EvidenceDetails result={result} /><ResultLimits result={result} /></div></details>
-      </div> : <ResultContent result={result} follow={follow} candidates={candidates} task={context.task} reused={Boolean(record?.reused)} />}
+      </div> : result.deep_report ? <DeepReportView result={result} reused={Boolean(record?.reused)} /> : <ResultContent result={result} follow={follow} candidates={candidates} task={context.task} reused={Boolean(record?.reused)} />}
       {!running && record?.status === "completed" && context.task === "data" && result.suggested_mapping && <section className="analysis-mapping" aria-label="Suggested mapping"><h3>Suggested column roles</h3><dl><div><dt>Equipment</dt><dd>{result.suggested_mapping.equipment_id}</dd></div><div><dt>Cycle</dt><dd>{result.suggested_mapping.cycle_index}</dd></div><div><dt>Failure</dt><dd>{result.suggested_mapping.failure_cycle || "Requires your confirmation"}</dd></div><div><dt>Sensors</dt><dd>{result.suggested_mapping.sensors.join(", ")}</dd></div></dl><Button variant="secondary" disabled={busy} onClick={applyMapping}>Use draft mapping</Button><p className="note">Review the roles before confirming.</p></section>}
       {!running && record?.status === "completed" && context.task !== "data" && context.task !== "brief" && enabled("brief") && <div className="analysis-brief-actions"><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(prepareReview)}><FileText size={15} aria-hidden="true" />Add to review brief</Button></div>}
-      <AnalysisAudit result={result} showFallback={!capabilities?.live_available} />
+      {context.task === "compare" && enabled("deep") && <div className="analysis-brief-actions"><DeepInvestigationAction context={{ ...context, task: "deep" }} /></div>}
+      <AnalysisAudit result={result} />
     </>}
     </>}
   </div>;
@@ -231,7 +234,7 @@ function ResultLimits({ result }: { result: AnalysisResult }) {
   return result.limitations.length ? <details className="analysis-limits analysis-disclosure disclosure-plain"><summary>What this does not establish</summary><div className="analysis-disclosure-content"><ul>{result.limitations.map(item => <li key={item}>{item}</li>)}</ul></div></details> : null;
 }
 
-function AnalysisAudit({ result, showFallback }: { result: AnalysisResult; showFallback: boolean }) {
+function AnalysisAudit({ result }: { result: AnalysisResult }) {
   const steps: { name: string; label: string; count: number }[] = [];
   for (const call of result.investigation ?? []) {
     const previous = steps[steps.length - 1];
@@ -241,8 +244,7 @@ function AnalysisAudit({ result, showFallback }: { result: AnalysisResult; showF
   return <details className="analysis-audit analysis-disclosure disclosure-plain"><summary>Analysis record</summary><div className="analysis-disclosure-content">
     {steps.length > 0 && <ol className="investigation-log">{steps.map((step, index) => <li key={`${index}-${step.name}`}><span>{step.label}</span>{step.count > 1 && <span className="investigation-repeat" aria-label={`Repeated ${step.count} times`}>× {step.count}</span>}</li>)}</ol>}
     <p className="analysis-verification">{result.verification}</p>
-    <dl className="analysis-record-metadata"><div><dt>Model</dt><dd>{result.model ?? "Recorded evidence"}</dd></div>{result.prompt_version && <div><dt>Prompt</dt><dd>{result.prompt_version}</dd></div>}<div><dt>Evidence ID</dt><dd><code>{result.evidence_digest}</code></dd></div></dl>
-    {result.fallback_reason && showFallback && <p className="analysis-record-fallback">{result.fallback_reason}</p>}
+    <dl className="analysis-record-metadata">{result.mode === "ai" ? <><div><dt>Model</dt><dd>{result.model ?? "Unavailable"}</dd></div>{result.prompt_version && <div><dt>Prompt</dt><dd>{result.prompt_version}</dd></div>}</> : <div><dt>Method</dt><dd>Recorded evidence</dd></div>}<div><dt>Evidence ID</dt><dd><code>{result.evidence_digest}</code></dd></div></dl>
   </div></details>;
 }
 function Finding({ finding }: { finding: AnalysisFinding }) {

@@ -1,0 +1,13 @@
+.dialog { width: min(560px, calc(100vw - 2 * var(--space-4))); max-height: calc(100dvh - 2 * var(--space-4)); overflow: auto; padding: var(--space-5); border: 1px solid var(--border-subtle); border-radius: var(--radius); background: var(--surface); color: var(--foreground); box-shadow: var(--popover-shadow); }
+.dialog::backdrop { background: rgba(0, 0, 0, .55); }
+.dialog header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.dialog h2 { margin: 0; font-size: var(--text-lg); }
+.dialog > p { margin: 0 0 var(--space-4); }
+.context { margin-top: var(--space-4); padding-block: var(--space-4); border-block: 1px solid var(--border-subtle); }
+.context summary { cursor: pointer; font-size: var(--text-sm); color: var(--text-secondary); }
+.context p { margin: var(--space-3) 0; }
+.fields { display: grid; gap: var(--space-3); }
+.save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); font-size: var(--text-sm); }
+.dialog footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-5); }
+.dialog footer .note { max-width: 30ch; }
+@media (max-width: 600px) { .dialog footer { align-items: stretch; flex-direction: column; gap: var(--space-3); } .dialog footer .note { max-width: none; } }

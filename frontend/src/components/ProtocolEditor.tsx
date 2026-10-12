@@ -1,6 +1,6 @@
 import { Select } from "@/registry/components/select/select";
 import { useState } from "react";
-import type { ExperimentProtocol, FaultSpec, FaultScenario, PilotBrief } from "../api/types";
+import type { ExperimentEngineerContext, ExperimentProtocol, FaultSpec, FaultScenario, PilotBrief } from "../api/types";
 import { Button, IconButton } from "./Chrome";
 import { Pencil, Trash2 } from "lucide-react";
 import { NumberField } from "@/registry/components/number-field/number-field";
@@ -72,17 +72,18 @@ export function ProtocolEditor({ value, onChange, sensors, disabled }: { value: 
   </div>;
 }
 
-export function PilotBriefEditor({ value, onChange, disabled }: { value: PilotBrief; onChange: (value: PilotBrief) => void; disabled: boolean }) {
+export function PilotBriefEditor({ value, onChange, context, onContextChange, disabled }: { value: PilotBrief; onChange: (value: PilotBrief) => void; context: ExperimentEngineerContext; onContextChange: (value: ExperimentEngineerContext) => void; disabled: boolean }) {
   return <details className="decision-detail pilot-brief"><summary>Pilot brief (optional)</summary><div className="pilot-brief-fields">
     <div className="pilot-brief-identity">
-    <Input label="Equipment family" placeholder="e.g. Conveyor motors" value={value.equipment_family ?? ""} maxLength={200} disabled={disabled} onChange={e => onChange({ ...value, equipment_family: e.target.value })} />
+    <Input label="Equipment type" placeholder="e.g. Conveyor motors" value={value.equipment_family ?? ""} maxLength={200} disabled={disabled} onChange={e => { onChange({ ...value, equipment_family: e.target.value }); onContextChange({ ...context, equipment_type: e.target.value }); }} />
     <Input label="Reviewing engineer" placeholder="Name or team" value={value.reviewing_engineer ?? ""} maxLength={200} disabled={disabled} onChange={e => onChange({ ...value, reviewing_engineer: e.target.value })} />
     <Select label="Data classification" value={value.data_classification ?? "unverified"} disabled={disabled} options={[{ value: "simulated", label: "Simulated benchmark" }, { value: "field", label: "Field records (user declared)" }, { value: "unverified", label: "Unverified" }]} onValueChange={data_classification => onChange({ ...value, data_classification: data_classification as PilotBrief["data_classification"] })} />
     </div>
+    <Textarea label="What the sensors measure" placeholder="For example, bearing temperature and outlet pressure" value={context.sensor_meaning ?? ""} maxLength={500} rows={2} disabled={disabled} onChange={e => onContextChange({ ...context, sensor_meaning: e.target.value })} />
     <div className="pilot-brief-review">
     <Textarea label="Current review procedure" placeholder="How warnings are reviewed today" value={value.current_procedure ?? ""} maxLength={2000} rows={3} disabled={disabled} onChange={e => onChange({ ...value, current_procedure: e.target.value })} />
-    <Textarea label="Decision this review supports" placeholder="What should this pilot help you decide?" value={value.intended_decision ?? ""} maxLength={2000} rows={3} disabled={disabled} onChange={e => onChange({ ...value, intended_decision: e.target.value })} />
+    <Textarea label="Decision this review supports" placeholder="What should this pilot help you decide?" value={value.intended_decision ?? ""} maxLength={2000} rows={3} disabled={disabled} onChange={e => { onChange({ ...value, intended_decision: e.target.value }); onContextChange({ ...context, decision: e.target.value }); }} />
     </div>
     <Input label="Proposed success measure" placeholder="e.g. Timely warnings on at least 90% of histories" value={value.success_measure ?? ""} maxLength={1000} disabled={disabled} onChange={e => onChange({ ...value, success_measure: e.target.value })} />
-  </div><p className="note">Field validation needs actual equipment records and an agreed review decision. This brief records intentions, not measured benefits.</p></details>;
+  </div><p className="note">Equipment type, sensor meaning and decision are saved for AI investigations. They do not affect model training or scoring. Contact details and other pilot notes are not sent to AI.</p><p className="note">Field validation needs actual equipment records and an agreed review decision. This brief records intentions, not measured benefits.</p></details>;
 }

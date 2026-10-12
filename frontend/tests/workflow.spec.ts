@@ -70,7 +70,7 @@ test("a browser sample trains, freezes, validates once and exports a ZIP", async
   await page.getByRole("button", { name: "Generate sample data" }).click();
   await expect(page.getByRole("heading", { name: "Review the test" })).toBeVisible();
   await page.getByText("Pilot brief (optional)", { exact: true }).click();
-  await page.getByRole("textbox", { name: "Equipment family" }).fill("Simulated pilot workflow");
+  await page.getByRole("textbox", { name: "Equipment type" }).fill("Simulated pilot workflow");
   await page.getByRole("button", { name: "Train and challenge models" }).click();
   await expect(page).toHaveURL(/\/experiments\/[^/]+\/comparison/, { timeout: 150_000 });
   await expect(page.getByRole("heading", { name: "Freeze and validate" })).toBeVisible();

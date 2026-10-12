@@ -63,7 +63,7 @@ class EvidenceTools:
                  toolSpec("list_fault_cases", {"model": model, "order": {"type": "string", "enum": ["failed", "weakest_detection", "highest_early_alarm"]},
                                                 "limit": {"type": "integer", "enum": [1, 2, 3]}}),
                  toolSpec("inspect_fault_case", {"model": model, "case": {"type": "string"}})]
-        if self.context.task == "compare" or (self.context.task == "brief" and len(self.context.candidates) == 2):
+        if self.context.task == "compare" or (self.context.task in ("brief", "deep") and len(self.context.candidates) == 2):
             specs.append(toolSpec("compare_models"))
         if self.context.task == "warning" or (self.context.task == "brief" and self.context.equipment_id):
             specs.append(toolSpec("get_warning_events"))
@@ -434,7 +434,8 @@ class EvidenceTools:
         self.result.mode = "ai" if model else "evidence"
         self.result.model = model
         self.result.prompt_version = PROMPT_VERSION
-        self.result.verification = "All assessments resolve to server-verified claims and scoped evidence. AI supplies no numbers, URLs or qualification decisions."
+        self.result.verification = ("All assessments resolve to server-verified claims and scoped evidence. AI supplies no numbers, URLs or qualification decisions."
+                                    if model else "Assessments cite server-verified claims and recorded evidence.")
         payload = {"original": self.result.evidence_digest, "sources": [source.model_dump(mode="json") for source in self.result.sources],
                    "assessment": [claim.model_dump() for claim in self.result.assessment], "calls": [call.model_dump() for call in self.calls]}
         self.result.evidence_digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -446,9 +447,21 @@ class EvidenceTools:
             packet = self.call("get_warning_events", {})
             return self.finish(packet["finding_ids"][:3], packet["claims"][:3],
                 "replay" if any(action.id == "replay" for action in self.result.actions) else None, None)
-        if self.context.task == "compare" or (self.context.task == "brief" and len(self.context.candidates) == 2):
+        if self.context.task == "compare" or (self.context.task in ("brief", "deep") and len(self.context.candidates) == 2):
             packet = self.call("compare_models", {})
-            return self.finish(packet["finding_ids"][:3], packet["claims"][:3], None, None)
+            # Investigate the failing model first, regardless of checkbox order.
+            # Comparison claims stay unchanged; this only ranks a concrete action.
+            model = min(self.models, key=lambda alias: (
+                self.verdicts[self.models[alias]].qualifies,
+                self.verdicts[self.models[alias]].worst_metrics.detection_fraction
+                    if self.verdicts[self.models[alias]].worst_metrics else 1))
+            cases = self.call("list_fault_cases", {"model": model,
+                "order": "failed" if not self.verdicts[self.models[model]].qualifies else "weakest_detection", "limit": 1})["cases"]
+            action = None
+            if cases:
+                self.call("inspect_fault_case", {"model": model, "case": cases[0]["case"]})
+                action = f"inspect-{model}-{cases[0]['case']}"
+            return self.finish(packet["finding_ids"][:3], packet["claims"][:3], action, None)
         for model in self.models:
             packet = self.call("get_model_metrics", {"model": model})
             findingIds += packet["finding_ids"][:1]

@@ -37,12 +37,14 @@ export function WorkspaceAiPermission() {
     <span ref={opener}><IconButton label="AI settings" className="theme-toggle icon-button" onClick={() => { setState(null); setError(""); setOpen(true); }} aria-haspopup="dialog"><Cpu size={17} aria-hidden="true" /></IconButton></span>
     {open && <dialog ref={dialog} className={styles.dialog} aria-labelledby="workspace-ai-title" onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}>
       <header><h2 id="workspace-ai-title" tabIndex={-1} ref={title}>Workspace AI</h2><IconButton label="Close AI settings" onClick={close}><X size={17} aria-hidden="true" /></IconButton></header>
-      <p>One permission for all existing and future experiments in this local workspace.</p>
+      <p>Manage permission for deep investigations and access to saved AI answers in this local workspace.</p>
       {state ? <>
-        <p role="status">{state.allowed ? "AI is enabled. New analyses run automatically; saved answers are reused." : "AI is off. Recorded evidence remains available."}</p>
+        <p role="status">{state.allowed ? "AI permission is enabled. Saved AI answers remain available." : "AI permission is off. Recorded evidence remains available."}</p>
+        <p>Routine analysis, comparisons, data checks and review briefs run locally without AI requests. Enabling permission does not start an analysis.</p>
+        <p>Choose Deep investigation on a completed result when you want possible explanations and suggested next tests. Each new investigation uses one AI request; saved reports are reused.</p>
         <details><summary>What AI receives</summary><p>{state.disclosure}</p></details>
         {state.allowed && <p className="note">Turning AI off cancels active analyses and removes cloud-derived answers and briefs. Evidence-only drafts are retained.</p>}
-        <Button variant={state.allowed ? "secondary" : "primary"} loading={busy} onClick={() => void save()}>{state.allowed ? "Turn off AI analysis" : "Enable AI analysis"}</Button>
+        <Button variant={state.allowed ? "secondary" : "primary"} loading={busy} onClick={() => void save()}>{state.allowed ? "Turn off AI permission" : "Enable AI permission"}</Button>
       </> : !error && <p role="status">Checking AI permission…</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {!state && error && <Button variant="secondary" onClick={() => { setError(""); void assistant.consent("workspace").then(setState, failure => setError(analysisError(failure))); }}>Retry</Button>}

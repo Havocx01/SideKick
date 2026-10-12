@@ -57,9 +57,18 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     // at the entrance animation rather than after an arbitrary network delay.
     let release!: () => void;
     const admitted = new Promise<void>(resolve => { release = resolve; });
-    await page.route("**/api/selection**", async route => { await admitted; await route.continue(); });
+    let prepared!: () => void;
+    const responseReady = new Promise<void>(resolve => { prepared = resolve; });
+    await page.route("**/api/selection**", async route => {
+      const response = await route.fetch();
+      prepared();
+      await admitted;
+      await route.fulfill({ response });
+    });
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("switch", { name: "Animations", exact: true })).toHaveAttribute("aria-checked", "true");
+    // Measure the actual entrance; backend latency must not consume its observation window.
+    await responseReady;
     const movement = page.evaluate(async () => {
       const values = new Set<string>();
       const scales: number[] = [];

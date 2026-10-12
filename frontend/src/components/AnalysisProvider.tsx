@@ -14,7 +14,9 @@ export function analysisContextKey(value: AnalysisRequest) {
   return JSON.stringify({ task: value.task === "brief" ? (value.candidates?.length === 2 ? "compare" : value.equipment_id && value.scenario_id ? "warning" : "investigate") : value.task,
     experiment_id: value.experiment_id ?? null, dataset_id: value.dataset_id ?? null, mapping,
     complete_histories: value.complete_histories ?? false, candidates: value.candidates ?? [], partition: value.partition ?? "out_of_fold",
-    scenario_id: value.scenario_id ?? null, equipment_id: value.equipment_id ?? null, cycle: value.cycle ?? null });
+    scenario_id: value.scenario_id ?? null, equipment_id: value.equipment_id ?? null, cycle: value.cycle ?? null,
+    engineer_context: value.engineer_context ? { equipment_type: value.engineer_context.equipment_type?.trim() ?? "", sensor_meaning: value.engineer_context.sensor_meaning?.trim() ?? "", decision: value.engineer_context.decision?.trim() ?? "" } : null,
+    investigation_focus: value.investigation_focus?.trim() || null });
 }
 type VisibleRecord = AnalysisRecord & { output_currency?: "current" | "historical" };
 interface AnalysisState {
@@ -163,11 +165,14 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         setCapabilities(caps);
         const consentScope = caps.mode === "full" ? "workspace" : next.dataset_id ? `dataset:${next.dataset_id}` : next.experiment_id;
         let consentPermitsDraft = true;
-        if (caps.consent_required && consentScope) {
+        // Routine local results need no permission lookup. Historical cloud
+        // drafts still verify consent, and all saved reads are guarded server-side.
+        if (caps.consent_required && consentScope && (next.task === "deep" || caps.live_available || (revalidate && previous?.result?.mode === "ai"))) {
           const state = await assistant.consent(consentScope);
           if (token !== generation.current) return;
           updateConsent(state);
           consentPermitsDraft = state.allowed;
+          if (next.task === "deep" && !state.allowed && !revalidate) return;
         }
         if (failedReopen) { setError(retainedError); return; }
         // A failed admission response has no known job ID. Explicit recovery
@@ -340,6 +345,6 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     if (!mapping || !mappingReceiver.current || context?.task !== "data") return;
     mappingReceiver.current(mapping); close();
   }
-  const canRetry = Boolean(context && capabilities?.tasks.includes(context.task) && !verifying && !pending);
+  const canRetry = Boolean(context && capabilities?.tasks.includes(context.task) && !verifying && !pending && (context.task !== "deep" || (consent?.allowed && capabilities.deep_available)));
   return <AnalysisContext.Provider value={{ open, context, record, capabilities, consent, error, pending, verifying, canRetry, statusRecovery, refreshStatus: () => { setError(""); setStatusRecovery(""); setPollVersion(version => version + 1); }, start: (next, receiver) => { mappingReceiver.current = receiver; void run(next, true); }, applyMapping, prepareReview, retry: () => { if (contextRef.current) void run(contextRef.current, false, true); }, close, cancel, setConsent, unlock, saveBrief, editBrief, enabled: task => tasks.includes(task) }}>{children}</AnalysisContext.Provider>;
 }

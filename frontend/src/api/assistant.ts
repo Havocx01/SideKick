@@ -1,10 +1,12 @@
 import { downloadEvidence, request } from "./client";
-import type { AnalysisDetail, AnalysisRecord, AnalysisRequest, AssistantCapabilities, ConsentState } from "./types";
+import type { AnalysisDetail, AnalysisRecord, AnalysisRequest, AssistantCapabilities, ConsentState, ExperimentEngineerContext } from "./types";
 
 const base = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 const post = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
 const path = (id: string) => `/api/assistant/analyses/${encodeURIComponent(id)}`;
 export const assistant = {
+  experimentContext: (id?: string | null) => request<ExperimentEngineerContext>(`/api/assistant/experiment-context${id ? `?experiment_id=${encodeURIComponent(id)}` : ""}`),
+  saveExperimentContext: (id: string | null | undefined, fields: ExperimentEngineerContext) => post<ExperimentEngineerContext>(`/api/assistant/experiment-context${id ? `?experiment_id=${encodeURIComponent(id)}` : ""}`, fields),
   capabilities: (experimentId?: string | null, datasetId?: string | null) => request<AssistantCapabilities>(`/api/assistant/capabilities${datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : experimentId ? `?experiment_id=${encodeURIComponent(experimentId)}` : ""}`),
   start: (body: AnalysisRequest, reuse = true) => post<AnalysisRecord>(`/api/assistant/analyses${reuse ? "?reuse=true" : ""}`, body),
   get: (id: string) => request<AnalysisDetail>(path(id)),

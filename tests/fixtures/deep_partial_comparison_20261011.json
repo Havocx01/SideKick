@@ -1,0 +1,111 @@
+{
+  "parsed": {
+    "hypotheses": [
+      {
+        "title": "Threshold Sensitivity Differences",
+        "explanation": "The observed warnings missed or become late primarily due to fixed threshold settings that fail to trigger timely alerts under certain persistent dropout or stuck fault patterns. Lower detection in model-2 patterns with persistent faults suggests its thresholding mechanism is less sensitive in these scenarios, while model-1 maintains detection. This could imply model-2's threshold or scoring margin fails to overcome persistence-induced score depressions.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-2",
+          "pattern-3",
+          "pattern-4"
+        ],
+        "alternative": "Model-2's feature representation or input handling for dropout and stuck sensor faults is less robust, causing lower reliable scores despite threshold settings."
+      },
+      {
+        "title": "Input Handling Robustness",
+        "explanation": "Model-2 exhibits reduced detection for persistent dropout and stuck sensor faults possibly because it lacks robust imputation or compensation for missing or constant signals, making its features less reliable. Model-1, especially as an augmented xgboost model, likely handles these missing patterns better, explaining its superior detection rates and fewer late warnings.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-4",
+          "pattern-13",
+          "pattern-15"
+        ],
+        "alternative": "Differences in threshold placement or warning persistence logic, not input handling, principally cause missed or late warnings for model-2."
+      }
+    ],
+    "gaps": [
+      "No historical preprocessing details are available to confirm imputation or missing-data handling differences.",
+      "Equipment and fold-level outcome summaries are unavailable, limiting detection of systemic weaknesses across data partitions."
+    ],
+    "next_tests": [
+      {
+        "title": "Inspect Warning Persistence and Threshold Margins on Dropout and Stuck Fault Patterns",
+        "procedure": "Analyze score traces and warning state transitions for model-2's patterns with persistent dropout or stuck faults (especially patterns 1-4). Check if scores exceed but do not sustain above threshold long enough to trigger warnings due to persistence rules.",
+        "expected_signal": "Detected warning switches off or fails to persist across required consecutive cycles despite scores above threshold in some cycles.",
+        "if_signal_observed": "Supports the Threshold Sensitivity Differences hypothesis where warning logic and threshold persistence impede timely alerts.",
+        "if_signal_absent": "Suggests Input Handling Robustness differences where model-2's score never adequately surpasses thresholds due to degraded feature reliability.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-2",
+          "pattern-3",
+          "pattern-4"
+        ]
+      },
+      {
+        "title": "Compare Score Distributions and Imputation Flags for Missing Data in Dropout Faults",
+        "procedure": "Examine if recorded scores from model-2 for dropout fault patterns are lower overall compared to model-1 and whether missing-value indicators or imputation features are present in training or runtime logs to assess compensatory inputs.",
+        "expected_signal": "Model-2 scores are consistently lower and show no compensatory imputation signals or missingness handling features; model-1 shows stronger or stable scoring despite missing data.",
+        "if_signal_observed": "Supports Input Handling Robustness hypothesis that model-2's weaker input handling causes warning failures.",
+        "if_signal_absent": "Points toward threshold and persistence settings as main cause rather than input representation for warning shortfalls.",
+        "observation_ids": [
+          "pattern-1",
+          "pattern-15"
+        ]
+      }
+    ]
+  },
+  "inspected_ids": [
+    "pattern-1",
+    "pattern-2",
+    "pattern-3",
+    "pattern-4",
+    "pattern-5",
+    "pattern-6",
+    "pattern-7",
+    "pattern-8",
+    "pattern-9",
+    "pattern-10",
+    "pattern-11",
+    "pattern-12",
+    "pattern-13",
+    "pattern-14",
+    "pattern-15",
+    "pattern-16",
+    "pattern-17",
+    "pattern-18",
+    "pattern-19",
+    "pattern-20",
+    "pattern-21",
+    "pattern-22",
+    "pattern-23",
+    "pattern-24",
+    "history-summary-1",
+    "history-summary-2",
+    "sensor-quality-1",
+    "sensor-quality-2",
+    "sensor-quality-3",
+    "sensor-quality-4",
+    "sensor-quality-5",
+    "sensor-quality-6",
+    "sensor-quality-7",
+    "sensor-quality-8",
+    "sensor-quality-9",
+    "sensor-quality-10",
+    "diagnostic-availability"
+  ],
+  "aliases": {
+    "model-1": "xgboost_augmented",
+    "model-2": "logistic_regression",
+    "channel-15": "Recorded channel",
+    "channel-5": "Recorded channel",
+    "channel-3": "Recorded channel",
+    "channel-4": "Recorded channel",
+    "channel-6": "Recorded channel",
+    "channel-8": "Recorded channel",
+    "channel-12": "Recorded channel",
+    "channel-14": "Recorded channel",
+    "channel-1": "Recorded channel",
+    "channel-2": "Recorded channel"
+  }
+}

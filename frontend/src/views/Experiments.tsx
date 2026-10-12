@@ -2,7 +2,7 @@ import { Select } from "@/registry/components/select/select";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, experiments, library } from "../api/client";
-import type { ColumnMapping, DatasetRegistration, ExperimentRecord, ExperimentProtocol, PilotBrief } from "../api/types";
+import type { ColumnMapping, DatasetRegistration, ExperimentEngineerContext, ExperimentRecord, ExperimentProtocol, PilotBrief } from "../api/types";
 import { defaultProtocol, PilotBriefEditor, ProtocolEditor } from "../components/ProtocolEditor";
 import { Badge, Button, Field, Panel, StateBlock } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
@@ -77,6 +77,7 @@ function ExperimentSetup() {
   const [burden, setBurden] = useState(10);
   const [protocol, setProtocol] = useState<ExperimentProtocol>(defaultProtocol([]));
   const [pilotBrief, setPilotBrief] = useState<PilotBrief>({ data_classification: "unverified" });
+  const [engineerContext, setEngineerContext] = useState<ExperimentEngineerContext>({ equipment_type: "", sensor_meaning: "", decision: "" });
   const datasetId = params.get("dataset");
   const isSample = params.get("source") === "sample";
   const folderParam = params.get("folder");
@@ -176,7 +177,7 @@ function ExperimentSetup() {
         ...(folderParam !== null ? { folder_id: selectedFolder === "unfiled" ? null : selectedFolder } : {}),
         min_detection_fraction: detection / 100,
         max_early_alarm_burden: burden / 100
-        , ...(health.data?.can_edit_protocol ? { protocol: { ...protocol, min_detection_fraction: detection / 100, max_early_alarm_burden: burden / 100 }, pilot_brief: pilotBrief } : {})
+        , ...(health.data?.can_edit_protocol ? { protocol: { ...protocol, min_detection_fraction: detection / 100, max_early_alarm_burden: burden / 100 }, pilot_brief: pilotBrief, engineer_context: engineerContext } : {})
       });
       observeTraining(result, true);
       navigate(`/experiments/${result.experiment_id}`);
@@ -403,7 +404,7 @@ function ExperimentSetup() {
                   configurations and a 20-cycle feature window. Final validation is a separate, explicit local action.
                 </p>
                 </section>
-                {health.data?.can_edit_protocol && <PilotBriefEditor value={pilotBrief} onChange={setPilotBrief} disabled={busy} />}
+                {health.data?.can_edit_protocol && <PilotBriefEditor value={pilotBrief} onChange={setPilotBrief} context={engineerContext} onContextChange={setEngineerContext} disabled={busy} />}
                 </div>
                 {invalidSettings && <p className="setup-settings-error" role="alert">Check the test limits and warning-window order in Adjust test settings.</p>}
                 <div className="experiment-start-actions">

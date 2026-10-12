@@ -58,6 +58,15 @@ class AssistantStore:
                         # Keep unrecognised historical payloads and account for their bytes.
                         continue
                     db.execute("UPDATE analyses SET payload=? WHERE id=?", (record.model_dump_json(), id))
+                origins = db.execute("SELECT result_origin,brief_origin,revoked FROM analysis_provenance WHERE id=?", (id,)).fetchone()
+                if (record.status == "completed" and record.result and record.result.mode == "evidence"
+                        and origins and origins[0] == "evidence" and not origins[2]
+                        and (record.brief_text is None or origins[1] == "evidence")
+                        and record.error == "Cloud consent was revoked. Showing recorded evidence."):
+                    # Older revocation code also annotated proven local output. Repair
+                    # only that notice; real revocation tombstones remain authoritative.
+                    record.error = None
+                    db.execute("UPDATE analyses SET payload=? WHERE id=?", (record.model_dump_json(), id))
                 if record.status in {"queued", "running"}:
                     record.status = "interrupted"
                     record.error = "Server restarted. Start a new analysis."
@@ -310,6 +319,8 @@ class AssistantStore:
                 origins = db.execute("SELECT result_origin,brief_origin FROM analysis_provenance WHERE id=?", (id,)).fetchone() or ("unknown", "unknown")
                 if workspace or record.context.consent_scope == experiment:
                     tainted = origins[0] != "evidence" or (record.brief_text is not None and origins[1] != "evidence") or record.status in {"queued", "running"}
+                    if not tainted:
+                        continue
                     if origins[0] != "evidence":
                         record.result = None
                     if origins[1] != "evidence":

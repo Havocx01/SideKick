@@ -10,6 +10,7 @@ import { useApi } from "../hooks/useApi";
 import { useEvidence, useExperimentId } from "../hooks/useEvidence";
 import { Badge, Button, IconButton, Panel, StateBlock } from "./Chrome";
 import { Check, ChevronRight, ClipboardList, Download, FileText, ScanLine, Star, X } from "lucide-react";
+import { DeepInvestigationAction } from "./DeepInvestigationAction";
 
 export function EvidenceExport({ labels = false }: { labels?: boolean } = {}) {
   const api = useEvidence();
@@ -97,6 +98,7 @@ export function DecisionSummary({ selection, inspected, inspectFaultHref }: { se
           {analysis.enabled("investigate") && <Button variant="secondary" onClick={() => analysis.start({ task: "investigate", experiment_id: id, partition: selection.partition, candidates: [`${focus.candidate}/${focus.config_id}`] })}><ScanLine size={15} aria-hidden="true" />{focus.qualifies ? "Analyze result" : "Investigate failure"}</Button>}
           {/* <Link className="result-text-link" to={`${id ? `/experiments/${id}` : ""}/replay?${query}`}>Replay model</Link> */}
           {analysis.enabled("brief") && <Button variant="secondary" onClick={() => analysis.start({ task: "brief", experiment_id: id, partition: selection.partition, candidates: [`${focus.candidate}/${focus.config_id}`] })}><ClipboardList size={15} aria-hidden="true" />Prepare review brief</Button>}
+          {analysis.enabled("deep") && <DeepInvestigationAction key={`${id}/${selection.partition}/${focus.candidate}/${focus.config_id}`} context={{ task: "deep", experiment_id: id, partition: selection.partition, candidates: [`${focus.candidate}/${focus.config_id}`] }} />}
         </div>
         <p className="note decision-note">Test result, not deployment approval.</p>
       </Panel></div>}
