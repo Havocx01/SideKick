@@ -11,8 +11,11 @@ export function DeepReportView({ result, reused }: { result: AnalysisResult; reu
   const otherFindings = report.hypotheses.filter(item => item !== mainFinding);
   const patterns = report.observations.filter(item => item.kind !== "supporting");
   const supporting = report.observations.filter(item => item.kind === "supporting");
-  const recorded = supporting.find(item => item.summary && (firstCheck?.observation_ids.includes(item.id)
-    || item.related_pattern_ids?.some(id => firstCheck?.observation_ids.includes(id))));
+  // A directly cited history belongs beside its explanation. Another example of
+  // the same pattern may have a different crossing sequence or warning outcome.
+  const recorded = supporting.find(item => item.summary && mainFinding?.observation_ids.includes(item.id))
+    ?? supporting.find(item => item.summary && firstCheck?.observation_ids.includes(item.id))
+    ?? supporting.find(item => item.summary && item.related_pattern_ids?.some(id => firstCheck?.observation_ids.includes(id)));
   const visible = useStreamingReveal(streamWords(mainFinding?.explanation ?? "").length, 320, reused);
   return <div className="deep-report" aria-label="Deep investigation report">
     {recorded && <section className="deep-recorded-facts" aria-label="Recorded facts">

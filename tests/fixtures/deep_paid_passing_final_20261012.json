@@ -1,0 +1,1237 @@
+{
+  "context": {
+    "task": "deep",
+    "experiment_id": null,
+    "dataset_id": null,
+    "mapping": null,
+    "complete_histories": false,
+    "partition": "out_of_fold",
+    "candidates": [
+      "xgboost_augmented/aug3"
+    ],
+    "scenario_id": null,
+    "equipment_id": null,
+    "cycle": null,
+    "engineer_context": null,
+    "investigation_focus": null
+  },
+  "prompt": "sidekick-deep-v20",
+  "packet": {
+    "partition": "out_of_fold",
+    "models": [
+      {
+        "alias": "model-1",
+        "family": "xgboost_augmented",
+        "required_cases": 64,
+        "required_passed": 64,
+        "coverage_complete": null,
+        "available_patterns": 48,
+        "provided_patterns": 24,
+        "provided_cases": 32,
+        "healthy_detection": 1.0,
+        "healthy_early_alarm": 0.0009809167112537899
+      }
+    ],
+    "recorded_facts": {
+      "every_history_warned_in_time": false,
+      "faults_reduce_timely_detection": true,
+      "inspection_focus": "Inspect the recorded fault-related warning shortfalls: which traces become late or missed, and which input-handling or threshold mechanism could explain that change. Do not assume perfect detection."
+    },
+    "protocol_boundaries": {
+      "min_useful_lead": 10,
+      "horizon_cycles": 30,
+      "late_window_end": 9,
+      "transition_band_end": 45,
+      "alert_on_consecutive": 2,
+      "alert_off_consecutive": 2
+    },
+    "metric_definitions": {
+      "detection_fraction": "Proportion of recorded histories with an active warning in the useful pre-failure window. It is not fault-onset detection.",
+      "failed_cases": "Cases not meeting recorded limits. No failed cases does not mean every history was detected.",
+      "early_alarm_burden": "Undesirable alarm time among eligible cycles earlier than the transition boundary before failure. Not useful lead time or warning before fault onset.",
+      "coverage_unknown": "The explicit coverage flag was not recorded. Matching expected history counts is checked separately; it cannot establish the missing flag or training completeness.",
+      "scope": "Required simulated fault aggregates plus explicitly scoped stored diagnostic summaries and bounded aligned score/warning excerpts. No raw sensor readings, equipment IDs or full trace arrays are supplied.",
+      "reserved_histories": "Separate final-check evidence. Never use reserved histories for diagnosis, metadata investigation or tuning.",
+      "augmentation": "Training-example augmentation does not establish added feature columns or learned feature usage. Model-family differences do not isolate augmentation benefit."
+    },
+    "limits": {
+      "min_detection_fraction": 0.7,
+      "max_early_alarm_burden": 0.1,
+      "min_useful_lead": 10,
+      "horizon_cycles": 30
+    },
+    "comparable_coverage": false,
+    "observations": [
+      {
+        "id": "pattern-1",
+        "model": "model-1",
+        "channel": "channel-3",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0014267879436418763,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-2",
+        "model": "model-1",
+        "channel": "channel-12",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-3",
+        "model": "model-1",
+        "channel": "channel-12",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0007133939718209382,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-4",
+        "model": "model-1",
+        "channel": "channel-12",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0008025682182985554,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-5",
+        "model": "model-1",
+        "channel": "channel-14",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-6",
+        "model": "model-1",
+        "channel": "channel-14",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 0.9875,
+        "maximum_detection": 0.9875,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-7",
+        "model": "model-1",
+        "channel": "channel-1",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-8",
+        "model": "model-1",
+        "channel": "channel-1",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-9",
+        "model": "model-1",
+        "channel": "channel-1",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0008917424647761727,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-10",
+        "model": "model-1",
+        "channel": "channel-2",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-11",
+        "model": "model-1",
+        "channel": "channel-2",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-12",
+        "model": "model-1",
+        "channel": "channel-2",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-13",
+        "model": "model-1",
+        "channel": "channel-3",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.002318530408418049,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-14",
+        "model": "model-1",
+        "channel": "channel-3",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0008025682182985554,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-15",
+        "model": "model-1",
+        "channel": "channel-4",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0017834849295523454,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-16",
+        "model": "model-1",
+        "channel": "channel-4",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0007133939718209382,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-17",
+        "model": "model-1",
+        "channel": "channel-4",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0011592652042090245,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-18",
+        "model": "model-1",
+        "channel": "channel-5",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.001337613697164259,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-19",
+        "model": "model-1",
+        "channel": "channel-5",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0006242197253433209,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-20",
+        "model": "model-1",
+        "channel": "channel-5",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0008917424647761727,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-21",
+        "model": "model-1",
+        "channel": "channel-6",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0011592652042090245,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      },
+      {
+        "id": "pattern-22",
+        "model": "model-1",
+        "channel": "channel-6",
+        "kind": "dropout",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0011592652042090245,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-23",
+        "model": "model-1",
+        "channel": "channel-6",
+        "kind": "stuck",
+        "duration": "persistent",
+        "cases": 1,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.0009809167112537899,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [],
+        "directions": [],
+        "lengths": []
+      },
+      {
+        "id": "pattern-24",
+        "model": "model-1",
+        "channel": "channel-7",
+        "kind": "drift",
+        "duration": "persistent",
+        "cases": 2,
+        "failed_cases": 0,
+        "minimum_detection": 1.0,
+        "maximum_detection": 1.0,
+        "maximum_early_alarm": 0.001070090957731407,
+        "early_alarm_available": true,
+        "coverage": "unknown",
+        "history_counts_match": true,
+        "onsets": [
+          60
+        ],
+        "onset_unknown": false,
+        "severity_sd": [
+          1.0
+        ],
+        "directions": [
+          -1,
+          1
+        ],
+        "lengths": []
+      }
+    ],
+    "inspected_cases": 64,
+    "total_patterns": 48,
+    "summarized_patterns": 24,
+    "supporting_evidence": {
+      "paired_histories": {
+        "status": "available",
+        "items": [
+          {
+            "observation_id": "history-summary-1",
+            "model": "model-1",
+            "history": "history-1",
+            "fold": "fold-1",
+            "threshold": 0.7049202521214133,
+            "clean": {
+              "outcome": "timely",
+              "lead_cycles": 28,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 19,
+                "above_threshold": 20,
+                "above_threshold_without_active_warning": 1,
+                "maximum_above_threshold_streak": 20,
+                "minimum_score_margin": -0.6892569933900481,
+                "maximum_score_margin": 0.29428646966127103,
+                "warning_switch_offs": 0
+              }
+            },
+            "faulted": {
+              "outcome": "timely",
+              "lead_cycles": 27,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 18,
+                "above_threshold": 19,
+                "above_threshold_without_active_warning": 1,
+                "maximum_above_threshold_streak": 19,
+                "minimum_score_margin": -0.6964758786255365,
+                "maximum_score_margin": 0.2933174769511575,
+                "warning_switch_offs": 0
+              }
+            },
+            "change": "same_outcome",
+            "scope": "stored_example_same_history_same_threshold_same_cycles",
+            "score_warning_trace": {
+              "status": "available",
+              "scope": "selected_stored_history_excerpt_not_population",
+              "total_recorded_points": 202,
+              "sampled_points": 8,
+              "omitted_points": 194,
+              "useful_window_complete": true,
+              "cycle_gaps_present": false,
+              "useful_maximum_high_streak": {
+                "clean": 20,
+                "faulted": 19
+              },
+              "persistence_convention": "Valid scores in recorded order; invalid scores hold pending streaks and warning state. High streak includes earlier recorded points, not just the useful window. Cycle gaps do not reset the scorer.",
+              "points": [
+                {
+                  "rul": 31,
+                  "clean_score": 0.004053040407598019,
+                  "clean_warning_active": false,
+                  "clean_high_streak": 0,
+                  "faulted_score": 0.0015545616624876857,
+                  "faulted_warning_active": false,
+                  "faulted_high_streak": 0
+                },
+                {
+                  "rul": 30,
+                  "clean_score": 0.015663258731365204,
+                  "clean_warning_active": false,
+                  "clean_high_streak": 0,
+                  "faulted_score": 0.008444373495876789,
+                  "faulted_warning_active": false,
+                  "faulted_high_streak": 0
+                },
+                {
+                  "rul": 29,
+                  "clean_score": 0.8041938543319702,
+                  "clean_warning_active": false,
+                  "clean_high_streak": 1,
+                  "faulted_score": 0.6501485705375671,
+                  "faulted_warning_active": false,
+                  "faulted_high_streak": 0
+                },
+                {
+                  "rul": 28,
+                  "clean_score": 0.741529107093811,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 2,
+                  "faulted_score": 0.7656142115592957,
+                  "faulted_warning_active": false,
+                  "faulted_high_streak": 1
+                },
+                {
+                  "rul": 27,
+                  "clean_score": 0.7750702500343323,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 3,
+                  "faulted_score": 0.7161429524421692,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 2
+                },
+                {
+                  "rul": 26,
+                  "clean_score": 0.9249552488327026,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 4,
+                  "faulted_score": 0.8821537494659424,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 3
+                },
+                {
+                  "rul": 10,
+                  "clean_score": 0.9925217032432556,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 20,
+                  "faulted_score": 0.825589120388031,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 19
+                },
+                {
+                  "rul": 9,
+                  "clean_score": 0.9994520545005798,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 21,
+                  "faulted_score": 0.9967517852783203,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 20
+                }
+              ]
+            },
+            "related_pattern_ids": [
+              "pattern-2"
+            ]
+          },
+          {
+            "observation_id": "history-summary-2",
+            "model": "model-1",
+            "history": "history-2",
+            "fold": "fold-2",
+            "threshold": 0.7049202521214133,
+            "clean": {
+              "outcome": "timely",
+              "lead_cycles": 31,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 21,
+                "above_threshold": 20,
+                "above_threshold_without_active_warning": 0,
+                "maximum_above_threshold_streak": 17,
+                "minimum_score_margin": -0.09063156441541964,
+                "maximum_score_margin": 0.29504160090593046,
+                "warning_switch_offs": 0
+              }
+            },
+            "faulted": {
+              "outcome": "timely",
+              "lead_cycles": 28,
+              "episode_count": 1,
+              "useful_window": {
+                "recorded_cycles": 21,
+                "valid_scores": 21,
+                "active_cycles": 19,
+                "above_threshold": 19,
+                "above_threshold_without_active_warning": 1,
+                "maximum_above_threshold_streak": 17,
+                "minimum_score_margin": -0.40944485858770663,
+                "maximum_score_margin": 0.2948946754565591,
+                "warning_switch_offs": 0
+              }
+            },
+            "change": "same_outcome",
+            "scope": "stored_example_same_history_same_threshold_same_cycles",
+            "score_warning_trace": {
+              "status": "available",
+              "scope": "selected_stored_history_excerpt_not_population",
+              "total_recorded_points": 180,
+              "sampled_points": 8,
+              "omitted_points": 172,
+              "useful_window_complete": true,
+              "cycle_gaps_present": false,
+              "useful_maximum_high_streak": {
+                "clean": 17,
+                "faulted": 17
+              },
+              "persistence_convention": "Valid scores in recorded order; invalid scores hold pending streaks and warning state. High streak includes earlier recorded points, not just the useful window. Cycle gaps do not reset the scorer.",
+              "points": [
+                {
+                  "rul": 31,
+                  "clean_score": 0.9441813826560974,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 2,
+                  "faulted_score": 0.5883460640907288,
+                  "faulted_warning_active": false,
+                  "faulted_high_streak": 0
+                },
+                {
+                  "rul": 30,
+                  "clean_score": 0.936854898929596,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 3,
+                  "faulted_score": 0.6845782995223999,
+                  "faulted_warning_active": false,
+                  "faulted_high_streak": 0
+                },
+                {
+                  "rul": 29,
+                  "clean_score": 0.858723521232605,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 4,
+                  "faulted_score": 0.7132052779197693,
+                  "faulted_warning_active": false,
+                  "faulted_high_streak": 1
+                },
+                {
+                  "rul": 28,
+                  "clean_score": 0.9496919512748718,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 5,
+                  "faulted_score": 0.8916043639183044,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 2
+                },
+                {
+                  "rul": 27,
+                  "clean_score": 0.6142886877059937,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 0,
+                  "faulted_score": 0.29547539353370667,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 0
+                },
+                {
+                  "rul": 26,
+                  "clean_score": 0.8757919073104858,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 1,
+                  "faulted_score": 0.8180786371231079,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 1
+                },
+                {
+                  "rul": 10,
+                  "clean_score": 0.9999618530273438,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 17,
+                  "faulted_score": 0.9998149275779724,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 17
+                },
+                {
+                  "rul": 9,
+                  "clean_score": 0.9999840259552002,
+                  "clean_warning_active": true,
+                  "clean_high_streak": 18,
+                  "faulted_score": 0.9999592304229736,
+                  "faulted_warning_active": true,
+                  "faulted_high_streak": 18
+                }
+              ]
+            },
+            "related_pattern_ids": [
+              "pattern-2"
+            ]
+          }
+        ],
+        "scope": "stored_examples_only",
+        "selection": "missed_or_late_examples_first",
+        "omitted_pairs_may_exist": true,
+        "warning_rules": {
+          "alert_on_consecutive": 2,
+          "alert_off_consecutive": 2
+        }
+      },
+      "preprocessing": {
+        "status": "unavailable",
+        "items": [],
+        "reason": "No preprocessing record for this partition. Current source code is not evidence of historical fitted preprocessing."
+      },
+      "sensor_quality": {
+        "status": "available",
+        "items": [
+          {
+            "observation_id": "sensor-quality-1",
+            "channel": "channel-3",
+            "mean": 47.54116814502448,
+            "std": 0.26708092559826174,
+            "minimum": 46.85,
+            "maximum": 48.53,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-1",
+              "pattern-13",
+              "pattern-14"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-2",
+            "channel": "channel-12",
+            "mean": 1590.5231186079202,
+            "std": 6.131000927188835,
+            "minimum": 1571.04,
+            "maximum": 1616.91,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-2",
+              "pattern-3",
+              "pattern-4"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-3",
+            "channel": "channel-14",
+            "mean": 553.367711211284,
+            "std": 0.8850708068616236,
+            "minimum": 549.85,
+            "maximum": 556.06,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-5",
+              "pattern-6"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-4",
+            "channel": "channel-1",
+            "mean": -8.87014686636615e-06,
+            "std": 0.0021872604380133802,
+            "minimum": -0.0087,
+            "maximum": 0.0087,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-7",
+              "pattern-8",
+              "pattern-9"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-5",
+            "channel": "channel-2",
+            "mean": 2.350831273326548e-06,
+            "std": 0.0002930550220098974,
+            "minimum": -0.0006,
+            "maximum": 0.0006,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-10",
+              "pattern-11",
+              "pattern-12"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-6",
+            "channel": "channel-4",
+            "mean": 521.4134700208425,
+            "std": 0.7375355171108342,
+            "minimum": 518.69,
+            "maximum": 523.38,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-15",
+              "pattern-16",
+              "pattern-17"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-7",
+            "channel": "channel-5",
+            "mean": 2388.0961523920314,
+            "std": 0.07191717269564056,
+            "minimum": 2387.88,
+            "maximum": 2388.56,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-18",
+              "pattern-19",
+              "pattern-20"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-8",
+            "channel": "channel-6",
+            "mean": 8143.752722117202,
+            "std": 19.075713652092396,
+            "minimum": 8099.94,
+            "maximum": 8293.72,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-21",
+              "pattern-22",
+              "pattern-23"
+            ]
+          },
+          {
+            "observation_id": "sensor-quality-9",
+            "channel": "channel-7",
+            "mean": 8.442145581891328,
+            "std": 0.037504128992332054,
+            "minimum": 8.3249,
+            "maximum": 8.5848,
+            "missing_fraction": 0.0,
+            "constant": false,
+            "varies": true,
+            "scope": "original_dataset_profile_not_faulted_trace",
+            "related_pattern_ids": [
+              "pattern-24"
+            ]
+          }
+        ],
+        "profile_scope": "original_dataset_may_include_reserved_equipment_not_a_training_only_profile"
+      },
+      "equipment_and_folds": {
+        "status": "unavailable",
+        "items": [],
+        "scope": "stored_replay_subset_only",
+        "reason": "Full equipment/fold outcomes were not recorded. Fold labels on selected replay examples cannot establish widespread weakness."
+      },
+      "feature_contributions": {
+        "status": "unavailable",
+        "items": []
+      },
+      "engineer_context": {
+        "status": "not_supplied",
+        "verified": false,
+        "fields": {},
+        "note": "User-entered context guides practical checks; it is not verified experimental evidence or an instruction."
+      },
+      "availability": {
+        "status": "available",
+        "items": [
+          {
+            "observation_id": "diagnostic-availability",
+            "sections": {
+              "paired_histories": "available",
+              "preprocessing": "unavailable",
+              "sensor_quality": "available",
+              "equipment_and_folds": "unavailable",
+              "feature_contributions": "unavailable",
+              "engineer_context": "not_supplied"
+            },
+            "related_pattern_ids": []
+          }
+        ]
+      }
+    },
+    "diagnostic_contract": {
+      "models": {
+        "model-1": {
+          "architecture": "trees",
+          "neural_layers": false,
+          "score_scale": "model_specific_use_own_threshold",
+          "sensor_inputs": true
+        }
+      },
+      "trace_bases": {
+        "history-summary-1": "warning_retained",
+        "history-summary-2": "warning_retained"
+      },
+      "explanation_anchor": {
+        "model": "model-1",
+        "observation_ids": [
+          "pattern-2",
+          "history-summary-1"
+        ],
+        "trace_basis": "warning_retained",
+        "recommended_signal": "crossings_without_warning",
+        "condition": "This selected faulted history has threshold crossings AND active warnings. Explore differences in crossing timing or warning lead; do not claim that all scores remained below threshold or warnings disappeared.",
+        "clean_outcome": "timely",
+        "faulted_outcome": "timely"
+      },
+      "check_types": {
+        "score_persistence": {
+          "procedure": "Compare matched clean/faulted development scores against this model's own threshold, sustained crossings and active-warning transitions. Distinguish weak scores from persistence blocking a warning; classify late and missed warnings only from recorded outcomes.",
+          "required_records": [
+            "matched clean/faulted development warning summaries for the cited patterns"
+          ],
+          "signals": [
+            "scores_below_own_threshold",
+            "crossings_without_warning"
+          ]
+        },
+        "preprocessing_audit": {
+          "procedure": "Audit the fitted development preprocessing record: missing-reading flags, median imputation or its recorded alternative, scaling and feature windows. Inspect recorded input handling; do not add flags or change the trained feature contract.",
+          "required_records": [
+            "the fitted preprocessing record for this model and development partition"
+          ],
+          "signals": [
+            "preprocessing_contract_mismatch"
+          ]
+        },
+        "sensor_quality": {
+          "procedure": "Inspect missingness, flat readings and recorded ranges for the cited channels. This original dataset profile is descriptive, may include reserved equipment, and does not identify faulted-history readings or justify tuning.",
+          "required_records": [
+            "recorded original-dataset quality statistics for the cited channels"
+          ],
+          "signals": [
+            "sensor_quality_anomaly"
+          ]
+        },
+        "threshold_sensitivity": {
+          "procedure": "Only after the required records are available, assess sensitivity around this model's own threshold on development histories. Hold the model, preprocessing and alert persistence fixed; measure timely, late and missed warnings AND early-alarm burden. Never synchronize numeric thresholds across models or tune on reserved histories.",
+          "required_records": [],
+          "signals": [
+            "threshold_tradeoff"
+          ]
+        },
+        "recorded_attribution": {
+          "procedure": "Inspect matched recorded contributions to clean predictions only, using this model's attribution scale. Do not infer faulted feature importance, physical causes or neural intermediate layers from these records.",
+          "required_records": [
+            "matched recorded clean-prediction contributions for the cited patterns"
+          ],
+          "signals": [
+            "attribution_concentration"
+          ]
+        },
+        "fold_variation": {
+          "procedure": "Compare recorded development outcomes across equipment and folds for the cited fault cases. Keep late and missed outcomes separate; repeated fault cases reuse equipment and are not independent samples.",
+          "required_records": [
+            "recorded development fold outcomes for the cited fault cases"
+          ],
+          "signals": [
+            "fold_outcome_concentration"
+          ]
+        }
+      },
+      "scope": "Inspect development evidence only. No new scoring, training or tuning is executed.",
+      "threshold_records": "Complete development score traces, selected threshold, fixed alert rules and eligibility mask are required; compact paired summaries cannot support a threshold sweep.",
+      "availability": "The server derives inspect_now or needs_evidence for the exact model and cited patterns. Never claim unavailable records were inspected."
+    }
+  },
+  "parsed": {
+    "hypotheses": [
+      {
+        "title": "Score timing shift within sustained warning",
+        "explanation": "If fault-induced signal drift changes score magnitudes or timing within a period of sustained warnings, warning activations may shift in lead time despite warning retention as seen in history-summary-1 with pattern-2.",
+        "observation_ids": [
+          "pattern-2",
+          "history-summary-1"
+        ],
+        "alternative": "If baseline warning persistence hides short score dips below threshold, crossing timing shifts would not affect warning lead and shifts relate to boundary detection rather than internal score changes for the same sustained warning periods.",
+        "trace_basis": "warning_retained"
+      }
+    ],
+    "gaps": [
+      "No preprocessing record is available to verify input-handling differences.",
+      "No faulted feature contributions or fold outcome variations limit explanation depth."
+    ],
+    "next_tests": [
+      {
+        "title": "Score persistence and crossing timing comparison for warning lead shifts",
+        "model": "model-1",
+        "check_type": "score_persistence",
+        "focus": "Determine if within sustained warnings the faulted scores shift timing or magnitude of threshold crossings compared to clean, causing warning lead changes without warning loss.",
+        "signal": "crossings_without_warning",
+        "observation_ids": [
+          "pattern-2",
+          "history-summary-1"
+        ]
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 8979,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 0
+    },
+    "output_tokens": 232,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 9211
+  }
+}

@@ -5,7 +5,7 @@ import globals from "globals";
 
 // Correctness only; generated contracts and imported registry source have separate owners.
 export default [
-  { ignores: ["dist/**", "node_modules/**", "src/api/types.ts", "src/registry/**"] },
+  { ignores: ["dist/**", "node_modules/**", "test-results/**", "playwright-report/**", "src/api/types.ts", "src/registry/**"] },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: { parser: tseslint.parser, globals: { ...globals.browser, ...globals.node } },

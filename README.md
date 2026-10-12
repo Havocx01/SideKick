@@ -65,7 +65,7 @@ Run `.\tasks.ps1 evaluation-pack` to prepare offline engineer review cases, a se
 
 ## Try it
 
-Start with **Start guided walkthrough**. It uses recorded NASA results to explain what Sidekick tests and how to read the warnings. It does not train models or score reserved histories.
+Start with **View walkthrough**. Its introductory disclosure uses recorded NASA results to explain what Sidekick tests and how to read the warnings. It does not train models or score reserved histories. For onsite judging, use the [presentation runbook and offline fallback checklist](docs/judging-guide.md).
 
 To run something new, choose **Set up sample**, generate the data, review the split and protocol, then select **Train and challenge models**. The result bars show warnings in time, late and missed. Investigate a result, select two candidates to compare, or explain a warning in replay. Analysis follows the selected model and evaluation partition. Prepare a review brief when ready; edits stay separate from the original evidence.
 

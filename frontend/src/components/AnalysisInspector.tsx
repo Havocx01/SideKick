@@ -57,6 +57,8 @@ function AnalysisContents() {
   const stages = record?.stages ?? [];
   const completedLabel = context.task === "deep" && result?.mode === "evidence"
     ? "Recorded evidence ready" : context.task === "brief" ? "Prepared brief" : "Analyzed evidence";
+  const showBriefAction = !running && record?.status === "completed" && context.task !== "data" && context.task !== "brief" && enabled("brief");
+  const showDeepAction = context.task === "compare" && enabled("deep");
   return <div className={`analysis-body${thinking ? " analysis-loading-body" : ""}`}>
     <div className="analysis-meta">
     <div className="analysis-context">{context.task === "data" ? <strong>Current column mapping</strong> : candidates.map(key => <strong key={key}>{candidateLabel(...key.split("/") as [string, string])}</strong>)}<span><span>{context.task === "data" ? "Draft data checks" : scopeLabel}{context.equipment_id ? ` · History ${context.equipment_id}` : ""}{context.cycle != null ? ` · Cycle ${context.cycle}` : ""}</span>{result && <span className="analysis-mode">{result.mode === "ai" ? <Cpu size={14} strokeWidth={1.75} aria-hidden="true" /> : <Database size={14} strokeWidth={1.75} aria-hidden="true" />}{result.mode === "ai" ? "AI analysis" : context.task === "data" ? "Local checks" : "Recorded evidence"}</span>}</span></div>
@@ -90,8 +92,10 @@ function AnalysisContents() {
         <details className="review-reference analysis-disclosure disclosure-plain"><summary>Supporting evidence</summary><div className="analysis-disclosure-content"><EvidenceDetails result={result} /><ResultLimits result={result} /></div></details>
       </div> : result.deep_report ? <DeepReportView result={result} reused={Boolean(record?.reused)} /> : <ResultContent result={result} follow={follow} candidates={candidates} task={context.task} reused={Boolean(record?.reused)} />}
       {!running && record?.status === "completed" && context.task === "data" && result.suggested_mapping && <section className="analysis-mapping" aria-label="Suggested mapping"><h3>Suggested column roles</h3><dl><div><dt>Equipment</dt><dd>{result.suggested_mapping.equipment_id}</dd></div><div><dt>Cycle</dt><dd>{result.suggested_mapping.cycle_index}</dd></div><div><dt>Failure</dt><dd>{result.suggested_mapping.failure_cycle || "Requires your confirmation"}</dd></div><div><dt>Sensors</dt><dd>{result.suggested_mapping.sensors.join(", ")}</dd></div></dl><Button variant="secondary" disabled={busy} onClick={applyMapping}>Use draft mapping</Button><p className="note">Review the roles before confirming.</p></section>}
-      {!running && record?.status === "completed" && context.task !== "data" && context.task !== "brief" && enabled("brief") && <div className="analysis-brief-actions"><Button size="sm" variant="secondary" loading={busy} onClick={() => void act(prepareReview)}><FileText size={15} aria-hidden="true" />Add to review brief</Button></div>}
-      {context.task === "compare" && enabled("deep") && <div className="analysis-brief-actions"><DeepInvestigationAction context={{ ...context, task: "deep" }} /></div>}
+      {(showBriefAction || showDeepAction) && <div className="analysis-brief-actions">
+        {showBriefAction && <Button size="sm" variant="secondary" loading={busy} onClick={() => void act(prepareReview)}><FileText size={15} aria-hidden="true" />Add to review brief</Button>}
+        {showDeepAction && <DeepInvestigationAction context={{ ...context, task: "deep" }} />}
+      </div>}
       <AnalysisAudit result={result} />
     </>}
     </>}

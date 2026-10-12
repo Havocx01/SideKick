@@ -1,7 +1,15 @@
 # Sidekick implementation plans
 
+The judging closeout includes the prior local trace, release and UI fixes in its
+reviewed local checkpoint. Older rows describe verification/publication state at
+their original completion; the current state is in the judging readiness receipt.
+
 | Plan | Status | Priority | Effort | Notes |
 |---|---|---|---|---|
+| [Judging preparation](2026-10-12-judging-preparation.md) | DONE | P1 | M | 439 backend / 105 browser / 7 protocol checks, lint/types/build and fresh Docker runtime pass. Saved brief survives cold restart; current guide and 14-file offline kit prepared. Reviewed local checkpoint; no push, deployment, paid calls or user storage edits. Remote CI and physical rehearsal remain team tasks. |
+| [Minimal paid deep verification](2026-10-12-deep-live-verification.md) | DONE | P1 | S | Four requests, estimated $0.0157780. Exact final passing response retains a trace-specific explanation/check; failing/comparison explanations safely omitted. 57 mocked contexts, 434 backend / 42 browser / 7 protocol checks and lint/types/build pass. Running API needs restart; consistent engineer added value unproved. Uncommitted/undeployed. |
+| [Trace-specific deep explanations](2026-10-12-trace-explanations.md) | DONE | P1 | S | Private trace-basis choices, scoped history citations and tentative server titles; facts follow the cited history. 150 final affected backend / 22 browser / 7 protocol checks, lint/types/build pass. Zero paid calls; live added value remains unproved. Uncommitted/undeployed. |
+| [Release and engineering review](2026-10-12-release-engineering-review.md) | DONE | P1 | M | 103 browser checks and fresh Docker runtime pass; remote CI found an ambiguous selector, repaired locally but needs publishing. AI-assisted engineering review and participant packs prepared; no human/field study. Zero paid calls; uncommitted/undeployed. |
 | [Matched traces and AI added value](2026-10-11-matched-traces-usefulness.md) | DONE | P1 | M | Aligned score/warning excerpts, facts/hypotheses/gaps and A/B review pack. 408 backend / 44 browser / 7 protocol checks, lint/types/build pass. Two paid calls, estimated $0.0075384; advice remains generic and human benefit unproved. Uncommitted and undeployed. |
 | [Experiment context and AI refinement](2026-10-11-context-ai-refinement.md) | DONE | P1 | M | Shared context in Pilot brief, separate editable metadata and per-investigation focus. 391 backend / 40 browser / 7 protocol checks, lint/types/build pass. Two paid calls, estimated $0.0065304; final retains a tentative explanation/alternative/check. Consistent engineer usefulness remains unproved. Uncommitted and undeployed. |
 | [Deep diagnostic contract](2026-10-11-deep-check-contract.md) | DONE | P1 | M | Model-scoped typed checks, server-owned controls/outcomes and explicit missing prerequisites. 382 backend / 31 browser / 7 protocol checks, lint/types/build and 12 offline routine cases pass. Four paid calls, estimated $0.015192; exact last capture retains one question, zero explanations after final filtering. Consistent AI usefulness remains unproved. Uncommitted and undeployed. |
@@ -16,4 +24,4 @@
 | [Reliability completion](2026-10-09-sidekick-reliability-completion.md) | DONE | P1 | L | Nine technical priorities resolved. Fresh deployment follow-up: 212 backend / 68 browser / 7 protocol checks; Docker builds, loopback, replay capacity/restart/expiry and hosted memory pass. Application committed in a807144; verification follow-up committed locally. No public deployment by this task. Engineer benefit remains unmeasured. |
 | [Review remediation](2026-10-09-sidekick-review-remediation-plan.md) | DONE | P1 | L | F1–F14 and follow-up fixes verified; Docker prerequisite resolved by the deployment runtime receipt. Reviewed application and verification follow-up committed locally. Field reliability and engineer study remain separate. |
 
-Last touched: 11 October 2026.
+Last touched: 12 October 2026.

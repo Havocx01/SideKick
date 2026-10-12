@@ -17,7 +17,7 @@ from app.assistant.evidence import percent
 from app.assistant.schemas import DeepHypothesis, DeepObservation, DeepReport, DeepSynthesis, InvestigationCall
 from app.schemas import Strict
 
-PROMPT_VERSION = "sidekick-deep-v18"
+PROMPT_VERSION = "sidekick-deep-v20"
 MAX_PATTERNS = 24
 MAX_INPUT_BYTES = 40000
 INSTRUCTION = """Help an engineer choose an informative diagnostic of a warning model.
@@ -26,21 +26,23 @@ with a check that distinguishes them. Do not restate the measured results, prais
 model or describe missing records as a cause. Prefer a single concise explanation
 and a single focused diagnostic of the failing model. Empty hypotheses are permitted
 when the inspected evidence cannot support a meaningful mechanism; do not fill space.
-Use a neutral title naming the mechanism. Write the explanation as a single short
+Your title is not published: Sidekick supplies a tentative title. Write the explanation as a single short
 sentence, and the alternative as a single short sentence. Each must explicitly say
 may, might, could or would, or frame the mechanism with if. A tentative opening never
 licenses a later sentence to assert unobserved scores, feature use or causes. Do not
 say "the modest scores indicate" or "this low scoring output causes" when traces
 were not supplied. Aim for fewer than forty words per sentence.
 
-For example, for a simulated dropout shortfall, a defensible hypothesis is:
-"The affected model may respond weakly to substituted sensor inputs, so model scores
-could remain below its own threshold." A competing explanation is: "Scores could
-instead cross the threshold briefly while the persistence rule delays activation."
-This is an example of reasoning shape, not a finding about this packet. Use it only
-if the cited fault kind and model permit it. Neither imputation behavior nor crossing
-timing is established by aggregate detection counts. A score/persistence check can
-distinguish these mechanisms once the required development records are available.
+Read diagnostic_contract.explanation_anchor FIRST. It selects one compatible matched
+history and states its recorded condition. Prefer its exact observation_ids and
+trace_basis for a single explanation and its related diagnostic; do not mix in another
+history with a different condition. Explain what could account for THAT condition,
+with a genuinely different mechanism that remains compatible with those same records.
+Do not offer a known observed crossing condition as if it were a competing unknown.
+Put citation IDs only in observation_ids, not in prose. Do not answer a question that
+the supplied trace already settles: a retained active warning is not a missing warning.
+For warning_retained, explore what could shift crossing timing or warning lead while
+the warning remains active/timely. Never assert weak scores or absent warnings for it.
 Never invent numerical values or copy rates into prose. The interface supplies the
 exact recorded numbers beside citations. Do not describe a model as robust, its
 warnings as perfect, or the absence of original-data anomalies as fault immunity.
@@ -95,7 +97,23 @@ invalid scores hold pending streaks and warning state. Do not reset streaks at t
 useful-window boundary or assume omitted samples are adjacent. Full recorded summaries
 and the recorded outcome can describe the selected history, never all equipment.
 If a relevant paired history is supplied, cite its history-summary ID together with
-its related fault pattern when selecting a score/persistence check. A missing fitted
+its related fault pattern in BOTH the explanation and score/persistence check. Use
+diagnostic_contract.trace_bases to select trace_basis. Address that exact condition
+in the explanation and explicitly limit it to the selected or matched history.
+For no_useful_crossings, ask what could keep faulted scores below this model's own
+threshold; persistence alone cannot activate a warning without qualifying scores.
+For short_crossings, explain what could produce brief or isolated crossing streaks;
+insufficient streaks are consistent with the opening rule, not proof of broken logic.
+Contrast possible score instability with threshold placement or another unverified
+input mechanism, rather than pretending the known short streak is an unknown outcome.
+For sustained_crossings_without_warning, consider recorded timing or warning-state
+context; do not blame threshold stringency or declare the persistence logic faulty.
+Do not say all faulted scores stayed below threshold if any crossing is recorded.
+Different selected histories can have different conditions: cite only the matching
+histories for this explanation, never generalize to uncited faults or fleet behavior.
+If a relevant matched history has no eligible basis (incomplete or invalid
+window), abstain from an explanation rather than infer a complete crossing sequence.
+Use null trace_basis only when no related matched history was supplied. A missing fitted
 preprocessing record remains a prerequisite for an input-handling claim.
 
 Use precise language: model scores cross or remain below a numeric threshold; warnings
@@ -178,7 +196,12 @@ def provider_synthesis_schema(observation_ids: list[str], *, packet=None) -> typ
     reference = Literal[ids]
     citations = (list[reference], Field(min_length=1, max_length=4,
         description="Supporting pattern IDs from this request's inspected observations only."))
-    hypothesis = create_model("ScopedDeepHypothesis", __base__=DeepProviderHypothesis, observation_ids=citations)
+    hypothesis_fields = {"observation_ids": citations}
+    if packet is not None:
+        from app.assistant.trace_reasoning import TraceBasis
+        hypothesis_fields["trace_basis"] = (TraceBasis | None, Field(default=None,
+            description="Recorded trace condition from diagnostic_contract.trace_bases for the cited matched history; null only if no related matched history exists."))
+    hypothesis = create_model("ScopedDeepHypothesis", __base__=DeepProviderHypothesis, **hypothesis_fields)
     if packet is None:  # Offline legacy contract regression only; never used for new paid output.
         test = create_model("ScopedDeepTest", __base__=DeepProviderTest, observation_ids=citations)
     else:
@@ -344,14 +367,14 @@ def collect_deep_evidence(tools):
 def validate_synthesis(output, observations, aliases, *, fault_kinds=()):
     from app.assistant.diagnostic_checks import semantic_text
     ids = {row.id for row in observations}
-    texts = [output.summary, *output.gaps]
+    texts = [(text, ()) for text in [output.summary, *output.gaps]]
     for item in [*output.hypotheses, *output.next_tests]:
         if len(set(item.observation_ids)) != len(item.observation_ids) or not set(item.observation_ids) <= ids:
             raise DeepVerificationError("citation")
-        texts.extend(value for key, value in item.model_dump().items() if key != "observation_ids")
+        texts.extend((value, item.observation_ids) for key, value in item.model_dump().items() if key != "observation_ids")
     if any(len(gap) > 500 for gap in output.gaps):
         raise DeepVerificationError("gap_length")
-    for text in texts:
+    for text, cited_ids in texts:
         if not isinstance(text, str):  # New optional server-composed metadata is not AI prose.
             continue
         if not semantic_text(text):
@@ -369,6 +392,11 @@ def validate_synthesis(output, observations, aliases, *, fault_kinds=()):
         # Mask only whole, known aliases, with the same casing rules as resolution.
         known = "|".join(re.escape(alias) for alias in sorted(aliases, key=len, reverse=True))
         clean = re.sub(rf"\b(?:{known})\b", "", text, flags=re.I) if known else text
+        # Known IDs are server-owned references, not invented measurements. Only
+        # this paragraph's verified citations may be masked; unknown IDs still fail.
+        references = "|".join(re.escape(id) for id in sorted(cited_ids, key=len, reverse=True))
+        if references:
+            clean = re.sub(rf"\b(?:{references})\b", "record citation", clean, flags=re.I)
         # Negated limits are appropriate; affirmative proof/feature claims are not.
         cautious = re.sub(r"\b(?:cannot|does not|do not|would not|will not)\s+confirm\b",
                           "unconfirmed", clean, flags=re.I)

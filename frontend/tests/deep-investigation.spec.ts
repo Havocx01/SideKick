@@ -168,6 +168,33 @@ test("main finding follows the priority check and supporting detail stays access
   expect(state.starts).toBe(1);
 });
 
+for (const width of [390, 1280]) {
+  test(`facts follow the explanation's directly cited history at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const state = await fixture(page);
+    const first = state.report.observations[1];
+    first.summary = "This example has an isolated crossing too short for the opening rule.";
+    first.related_pattern_ids = ["pattern-a"];
+    state.report.observations.push({ ...first, id: "history-summary-2", title: "Second matched history",
+      summary: "This selected history has no faulted useful-window score crossings." });
+    state.report.hypotheses[0] = { title: "Possible reasons for absent useful-window score crossings",
+      explanation: "Faulted scores may remain below their threshold because input response differs in this matched history.",
+      alternative: "The selected threshold could instead require a stronger response.",
+      observation_ids: ["pattern-a", "history-summary-2"] };
+    state.report.next_tests[0].observation_ids = ["pattern-a", "history-summary-1"];
+    await page.goto("/comparison?candidate=logistic_regression%2Flr2");
+    await launch(page);
+    const dialog = page.getByRole("dialog", { name: "Deep investigation", exact: true });
+    const facts = dialog.getByRole("region", { name: "Recorded facts", exact: true });
+    await expect(facts).toContainText("Second matched history");
+    await expect(facts).toContainText("no faulted useful-window score crossings");
+    await expect(facts).not.toContainText("isolated crossing");
+    await expect(dialog.getByRole("region", { name: "Possible explanations", exact: true }))
+      .toContainText("Possible reasons for absent useful-window score crossings");
+    expect(state.starts).toBe(1);
+  });
+}
+
 test("deep permission is deliberate, failure retains the action, routine analysis stays local", async ({ page }) => {
   const state = await fixture(page, false);
   await page.goto("/comparison?candidate=logistic_regression%2Flr2");
@@ -233,7 +260,7 @@ for (const theme of ["light", "dark"]) for (const width of [390, 1280]) {
     expect(state.starts).toBe(0);
     state.contextFailure = false;
     await setup.getByRole("button", { name: "Save context", exact: true }).click();
-    await expect(setup.getByRole("status")).toContainText("Context saved");
+    await expect(setup.getByRole("status").filter({ hasText: "Context saved" })).toBeVisible();
     await setup.getByRole("textbox", { name: "What should this investigation focus on? (optional)", exact: true }).fill("Compare score response and persistence");
     expect(await setup.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBeTruthy();
     await setup.getByRole("button", { name: "Start investigation", exact: true }).click();

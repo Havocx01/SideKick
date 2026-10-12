@@ -2,6 +2,8 @@
 
 --live --case failing --case comparison admits at most two requests in a durable
 ledger, no retries, with the current model and a conservative $0.10 ceiling.
+An explicitly named campaign may reserve up to four total requests; failed calls
+count and its limits cannot be increased. Each invocation selects at most two cases.
 Generation latency is measured; engineer decision time is deliberately left blank.
 No experiment, consent, training, validation or user-draft records are changed.
 """
@@ -54,7 +56,11 @@ def admit(ledger, label, params):
     byte_bound = len(json.dumps(params['input']).encode()) + len(json.dumps(schema).encode()) + 2000
     cost = (byte_bound * .4 + params['max_output_tokens'] * 1.6) / 1_000_000
     calls = ledger.setdefault('calls', [])
-    if params['model'] != MODEL or len(calls) >= MAX_REQUESTS or any(c['case'] == label for c in calls) or sum(c.get('cost_usd', c['reserved_usd']) for c in calls) + cost > MAX_USD:
+    request_limit = ledger.get('max_requests', MAX_REQUESTS)
+    cost_limit = ledger.get('max_usd', MAX_USD)
+    if type(request_limit) is not int or not 1 <= request_limit <= 4 or not 0 < cost_limit <= MAX_USD:
+        raise RuntimeError('Invalid paid evaluation limits.')
+    if params['model'] != MODEL or len(calls) >= request_limit or any(c['case'] == label for c in calls) or sum(c.get('cost_usd', c['reserved_usd']) for c in calls) + cost > cost_limit:
         raise RuntimeError('Paid request, model, duplicate-case or cost limit reached.')
     row = {'case': label, 'model': params['model'], 'prompt': deep.PROMPT_VERSION, 'reserved_usd': cost, 'status': 'admitted'}
     calls.append(row)
@@ -176,8 +182,12 @@ async def run(args):
     settings = get_settings()
     if args.live and (not settings.openai_api_key or settings.assistant_model != MODEL):
         raise ValueError('Current configured model and server key required; no request admitted.')
-    ledger_path = ROOT/'output/matched-traces-20261011/paid-ledger.json'
-    ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {'max_requests': MAX_REQUESTS, 'max_usd': MAX_USD, 'calls': []}
+    ledger_path = campaign_folder(args)/'paid-ledger.json'
+    requested_limit = getattr(args, 'max_requests', MAX_REQUESTS)
+    ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {'max_requests': requested_limit, 'max_usd': MAX_USD, 'calls': []}
+    if args.live and ledger.get('max_requests', MAX_REQUESTS) != requested_limit:
+        raise ValueError('Existing campaign limits cannot be changed; retain the original budget.')
+    attempt = getattr(args, 'attempt', 'initial')
     for name in selected:
         scoped = bundle.model_copy(deep=True)
         if name == 'missing-evidence':
@@ -198,7 +208,7 @@ async def run(args):
                 sdk = original(**kwargs)
                 class Responses:
                     async def parse(self, **params):
-                        admission = admit(ledger, name, params)
+                        admission = admit(ledger, name + ':' + attempt, params)
                         calls.append(admission)
                         write(ledger_path, ledger)
                         try:
@@ -274,16 +284,29 @@ async def run(args):
     return 0
 
 
+def campaign_folder(args):
+    campaign = getattr(args, 'campaign', None)
+    if campaign is None:
+        return ROOT/'output/matched-traces-20261011'
+    import re
+    if not re.fullmatch(r'[a-z][a-z0-9-]{0,63}', campaign):
+        raise ValueError('Campaign must be a short lowercase name.')
+    return ROOT/'output/deep-evaluations'/campaign
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--case', action='append', choices=CASES)
     parser.add_argument('--capture', action='append', type=Path)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--campaign', help='Separate durable paid ledger for this explicitly authorized evaluation.')
+    parser.add_argument('--max-requests', type=int, choices=range(1, 5), default=MAX_REQUESTS)
+    parser.add_argument('--attempt', choices=('initial', 'after-fix'), default='initial')
     args = parser.parse_args()
     if not args.live:
         return asyncio.run(run(args))
-    lock = ROOT/'output/matched-traces-20261011/paid-evaluation.lock'
+    lock = campaign_folder(args)/'paid-evaluation.lock'
     lock.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation prevents overlapping invocations from racing the ledger.
     # A crashed process leaves the lock in place for deliberate operator recovery.
