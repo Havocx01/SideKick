@@ -4,6 +4,8 @@ import { Input } from "@/components/arc/input/input";
 import { Textarea } from "@/components/arc/textarea/textarea";
 import type { AnalysisRequest, ExperimentEngineerContext } from "../api/types";
 import { assistant } from "../api/assistant";
+import { experiments } from "../api/client";
+import { demoPrefill, prefillEngineerContext } from "../lib/demo-prefill";
 import { analysisError, useAnalysis } from "./AnalysisProvider";
 import { Button, IconButton } from "./Chrome";
 import styles from "./deep-investigation-setup.module.css";
@@ -22,6 +24,7 @@ export function DeepInvestigationAction({ context }: { context: AnalysisRequest 
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const [saveNotice, setSaveNotice] = useState("");
+  const [demo, setDemo] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLSpanElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
@@ -31,8 +34,16 @@ export function DeepInvestigationAction({ context }: { context: AnalysisRequest 
     if (!open) return;
     dialog.current?.showModal(); title.current?.focus();
     let current = true;
-    assistant.experimentContext(context.experiment_id).then(value => {
-      if (current) { setSaved(value); setFields(value); setError(""); }
+    Promise.all([
+      assistant.experimentContext(context.experiment_id),
+      context.experiment_id ? experiments.get(context.experiment_id).catch(() => null) : Promise.resolve(null)
+    ]).then(([value, run]) => {
+      if (current) {
+        const preset = run ? demoPrefill(run) : null;
+        setSaved(value); setFields(preset ? prefillEngineerContext(value, preset.context) : value); setError("");
+        setDemo(Boolean(preset));
+        if (preset) setFocus(current => current.trim() ? current : preset.focus);
+      }
     }, failure => { if (current) setError(analysisError(failure)); });
     return () => { current = false; };
   }, [open, revision, context.experiment_id]);
@@ -62,8 +73,9 @@ export function DeepInvestigationAction({ context }: { context: AnalysisRequest 
     {open && <dialog ref={dialog} className={styles.dialog} aria-labelledby={id} onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}>
       <header><h2 id={id} ref={title} tabIndex={-1}>Plan an investigation</h2><IconButton label="Close investigation setup" disabled={busy} onClick={close}><X size={17} aria-hidden="true" /></IconButton></header>
       <p className="note">Explore possible explanations and checks using recorded development evidence. No training or validation runs are started.</p>
+      {demo && <p className="note">Demo text is prefilled. Review and save the context before starting.</p>}
       <Textarea label="What should this investigation focus on? (optional)" placeholder="For example, why missing readings delay warnings" maxLength={500} rows={2} value={focus} onChange={event => setFocus(event.target.value)} />
-      {saved ? <details className={styles.context}><summary>Experiment context{Object.values(saved).some(Boolean) ? " · Saved" : " · Optional"}</summary>
+      {saved ? <details className={styles.context} open={demo}><summary>Experiment context{Object.values(saved).some(Boolean) ? " · Saved" : " · Optional"}</summary>
         <p className="note">Saved with this experiment and shared with AI when you start an investigation. These descriptions do not affect training or scoring. Contact details and other pilot notes are excluded.</p>
         <div className={styles.fields}>
           <Input label="Equipment type" maxLength={200} disabled={busy} value={fields.equipment_type ?? ""} onChange={event => { setSaveNotice(""); setFields(previous => ({ ...previous, equipment_type: event.target.value })); }} />
