@@ -2,7 +2,7 @@
 
 Sidekick tests whether equipment failure warnings survive missing, frozen or drifting sensors. Train models, inspect their weakest cases, and export the evidence.
 
-Built for ABB Accelerator 2026, Theme 1, by Adam Qablawi and Kareem Massoud.
+Built for ABB Accelerator 2026, Theme 1
 
 [Public demo](https://sidekick-e9lu.onrender.com/) · [Reviewer walkthrough](SUBMISSION.md)
 
