@@ -9,6 +9,7 @@ import type { ExperimentRecord, FaultScenario, PilotAgreementCreate, PilotAgreem
 import { Badge, Button, Panel, StateBlock } from "../components/Chrome";
 import { ValidationPanel } from "../components/ValidationPanel";
 import { useApi } from "../hooks/useApi";
+import { demoPrefill, prefillPilotBrief } from "../lib/demo-prefill";
 import { candidateLabel, percent } from "../format";
 import styles from "./pilot-review.module.css";
 
@@ -85,7 +86,7 @@ function PilotWorkspace({ id }: { id: string }) {
               </div>}
             </StateBlock>
           </Panel>
-          {pilot.data.outcome ? <OutcomeSummary outcome={pilot.data.outcome} synthetic={synthetic} /> : <ReviewForm id={id} reviewer={pilot.data.agreement?.brief.reviewing_engineer ?? ""} allowsTrial={Boolean(pilot.data.final_qualifies) && pilot.data.agreement?.data_source === "upload" && pilot.data.agreement.brief.data_classification === "field"} onSaved={pilot.reload} />}
+          {pilot.data.outcome ? <OutcomeSummary outcome={pilot.data.outcome} synthetic={synthetic} /> : <ReviewForm id={id} reviewer={pilot.data.agreement?.brief.reviewing_engineer ?? ""} allowsTrial={Boolean(pilot.data.final_qualifies) && pilot.data.agreement?.data_source === "upload" && pilot.data.agreement.brief.data_classification === "field"} demoReason={demoPrefill(run.data)?.reviewReason} onSaved={pilot.reload} />}
         </>}
       </>}
     </StateBlock>
@@ -99,7 +100,11 @@ function PilotWorkspace({ id }: { id: string }) {
 }
 
 function AgreementForm({ id, run, onSaved }: { id: string; run: ExperimentRecord; onSaved: () => void }) {
-  const [brief, setBrief] = useState<PilotBrief>({ ...run.pilot_brief, data_classification: run.source === "synthetic" ? "simulated" : run.pilot_brief?.data_classification ?? "unverified" });
+  const demo = demoPrefill(run);
+  const [brief, setBrief] = useState<PilotBrief>(() => {
+    const existing = { ...run.pilot_brief, data_classification: run.source === "synthetic" ? "simulated" as const : run.pilot_brief?.data_classification ?? "unverified" as const };
+    return demo ? prefillPilotBrief(existing, demo.brief) : existing;
+  });
   const [checks, setChecks] = useState({ single_family_confirmed: false, failure_labels_checked: false, representative_data_confirmed: false, protocol_agreed: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -110,7 +115,7 @@ function AgreementForm({ id, run, onSaved }: { id: string; run: ExperimentRecord
   const labels: Record<keyof typeof checks, string> = {
     single_family_confirmed: "One equipment family is represented",
     failure_labels_checked: "Failure labels and column mapping are checked",
-    representative_data_confirmed: synthetic ? "Data covers the intended simulated conditions" : "Data covers the intended operating conditions",
+    representative_data_confirmed: synthetic || brief.data_classification === "simulated" ? "Data covers the intended simulated conditions" : "Data covers the intended operating conditions",
     protocol_agreed: "Reviewer agrees the warning window, faults and limits"
   };
   async function save(event: FormEvent) {
@@ -121,6 +126,7 @@ function AgreementForm({ id, run, onSaved }: { id: string; run: ExperimentRecord
   }
   return <Panel title="Agree the pilot" description="Record the scope before reserved scoring.">
     <form className={styles.form} onSubmit={save}>
+      {demo && <p className="note">Demo text is prefilled. Review the fields and confirm the reviewer checks before saving.</p>}
       <fieldset disabled={busy} className={styles.checks}>
         <div className={styles.fields}>
           <Input label="Equipment family" required maxLength={200} value={brief.equipment_family ?? ""} onChange={e => edit("equipment_family", e.target.value)} />
@@ -175,8 +181,8 @@ function AgreementSummary({ agreement }: { agreement: PilotAgreementRecord }) {
   </details>;
 }
 
-function ReviewForm({ id, reviewer, allowsTrial, onSaved }: { id: string; reviewer: string; allowsTrial: boolean; onSaved: () => void }) {
-  const [value, setValue] = useState<PilotOutcomeCreate>({ reviewing_engineer: reviewer, decision: "collect_data", decision_changed: false, observations: "", baseline_review_minutes: null, sidekick_review_minutes: null, evidence_reviewed: false });
+function ReviewForm({ id, reviewer, allowsTrial, demoReason, onSaved }: { id: string; reviewer: string; allowsTrial: boolean; demoReason?: string; onSaved: () => void }) {
+  const [value, setValue] = useState<PilotOutcomeCreate>({ reviewing_engineer: reviewer, decision: "collect_data", decision_changed: false, observations: demoReason ?? "", baseline_review_minutes: null, sidekick_review_minutes: null, evidence_reviewed: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const edit = <K extends keyof PilotOutcomeCreate>(key: K, next: PilotOutcomeCreate[K]) => setValue(previous => ({ ...previous, [key]: next }));
@@ -188,6 +194,7 @@ function ReviewForm({ id, reviewer, allowsTrial, onSaved }: { id: string; review
   }
   return <Panel title="Engineer review" description="Record what the evidence changed.">
     <form className={styles.form} onSubmit={save}>
+      {demoReason && <p className="note">Demo text is prefilled. Review the actual final results before recording a decision.</p>}
       <Input label="Reviewing engineer" required disabled={busy} maxLength={200} value={value.reviewing_engineer} onChange={e => edit("reviewing_engineer", e.target.value)} />
       <fieldset disabled={busy} className={styles.checks}><RadioGroup label="Next action" value={value.decision} onValueChange={next => edit("decision", next as PilotDecision)} options={Object.entries(decisions).filter(([key]) => allowsTrial || key !== "supervised_trial").map(([key, label]) => ({ value: key, label }))} /></fieldset>
       <Textarea label="Reason and observed findings" required disabled={busy} rows={3} maxLength={2000} value={value.observations} onChange={e => edit("observations", e.target.value)} />
