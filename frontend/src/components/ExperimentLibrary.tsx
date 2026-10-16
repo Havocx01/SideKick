@@ -1,6 +1,6 @@
 import { Select } from "@/registry/components/select/select";
 import { useMotionPreference } from "../hooks/useMotionPreference";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
 import { LayoutGroup, motion } from "motion/react";
 import { motionTokens } from "@/registry/motion-tokens";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -78,6 +78,7 @@ export function ExperimentLibrary() {
   const revision = useRef(0);
   const mutating = useRef(false);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const pendingNameFocus = useRef<NameEditor | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const uploadController = useRef<AbortController | null>(null);
@@ -86,6 +87,16 @@ export function ExperimentLibrary() {
   const isDesktop = () => window.matchMedia("(min-width: 769px) and (hover: hover) and (pointer: fine)").matches;
   const [desktop, setDesktop] = useState(isDesktop);
   const busy = saving || upload?.state === "uploading";
+  useLayoutEffect(() => {
+    const target = pendingNameFocus.current;
+    if (!target || nameEditor || busy) return;
+    pendingNameFocus.current = null;
+    // The folder button is recreated after editing; focus it only once React
+    // has committed the replacement and removed its disabled state.
+    const node = target.mode === "rename" ? rowNodes.current.get(key(target.item)) : target.mode === "folderRename"
+      ? document.querySelector<HTMLElement>(`[data-folder-id="${target.folder.id}"] [data-folder-open]`) : returnFocus.current;
+    (node?.isConnected ? node : heading.current)?.focus();
+  }, [nameEditor, busy]);
   const tab = params.get("tab") === "uploads" ? "uploads" : params.get("tab") === "runs" ? "runs" : "all";
   const view = params.get("view") === "archive" ? "archive" : params.get("view") === "unfiled" ? "unfiled" : "all";
   const folderId = params.get("folder");
@@ -241,12 +252,8 @@ export function ExperimentLibrary() {
   }
   function finishName(focus: boolean, target: NameEditor) {
     if (!alive.current) return;
+    pendingNameFocus.current = focus ? target : null;
     browserPaused.current = false; setNameEditor(null);
-    if (focus) requestAnimationFrame(() => {
-      const node = target.mode === "rename" ? rowNodes.current.get(key(target.item)) : target.mode === "folderRename"
-        ? document.querySelector<HTMLElement>(`[data-folder-id="${target.folder.id}"] [data-folder-open]`) : returnFocus.current;
-      (node?.isConnected ? node : heading.current)?.focus();
-    });
     void refresh().catch(() => {});
   }
   function inlineEditor(target: NameEditor) {

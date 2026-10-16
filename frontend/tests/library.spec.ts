@@ -80,6 +80,31 @@ test("folders rename inline, validate duplicate names and retain data on deletio
   expect(fixture.state.items.at(-1)!.folder_id).toBeNull();
 });
 
+test("folder rename restores keyboard focus without waiting for a paint", async ({ page }) => {
+  const fixture = await fixtureLibrary(page);
+  await page.goto("/experiments");
+  const folder = page.getByRole("button", { name: "Pumps", exact: true });
+  await expect(folder).toBeVisible();
+  // Background tabs can suspend animation frames while a save still completes.
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  const name = page.getByRole("textbox", { name: "Folder name", exact: true });
+  await folder.press("F2");
+  await expect(name).toBeFocused();
+  await name.fill("Pump fleet");
+  await name.press("Enter");
+  const renamed = page.getByRole("button", { name: "Pump fleet", exact: true });
+  await expect(renamed).toBeFocused();
+  await page.keyboard.press("F2");
+  await name.fill("Discard this");
+  await name.press("Escape");
+  await expect(renamed).toBeFocused();
+  await page.keyboard.press("F2");
+  await name.press("Enter");
+  await expect(renamed).toBeFocused();
+  expect(fixture.calls).toHaveLength(1);
+});
+
 test("native single and selected drag moves, archive protection, restore and failed moves", async ({ page }) => {
   const fixture = await fixtureLibrary(page);
   await page.goto("/experiments");
