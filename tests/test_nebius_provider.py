@@ -62,12 +62,15 @@ def test_default_probe_is_offline_and_missing_key_never_falls_back_to_openai():
     root = Path(__file__).resolve().parents[1]
     env = {**os.environ, "NEBIUS_API_KEY": "", "OPENAI_API_KEY": "mock-openai-do-not-use",
         "SIDEKICK_ASSISTANT_PROVIDER": "openai", "SIDEKICK_ASSISTANT_MODEL": "gpt-4.1-mini-2025-04-14",
-        "SIDEKICK_NEBIUS_BASE_URL": "https://api.tokenfactory.nebius.com/v1/"}
+        "SIDEKICK_NEBIUS_BASE_URL": "https://api.tokenfactory.nebius.com/v1/",
+        "SIDEKICK_NEBIUS_REASONING_EFFORT": "low", "SIDEKICK_NEBIUS_REASONING_TOKENS": "4096"}
     command = [sys.executable, str(root / "scripts/check_nebius.py")]
     offline = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=15)
     assert offline.returncode == 0
     report = json.loads(offline.stdout)
     assert report["model"].startswith("nvidia/") and not report["credential_configured"] and not report["live_verified"]
+    assert report["base_output_tokens_per_request"] == 1024 and report["max_output_tokens_per_request"] == 5120
+    assert report["reasoning_effort"] == "low"
     live = subprocess.run([*command, "--live"], cwd=root, env=env, capture_output=True, text=True, timeout=15)
     assert live.returncode == 2 and "NEBIUS_API_KEY" in live.stdout
     assert "mock-openai-do-not-use" not in offline.stdout + live.stdout
@@ -90,7 +93,40 @@ def test_structured_chat_uses_schema_and_local_validation():
     payload = requests[0]
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
-    assert payload["max_tokens"] == 128 and "input" not in payload and "store" not in payload
+    # Reasoning tokens count against max_tokens, so the visible budget gets headroom.
+    assert payload["max_tokens"] == 128 + 4096 and payload["reasoning_effort"] == "low"
+    assert "input" not in payload and "store" not in payload
+
+
+def test_reasoning_budget_is_configurable_and_disabled_reasoning_adds_no_headroom():
+    from app.assistant.transport import nebius_options
+    assert nebius_options(configured(nebius_reasoning_tokens=1024), 700) == {"max_tokens": 1724, "reasoning_effort": "low"}
+    assert nebius_options(configured(nebius_reasoning_effort="none"), 700) == {"max_tokens": 700, "reasoning_effort": "none"}
+    with pytest.raises(ValueError, match="REASONING_EFFORT"):
+        configured(nebius_reasoning_effort="extreme")
+    with pytest.raises(ValueError, match="REASONING_TOKENS"):
+        configured(nebius_reasoning_tokens=-1)
+
+
+@pytest.mark.parametrize("tokens", [True, 1.5, "4096", None])
+def test_reasoning_reserve_requires_integer_tokens(tokens):
+    with pytest.raises(ValueError, match="REASONING_TOKENS"):
+        configured(nebius_reasoning_tokens=tokens)
+
+
+@pytest.mark.parametrize("content,expected", [
+    ('<think>Check the schema first.</think>\n{"status":"ok","count":2}', 2),
+    ('  {"status":"ok","count":3}  ', 3),
+])
+def test_inline_reasoning_is_not_parsed_as_the_answer(content, expected):
+    from app.assistant.transport import request_structured
+    def respond(request):
+        return httpx.Response(200, json=completion(content))
+    async def run():
+        async with AsyncOpenAI(api_key="mock", base_url="http://fixture.invalid/v1/",
+                http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))) as client:
+            return await request_structured(client, configured(), history=[], response_model=Probe, max_output_tokens=128)
+    assert asyncio.run(run()).count == expected
 
 
 @pytest.mark.parametrize("content,finish,refusal", [
@@ -101,6 +137,9 @@ def test_structured_chat_uses_schema_and_local_validation():
     ('{"status":"ok","count":"2"}', "stop", None),
     ('{"status":"ok","count":2,"extra":"untrusted"}', "stop", None),
     ("not json", "stop", None), (None, "stop", None),
+    pytest.param('<think>' + 'x' * 100001 + '</think>{"status":"ok","count":2}', "stop", None, id="oversized-inline-reasoning"),
+    ('<think>unfinished reasoning {"status":"ok","count":2}', "stop", None),
+    ('<think>done</think>', "stop", None),
 ])
 def test_incomplete_refused_or_invalid_chat_fails_without_retry(content, finish, refusal):
     from app.assistant.transport import request_structured

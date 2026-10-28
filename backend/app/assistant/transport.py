@@ -90,6 +90,24 @@ def strict_schema(model: type[BaseModel]) -> dict:
     return visit(model.model_json_schema())
 
 
+def nebius_options(settings, max_output_tokens: int) -> dict:
+    """Allow reasoning tokens within the total completion limit."""
+    effort = getattr(settings, "nebius_reasoning_effort", "low")
+    headroom = 0 if effort == "none" else getattr(settings, "nebius_reasoning_tokens", 4096)
+    return {"max_tokens": max_output_tokens + headroom, "reasoning_effort": effort}
+
+
+def visible_content(content: str) -> str:
+    """Drop a leading reasoning block when an endpoint returns it inline."""
+    text = content.lstrip()
+    if text.startswith("<think>"):
+        end = text.find("</think>")
+        if end < 0:
+            raise ValueError("Provider returned unfinished reasoning instead of an answer")
+        text = text[end + len("</think>"):]
+    return text.strip()
+
+
 def complete_message(response, *, tools=False):
     if len(response.choices) != 1:
         raise ValueError("Provider returned an unsupported number of choices")
@@ -105,12 +123,15 @@ async def request_structured(client, settings, *, history, response_model, max_o
             max_output_tokens=max_output_tokens, input=history, text_format=response_model)
         return response.output_parsed
     response = await client.chat.completions.create(model=settings.assistant_model, messages=chat_messages(history),
-        max_tokens=max_output_tokens, response_format={"type": "json_schema", "json_schema": {
+        **nebius_options(settings, max_output_tokens), response_format={"type": "json_schema", "json_schema": {
             "name": response_model.__name__, "strict": True, "schema": strict_schema(response_model)}})
     message = complete_message(response)
     if message.tool_calls or not message.content or len(message.content.encode()) > 100_000:
         raise ValueError("Provider returned an unsupported structured response")
-    return response_model.model_validate_json(message.content, strict=True)
+    content = visible_content(message.content)
+    if not content:
+        raise ValueError("Provider returned an unsupported structured response")
+    return response_model.model_validate_json(content, strict=True)
 
 
 async def request_tool_calls(client, settings, *, history, tools, forced, max_output_tokens):
@@ -120,7 +141,7 @@ async def request_tool_calls(client, settings, *, history, tools, forced, max_ou
             tool_choice={"type": "function", "name": forced} if forced else "auto", parallel_tool_calls=False)
         return [item for item in response.output if item.type == "function_call"]
     response = await client.chat.completions.create(model=settings.assistant_model, messages=chat_messages(history),
-        max_tokens=max_output_tokens, tools=[{"type": "function", "function": {
+        **nebius_options(settings, max_output_tokens), tools=[{"type": "function", "function": {
             key: value for key, value in spec.items() if key != "type"}} for spec in tools],
         tool_choice={"type": "function", "function": {"name": forced}} if forced else "auto", parallel_tool_calls=False)
     message = complete_message(response, tools=True)
