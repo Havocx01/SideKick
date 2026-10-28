@@ -34,8 +34,8 @@ scoring during the presentation.
 Current offline media/reports are prepared under `output/judging-20261012/` on the
 presentation machine. Copy the verified package to another laptop or USB drive.
 The v1.5 images/video in `media/submission/` are historical. Use the fresh V2 recording.
-See [judging readiness](docs/arc/audits/2026-10-12-judging-readiness.md) for actual
-verification results and remaining prerequisites.
+See [testing](TESTING.md) for verification commands and the
+[judging guide](docs/judging-guide.md) for presentation prerequisites.
 
 Repository: <https://github.com/Havocx01/SideKick>. The README's public demo is a
 separate restricted environment. Do not assume it contains this local revision or

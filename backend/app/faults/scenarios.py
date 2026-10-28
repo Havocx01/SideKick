@@ -58,8 +58,7 @@ class FaultCase(Strict):
 
     @property
     def scenario_id(self) -> str:
-        # Legacy labels round floats for display. New search/cache identities
-        # must retain the complete parameter values even for single components.
+        # Legacy display labels round floats; cache IDs need full precision.
         prefix = "single-v1-" if len(self.components) == 1 else "compound-v1-"
         return prefix + fingerprint(self.model_dump(mode="json"))[:24]
 
@@ -134,8 +133,7 @@ def apply_case(raw: np.ndarray, rul: np.ndarray, case: FaultCase, builder, confi
             reasons.append(f"{atom.sensor}: sensor not present")
             continue
         index = builder.preprocessor.index_of(atom.sensor)
-        # Legacy injection treats seed=0 as falsy. Set its fallback seed explicitly
-        # for new cases without changing historical single-fault behavior.
+        # Legacy injection treats seed=0 as falsy, so set its fallback explicitly.
         injection_config = replace(config, base_seed=atom.seed) if atom.onset_before_failure is None else config
         injected = apply_fault(raw[:, index], rul, atom, sensor_std=builder.preprocessor.std_of(atom.sensor), config=injection_config)
         if not injected.applied:
