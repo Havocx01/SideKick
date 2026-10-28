@@ -8,6 +8,7 @@ import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -110,6 +111,22 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def validate_nebius_url(value: str) -> str:
+    """Only send the Nebius credential to an explicitly selected Nebius API."""
+    try:
+        url = urlsplit(value)
+        port = url.port
+    except ValueError:
+        raise ValueError("Nebius endpoint must be a valid HTTPS Token Factory API URL") from None
+    host = url.hostname or ""
+    if (url.scheme != "https" or not (host == "api.tokenfactory.nebius.com"
+            or (host.startswith("api.tokenfactory.") and host.endswith(".nebius.com")))
+            or url.username or url.password or url.query or url.fragment
+            or port not in (None, 443) or url.path.rstrip("/") != "/v1"):
+        raise ValueError("Nebius endpoint must be an HTTPS Token Factory API URL ending in /v1/ without credentials or query parameters")
+    return value.rstrip("/") + "/"
+
+
 @dataclass
 class Settings:
     mode: RunMode = field(default_factory=lambda: os.environ.get("SIDEKICK_MODE", "full"))
@@ -126,7 +143,10 @@ class Settings:
 
     llm_max_tool_calls: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_MAX_TOOL_CALLS", "8")))
     openai_api_key: str = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY", ""), repr=False)
-    assistant_model: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_MODEL", "gpt-4.1-mini-2025-04-14"))
+    assistant_provider: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PROVIDER", "openai"))
+    nebius_api_key: str = field(default_factory=lambda: os.environ.get("NEBIUS_API_KEY", ""), repr=False)
+    nebius_base_url: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"))
+    assistant_model: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_MODEL", ""))
     assistant_presenter_code: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PRESENTER_CODE", ""), repr=False)
     assistant_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_ENABLED", True))
     assistant_live_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_LIVE_ENABLED", True))
@@ -147,6 +167,13 @@ class Settings:
     )
 
     def __post_init__(self):
+        self.assistant_provider = self.assistant_provider.strip().lower()
+        if self.assistant_provider not in {"openai", "nebius"}:
+            raise ValueError("SIDEKICK_ASSISTANT_PROVIDER must be openai or nebius")
+        self.nebius_base_url = validate_nebius_url(self.nebius_base_url)
+        if not self.assistant_model:
+            self.assistant_model = ("nvidia/nemotron-3-super-120b-a12b" if self.assistant_provider == "nebius"
+                else "gpt-4.1-mini-2025-04-14")
         if self.mode not in ("full", "replay", "demo"):
             raise ValueError("SIDEKICK_MODE must be full, replay or demo")
         if self.assistant_timeout_seconds <= 0:

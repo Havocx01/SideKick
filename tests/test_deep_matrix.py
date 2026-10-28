@@ -49,6 +49,7 @@ def test_all_recorded_models_and_pairs_missing_evidence_and_uploaded_context(mon
 
     monkeypatch.setattr(deep, 'AsyncOpenAI', Client)
     settings = get_settings()
+    monkeypatch.setattr(settings, 'openai_api_key', 'offline-mock-only')
     async def run():
         for context in contexts:
             scoped = bundle.model_copy(deep=True) if context.experiment_id else bundle

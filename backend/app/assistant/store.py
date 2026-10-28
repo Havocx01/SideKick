@@ -34,6 +34,7 @@ class AssistantStore:
                 "CREATE TABLE IF NOT EXISTS analyses(id TEXT PRIMARY KEY, owner TEXT NOT NULL, payload TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS consent(owner TEXT, experiment TEXT, allowed INTEGER, PRIMARY KEY(owner,experiment))",
                 "CREATE TABLE IF NOT EXISTS workspace_consent(id INTEGER PRIMARY KEY CHECK(id=1), allowed INTEGER NOT NULL CHECK(allowed IN (0,1)))",
+                "CREATE TABLE IF NOT EXISTS provider_consent(provider TEXT PRIMARY KEY, allowed INTEGER NOT NULL CHECK(allowed IN (0,1)))",
                 "CREATE TABLE IF NOT EXISTS sessions(owner TEXT PRIMARY KEY, unlocked_until REAL NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS attempts(address TEXT NOT NULL, created REAL NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS analysis_provenance(id TEXT PRIMARY KEY, result_origin TEXT NOT NULL, brief_origin TEXT NOT NULL)",
@@ -220,6 +221,20 @@ class AssistantStore:
         with self.connect() as db:
             db.execute("INSERT OR REPLACE INTO workspace_consent VALUES(1,?)", (int(allowed),))
 
+    def provider_consent(self, provider: str) -> bool:
+        with self.connect() as db:
+            row = db.execute("SELECT allowed FROM provider_consent WHERE provider=?", (provider,)).fetchone()
+        return bool(row and row[0])
+
+    def has_provider_consent(self) -> bool:
+        with self.connect() as db:
+            return db.execute("SELECT 1 FROM provider_consent WHERE allowed=1 LIMIT 1").fetchone() is not None
+
+    def allow_provider(self, provider: str):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("INSERT OR REPLACE INTO provider_consent VALUES(?,1)", (provider,))
+
     def latest_scoped(self, owner, draft_fingerprint):
         """A version change does not authorise a new paid analysis of identical evidence."""
         with self.connect() as db:
@@ -291,6 +306,7 @@ class AssistantStore:
             db.execute("BEGIN IMMEDIATE")
             if workspace:
                 db.execute("INSERT OR REPLACE INTO workspace_consent VALUES(1,0)")
+                db.execute("DELETE FROM provider_consent")
                 db.execute("UPDATE consent SET allowed=0")
                 rows = db.execute("SELECT id,payload FROM analyses").fetchall()
             else:

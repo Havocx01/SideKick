@@ -10,10 +10,13 @@ from app.schemas import ExperimentCreate
 
 @pytest.mark.parametrize("action,expected", [("cancel", "cancelled"), ("timeout", "timed_out"), ("shutdown", "interrupted")])
 def test_worker_is_stopped_and_status_persists(local_settings, monkeypatch, action, expected):
+    monkeypatch.setenv("OPENAI_API_KEY", "mock-openai-key")
+    monkeypatch.setenv("NEBIUS_API_KEY", "mock-nebius-key")
     original = subprocess.Popen
     processes = []
 
     def start_process(args, **options):
+        assert "OPENAI_API_KEY" not in options["env"] and "NEBIUS_API_KEY" not in options["env"]
         process = original([sys.executable, "-c", "import time; time.sleep(60)"], **options)
         processes.append(process)
         return process
