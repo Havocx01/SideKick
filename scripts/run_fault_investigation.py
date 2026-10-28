@@ -1,5 +1,6 @@
 """Create, run, inspect or cancel a saved fault investigation against a trusted Phase 2 context package."""
 import argparse
+import asyncio
 import json
 from pathlib import Path
 import signal
@@ -39,6 +40,7 @@ def main(argv=None):
     action.add_argument("--attach", metavar="ID", help="Enable the runner for an existing investigation record.")
     action.add_argument("--add", nargs=2, metavar=("ID", "PROPOSALS_JSON"), help="Append proposals to an investigation.")
     action.add_argument("--run", metavar="ID", help="Run pending proposals within the saved budget.")
+    action.add_argument("--agent", metavar="ID", help="Let Nemotron propose and run experiments within saved limits.")
     action.add_argument("--status", metavar="ID", help="Show saved state without loading a model context.")
     action.add_argument("--cancel", metavar="ID", help="Ask an active or future run to stop.")
     action.add_argument("--resume", metavar="ID", help="Clear a cancellation so the investigation can run again.")
@@ -47,7 +49,14 @@ def main(argv=None):
     parser.add_argument("--max-attempts-per-scenario", type=int, default=2)
     parser.add_argument("--max-run-seconds", type=float, default=600)
     parser.add_argument("--objective", default="Test supplied fault scenarios.", help="Objective for a new investigation.")
+    parser.add_argument("--allow-nebius", action="store_true", help="Allow billable Nemotron calls with the objective, aliased policy and aggregate results.")
+    parser.add_argument("--max-provider-calls", type=int, default=4)
+    parser.add_argument("--max-output-tokens", type=int, default=1024)
+    parser.add_argument("--max-completion-tokens", type=int, default=32768)
+    parser.add_argument("--max-input-bytes", type=int, default=32768)
     args = parser.parse_args(argv)
+    if args.agent and not args.allow_nebius:
+        parser.error("--agent requires --allow-nebius to send the objective and aggregate evidence to Nebius")
     store = InvestigationStore(args.store)
 
     if args.create:
@@ -59,18 +68,33 @@ def main(argv=None):
         output = {"investigation_id": store.attachRecord(args.attach)}
     elif args.add:
         output = {"investigation_id": args.add[0], "added": store.add_proposals(args.add[0], read_proposals(Path(args.add[1])))}
-    elif args.run:
-        runner = ExperimentRunner(store, context(args))
+    elif args.run or args.agent:
+        fixed = context(args)
         interrupted = {"flag": False}
 
         def stop(*_):
             interrupted["flag"] = True  # Cooperative: the current experiment stops at its next check.
-        signal.signal(signal.SIGINT, stop)
-        output = runner.run(args.run, cancelled=lambda: interrupted["flag"]).model_dump(mode="json")
-        output["provider_requests"] = 0
+        previous = signal.signal(signal.SIGINT, stop)
+        try:
+            if args.agent:
+                from dotenv import load_dotenv
+                from app.config import get_settings
+                from app.investigator.controller import ControllerLimits, NemotronController
+                load_dotenv(ROOT / ".env", override=False)
+                limits = ControllerLimits(maxCalls=args.max_provider_calls, maxOutputTokens=args.max_output_tokens,
+                    maxCompletionTokens=args.max_completion_tokens, maxInputBytes=args.max_input_bytes)
+                controller = NemotronController(store, fixed, get_settings(), limits)
+                output = asyncio.run(controller.run(args.agent, allowProvider=True, cancelled=lambda: interrupted["flag"]))
+            else:
+                output = ExperimentRunner(store, fixed).run(args.run, cancelled=lambda: interrupted["flag"]).model_dump(mode="json")
+                output["provider_requests"] = 0
+        finally:
+            signal.signal(signal.SIGINT, previous)
     elif args.status:
+        from app.investigator.controller import controllerStatus
         state = store.load(args.status)
         output = state.model_dump(mode="json")
+        output["controller"] = controllerStatus(store, args.status)
     elif args.cancel:
         store.request_cancel(args.cancel)
         output = {"investigation_id": args.cancel, "cancel_requested": True}

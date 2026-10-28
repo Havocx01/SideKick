@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 import hashlib
 import json
+import math
 from pathlib import Path
 import sqlite3
 import time
@@ -292,10 +293,28 @@ class ExperimentRunner:
         self._wall = wall
         self._monotonic = monotonic
 
-    def run(self, investigation: str, *, cancelled=None) -> RunSummary:
+    @contextmanager
+    def lease(self, investigation):
         token = uuid.uuid4().hex
-        budget, recovered = self._acquire(investigation, token)
-        deadline = self._monotonic() + budget.max_run_seconds
+        self._acquire(investigation, token)
+        try:
+            yield token
+        finally:
+            self._unlock(investigation, token)
+
+    def run(self, investigation: str, *, cancelled=None, leaseToken=None, maxSeconds=None) -> RunSummary:
+        if maxSeconds is not None and (type(maxSeconds) not in (int, float) or not math.isfinite(maxSeconds)):
+            raise ValueError("Run time must be finite")
+        token = leaseToken or uuid.uuid4().hex
+        if leaseToken is None:
+            budget, recovered = self._acquire(investigation, token)
+        else:
+            with self.store.transaction() as db:
+                self.checkLease(db, investigation, token)
+                budget = InvestigationBudget.model_validate_json(self.store._row(db, investigation)["budget"])
+            recovered = []
+        seconds = budget.max_run_seconds if maxSeconds is None else min(budget.max_run_seconds, maxSeconds)
+        deadline = self._monotonic() + seconds
         summary = {"completed": [], "failed": [], "rejected": [], "duplicates": [], "interrupted_recovered": recovered}
         flags = {"lost": False, "cancel": False, "next_heartbeat": 0.0}
 
@@ -306,7 +325,7 @@ class ExperimentRunner:
             if not flags["cancel"] and now >= flags["next_heartbeat"]:
                 flags["next_heartbeat"] = now + HEARTBEAT_SECONDS
                 try:
-                    flags["cancel"] = self._heartbeat(investigation, token)
+                    flags["cancel"] = self.renewLease(investigation, token)
                 except LeaseLost:
                     flags["lost"] = True
             return flags["cancel"] or flags["lost"]
@@ -354,7 +373,8 @@ class ExperimentRunner:
                     break
             self._finish(investigation, token, reason)
         finally:
-            self._unlock(investigation, token)
+            if leaseToken is None:
+                self._unlock(investigation, token)
         state = self.store.load(investigation)
         return RunSummary(investigation_id=investigation, stop_reason=reason, slots_used=state.slots_used,
             failures=state.failures, **summary)
@@ -388,15 +408,15 @@ class ExperimentRunner:
             self._settle_exhausted(db, investigation, budget)
         return budget, orphans
 
-    def _owned(self, db, investigation, token):
+    def checkLease(self, db, investigation, token):
         found = db.execute("SELECT lease_token, lease_expires, cancel_requested FROM investigation_runs WHERE id=?", (investigation,)).fetchone()
         if found is None or found[0] != token or found[1] is None or found[1] <= self._wall():
             raise LeaseLost("Investigation lease was lost")
         return bool(found[2])
 
-    def _heartbeat(self, investigation, token) -> bool:
+    def renewLease(self, investigation, token) -> bool:
         with self.store.transaction() as db:
-            cancel = self._owned(db, investigation, token)
+            cancel = self.checkLease(db, investigation, token)
             db.execute("UPDATE investigation_runs SET lease_expires=? WHERE id=?", (self._wall() + self._ttl(), investigation))
             return cancel
 
@@ -406,17 +426,17 @@ class ExperimentRunner:
 
     def _finish(self, investigation, token, reason):
         with self.store.transaction() as db:
-            self._owned(db, investigation, token)
+            self.checkLease(db, investigation, token)
             db.execute("UPDATE investigation_runs SET stop_reason=? WHERE id=?", (reason, investigation))
 
     def _validate(self, investigation, token):
         rejected, duplicates = [], []
         with self.store.transaction() as db:
-            self._owned(db, investigation, token)
+            self.checkLease(db, investigation, token)
             for id, payload in db.execute("SELECT id,payload FROM proposals WHERE investigation=? AND status='pending' AND scenario_id IS NULL"
                     " ORDER BY seq", (investigation,)).fetchall():
                 try:
-                    case = self._case(payload, investigation)
+                    case = self.validateCase(payload, investigation)
                 except (ValueError, TypeError) as error:
                     db.execute("UPDATE proposals SET status='rejected', reason=? WHERE id=?", (_short(error), id))
                     rejected.append(id)
@@ -434,7 +454,7 @@ class ExperimentRunner:
                     duplicates.append(id)
         return rejected, duplicates
 
-    def _case(self, payload, investigation) -> FaultCase:
+    def validateCase(self, payload, investigation) -> FaultCase:
         if len(payload.encode()) > MAX_PROPOSAL_BYTES:
             raise ValueError("Proposal exceeds its size limit")
         value = json.loads(payload)
@@ -445,7 +465,7 @@ class ExperimentRunner:
     def _reserve(self, investigation, token, budget):
         """Check every limit and reserve a slot atomically, or return a stop reason."""
         with self.store.transaction() as db:
-            if self._owned(db, investigation, token):
+            if self.checkLease(db, investigation, token):
                 return "cancelled"
             slots, failures = self.store._usage(db, investigation)
             if failures >= budget.max_failures:
@@ -475,7 +495,7 @@ class ExperimentRunner:
 
     def _start(self, investigation, token, attempt, deadline):
         with self.store.transaction() as db:
-            if self._owned(db, investigation, token):
+            if self.checkLease(db, investigation, token):
                 return "cancelled"
             if self._monotonic() >= deadline:
                 return "time_limit"
@@ -483,7 +503,7 @@ class ExperimentRunner:
 
     def _execute(self, investigation, token, attempt, proposal, payload, scenario_id, budget, should_stop, flags, deadline):
         try:
-            case = self._case(payload, investigation)
+            case = self.validateCase(payload, investigation)
             if case.scenario_id != scenario_id:
                 raise ValueError("Proposal identity changed after validation")
             result = self.evaluator.evaluate(case, cancelled=should_stop)
@@ -510,7 +530,7 @@ class ExperimentRunner:
 
     def _record(self, investigation, token, attempt, proposal, status, reason, budget, document=None):
         with self.store.transaction() as db:
-            self._owned(db, investigation, token)
+            self.checkLease(db, investigation, token)
             db.execute("UPDATE attempts SET status=?, reason=?, finished=?, result=?, result_digest=? WHERE id=? AND status='running'",
                 (status, reason, self._wall(), document, hashlib.sha256(document.encode()).hexdigest() if document else None, attempt))
             if status == "completed":

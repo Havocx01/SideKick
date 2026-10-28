@@ -1,6 +1,6 @@
 # Investigation records
 
-Investigation setup and experiment execution are saved locally. Typed proposals run against fixed development models. Automatic scenario selection is not connected yet.
+Investigation setup, experiment execution and provider-call limits are saved locally. Nemotron can choose the next fault scenario from aggregate results, while the local validator and fixed evaluator control execution and measurements.
 
 Given an existing `FixedDevelopmentEvaluator` and `backend` on the Python module path:
 
@@ -19,7 +19,7 @@ loaded.check_context(evaluator)
 
 The experiment cap cannot exceed the evaluator policy. `check_context` rejects a different evaluator; the caller must supply the original fitted context. The record alone cannot reconstruct it.
 
-This developer interface has no HTTP route and makes no provider requests. Existing workspace, consent and exposure databases are separate.
+Setup, validation, status and ordinary runner actions stay local. Only the explicit controller action makes provider requests. This developer interface has no HTTP route; existing workspace, consent and exposure databases are separate.
 
 ## Scenario proposals
 
@@ -65,4 +65,22 @@ For a trusted context exported with the current source and dependency versions:
 .venv/Scripts/python.exe scripts/run_fault_investigation.py --store output/investigations --resume <id>
 ```
 
-`proposals.json` is a JSON list of typed proposals, bare cases or raw JSON strings. `--attach <id>` enables execution for an existing record in the same store; `--add <id> proposals.json` appends proposals. `--create` accepts an objective and experiment/failure/attempt/run-time limits. Loading a context rechecks its recorded evaluation before new work and requires explicit local artifact trust. No training, provider calls, HTTP route or agent loop is added by the runner.
+`proposals.json` is a JSON list of typed proposals, bare cases or raw JSON strings. `--attach <id>` enables execution for an existing record in the same store; `--add <id> proposals.json` appends proposals. `--create` accepts an objective and experiment/failure/attempt/run-time limits. Loading a context rechecks its recorded evaluation before new work and requires explicit local artifact trust. The ordinary runner does not train or call a provider.
+
+## Nemotron controller
+
+Configure Nebius using the [provider setup](nebius-phase-1.md). The controller requires full mode, enabled live inference and an NVIDIA Nemotron model. For an existing investigation, run:
+
+```powershell
+.venv/Scripts/python.exe scripts/run_fault_investigation.py --store output/investigations --context output/context-package --trust-local-artifact --agent <id> --allow-nebius --max-provider-calls 2 --max-completion-tokens 10240
+```
+
+`--allow-nebius` approves billable requests for that invocation, separately from browser permissions. The objective is sent verbatim, alongside aliased sensor/model names, numeric fault bounds and aggregate matched results. Raw sensor histories, equipment IDs, fitted objects, API keys and private policy notes are excluded from the packet. Recent cases are limited to twelve, with an explicit omitted count.
+
+Nemotron returns one typed proposal or a stop reason. Channel aliases are mapped locally and checked by `validateProposal`. Accepted proposals are saved atomically with their provider-call record, then evaluated before the next request. Pending proposals recovered after interruption run before another provider request. Only server-computed metrics enter the result summaries; model reasons and stop explanations remain unverified text.
+
+Provider call and completion-token reservations persist across restarts. Errors and interrupted calls retain their reservations, and the SDK makes no retries. Per-call completion limits include the configured reasoning headroom; the cumulative completion limit counts those full ceilings, not actual usage. Input content and schema have a separate byte limit. These controls bound execution allowances; actual provider usage, input-token charges and pricing are separate.
+
+The controller holds the runner lease while the model thinks. Cancellation and the saved run-time deadline also apply while awaiting a provider response. Another runner cannot execute the same investigation concurrently, and a lost lease cannot publish a reply. Local validation failures can lead to a new proposal within the remaining limits; malformed responses and provider errors stop the invocation. Changing the saved model, endpoint, prompt or limits requires a new investigation. Rotating a key does not reset counters.
+
+`--status <id>` shows controller configuration, reservations and call outcomes without a key or model context. The final controller report includes cumulative calls/experiments used and result references. A model stop is not evidence that all failure modes were tested. Scenario reduction, remedy testing, search baselines and a browser interface remain separate work.

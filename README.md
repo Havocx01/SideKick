@@ -4,7 +4,7 @@ Sidekick tests whether equipment failure warnings survive missing, frozen or dri
 
 Built for ABB Accelerator 2026, Theme 1
 
-The Nebius x NVIDIA adaptation includes explicit Token Factory configuration and provider-specific permission ([Phase 1 setup](docs/nebius-phase-1.md)), plus a developer-facing compound-fault evaluator with fixed development models and local replay ([Phase 2 guide](docs/nebius-phase-2.md)). Phase 3 adds a durable, budgeted runner for saved scenario proposals with duplicate skipping, failure counting, cancellation and interrupted-run recovery ([Phase 3 guide](docs/nebius-phase-3.md)). Existing browser protocols remain single-sensor; adaptive experiment selection is not implemented yet.
+The Nebius x NVIDIA adaptation includes Token Factory configuration and provider-specific permission ([setup](docs/nebius-phase-1.md)), a compound-fault evaluator with fixed development models and local replay ([evaluation guide](docs/nebius-phase-2.md)), and a Nemotron controller that chooses experiments from measured results under saved call/token limits ([investigation guide](docs/nebius-phase-3.md)). The controller is a developer CLI; existing browser protocols remain single-sensor.
 
 [Public demo](https://sidekick-e9lu.onrender.com/) · [Reviewer walkthrough](SUBMISSION.md)
 
