@@ -90,7 +90,34 @@ def test_structured_chat_uses_schema_and_local_validation():
     payload = requests[0]
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
-    assert payload["max_tokens"] == 128 and "input" not in payload and "store" not in payload
+    # Reasoning tokens count against max_tokens, so the visible budget gets headroom.
+    assert payload["max_tokens"] == 128 + 4096 and payload["reasoning_effort"] == "low"
+    assert "input" not in payload and "store" not in payload
+
+
+def test_reasoning_budget_is_configurable_and_disabled_reasoning_adds_no_headroom():
+    from app.assistant.transport import nebius_options
+    assert nebius_options(configured(nebius_reasoning_tokens=1024), 700) == {"max_tokens": 1724, "reasoning_effort": "low"}
+    assert nebius_options(configured(nebius_reasoning_effort="none"), 700) == {"max_tokens": 700, "reasoning_effort": "none"}
+    with pytest.raises(ValueError, match="REASONING_EFFORT"):
+        configured(nebius_reasoning_effort="extreme")
+    with pytest.raises(ValueError, match="REASONING_TOKENS"):
+        configured(nebius_reasoning_tokens=-1)
+
+
+@pytest.mark.parametrize("content,expected", [
+    ('<think>Check the schema first.</think>\n{"status":"ok","count":2}', 2),
+    ('  {"status":"ok","count":3}  ', 3),
+])
+def test_inline_reasoning_is_not_parsed_as_the_answer(content, expected):
+    from app.assistant.transport import request_structured
+    def respond(request):
+        return httpx.Response(200, json=completion(content))
+    async def run():
+        async with AsyncOpenAI(api_key="mock", base_url="http://fixture.invalid/v1/",
+                http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond))) as client:
+            return await request_structured(client, configured(), history=[], response_model=Probe, max_output_tokens=128)
+    assert asyncio.run(run()).count == expected
 
 
 @pytest.mark.parametrize("content,finish,refusal", [
@@ -101,6 +128,8 @@ def test_structured_chat_uses_schema_and_local_validation():
     ('{"status":"ok","count":"2"}', "stop", None),
     ('{"status":"ok","count":2,"extra":"untrusted"}', "stop", None),
     ("not json", "stop", None), (None, "stop", None),
+    ('<think>unfinished reasoning {"status":"ok","count":2}', "stop", None),
+    ('<think>done</think>', "stop", None),
 ])
 def test_incomplete_refused_or_invalid_chat_fails_without_retry(content, finish, refusal):
     from app.assistant.transport import request_structured

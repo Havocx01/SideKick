@@ -111,6 +111,9 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+NEBIUS_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high")
+
+
 def validate_nebius_url(value: str) -> str:
     """Only send the Nebius credential to an explicitly selected Nebius API."""
     try:
@@ -146,6 +149,10 @@ class Settings:
     assistant_provider: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PROVIDER", "openai"))
     nebius_api_key: str = field(default_factory=lambda: os.environ.get("NEBIUS_API_KEY", ""), repr=False)
     nebius_base_url: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"))
+    # Nemotron reasons by default and its reasoning tokens count against max_tokens.
+    # Keep effort explicit and reserve room so reasoning cannot truncate the answer.
+    nebius_reasoning_effort: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_REASONING_EFFORT", "low"))
+    nebius_reasoning_tokens: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_NEBIUS_REASONING_TOKENS", "4096")))
     assistant_model: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_MODEL", ""))
     assistant_presenter_code: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PRESENTER_CODE", ""), repr=False)
     assistant_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_ENABLED", True))
@@ -171,6 +178,11 @@ class Settings:
         if self.assistant_provider not in {"openai", "nebius"}:
             raise ValueError("SIDEKICK_ASSISTANT_PROVIDER must be openai or nebius")
         self.nebius_base_url = validate_nebius_url(self.nebius_base_url)
+        self.nebius_reasoning_effort = self.nebius_reasoning_effort.strip().lower()
+        if self.nebius_reasoning_effort not in NEBIUS_REASONING_EFFORTS:
+            raise ValueError("SIDEKICK_NEBIUS_REASONING_EFFORT must be one of " + ", ".join(NEBIUS_REASONING_EFFORTS))
+        if isinstance(self.nebius_reasoning_tokens, bool) or not 0 <= self.nebius_reasoning_tokens <= 32768:
+            raise ValueError("SIDEKICK_NEBIUS_REASONING_TOKENS must be between 0 and 32768")
         if not self.assistant_model:
             self.assistant_model = ("nvidia/nemotron-3-super-120b-a12b" if self.assistant_provider == "nebius"
                 else "gpt-4.1-mini-2025-04-14")

@@ -18,6 +18,8 @@ Confirm the exact model ID, tool calling and JSON-schema support in your account
 
 Restart the API after changing configuration. Open **AI settings** and read the updated disclosure before enabling AI. Consent is scoped to the selected Nebius endpoint. Enabling it does not launch a request. Select a completed model result and explicitly start **Deep investigation**. Hosted demo and replay modes remain evidence-only for new work.
 
+Nemotron reasons by default, and Token Factory counts reasoning tokens against `max_tokens`. Sidekick therefore sends `reasoning_effort` (default `low`) and reserves `SIDEKICK_NEBIUS_REASONING_TOKENS` (default 4,096) on top of each request's visible-answer budget. Without that headroom, reasoning can use the whole budget, the response is truncated and the investigation falls back to recorded evidence. Set `SIDEKICK_NEBIUS_REASONING_EFFORT=none` to disable reasoning and the extra budget; the reserve is a ceiling, so billing follows the tokens actually generated.
+
 Existing OpenAI settings continue to work when the provider is `openai`, the compatibility default. An explicitly configured model overrides the provider's default: remove an old GPT model override when switching to Nebius. Shell variables take precedence over `.env`. The local `.env` is never edited by the configuration check.
 
 ## Check connectivity
@@ -30,7 +32,7 @@ From the repository root on Windows:
 
 This only reports configuration and key availability; it makes no network requests and prints no key values.
 
-Once a key is configured, the following explicitly permits two billable requests, with no retries and up to 1,024 output tokens per request:
+Once a key is configured, the following explicitly permits two billable requests, with no retries and up to 1,024 answer tokens plus the configured reasoning reserve per request:
 
 ```powershell
 .venv\Scripts\python.exe scripts/check_nebius.py --live
