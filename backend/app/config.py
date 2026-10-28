@@ -149,8 +149,7 @@ class Settings:
     assistant_provider: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PROVIDER", "openai"))
     nebius_api_key: str = field(default_factory=lambda: os.environ.get("NEBIUS_API_KEY", ""), repr=False)
     nebius_base_url: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"))
-    # Nemotron reasons by default and its reasoning tokens count against max_tokens.
-    # Keep effort explicit and reserve room so reasoning cannot truncate the answer.
+    # Reasoning shares the request's completion allowance.
     nebius_reasoning_effort: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_REASONING_EFFORT", "low"))
     nebius_reasoning_tokens: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_NEBIUS_REASONING_TOKENS", "4096")))
     assistant_model: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_MODEL", ""))
@@ -181,7 +180,7 @@ class Settings:
         self.nebius_reasoning_effort = self.nebius_reasoning_effort.strip().lower()
         if self.nebius_reasoning_effort not in NEBIUS_REASONING_EFFORTS:
             raise ValueError("SIDEKICK_NEBIUS_REASONING_EFFORT must be one of " + ", ".join(NEBIUS_REASONING_EFFORTS))
-        if isinstance(self.nebius_reasoning_tokens, bool) or not 0 <= self.nebius_reasoning_tokens <= 32768:
+        if type(self.nebius_reasoning_tokens) is not int or not 0 <= self.nebius_reasoning_tokens <= 32768:
             raise ValueError("SIDEKICK_NEBIUS_REASONING_TOKENS must be between 0 and 32768")
         if not self.assistant_model:
             self.assistant_model = ("nvidia/nemotron-3-super-120b-a12b" if self.assistant_provider == "nebius"

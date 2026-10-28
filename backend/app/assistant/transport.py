@@ -91,14 +91,9 @@ def strict_schema(model: type[BaseModel]) -> dict:
 
 
 def nebius_options(settings, max_output_tokens: int) -> dict:
-    """Reasoning models spend completion tokens before the visible answer.
-
-    Without headroom a 700-token budget is consumed by Nemotron's default
-    reasoning, the response ends with finish_reason="length" and every live
-    investigation silently falls back to recorded evidence.
-    """
+    """Allow reasoning tokens within the total completion limit."""
     effort = getattr(settings, "nebius_reasoning_effort", "low")
-    headroom = 0 if effort == "none" else int(getattr(settings, "nebius_reasoning_tokens", 4096))
+    headroom = 0 if effort == "none" else getattr(settings, "nebius_reasoning_tokens", 4096)
     return {"max_tokens": max_output_tokens + headroom, "reasoning_effort": effort}
 
 
@@ -131,8 +126,10 @@ async def request_structured(client, settings, *, history, response_model, max_o
         **nebius_options(settings, max_output_tokens), response_format={"type": "json_schema", "json_schema": {
             "name": response_model.__name__, "strict": True, "schema": strict_schema(response_model)}})
     message = complete_message(response)
-    content = visible_content(message.content) if message.content else ""
-    if message.tool_calls or not content or len(content.encode()) > 100_000:
+    if message.tool_calls or not message.content or len(message.content.encode()) > 100_000:
+        raise ValueError("Provider returned an unsupported structured response")
+    content = visible_content(message.content)
+    if not content:
         raise ValueError("Provider returned an unsupported structured response")
     return response_model.model_validate_json(content, strict=True)
 

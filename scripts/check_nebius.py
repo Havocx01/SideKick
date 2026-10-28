@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from openai import AsyncOpenAI
 
-from app.assistant.transport import api_key, client_options, request_structured, request_tool_calls
+from app.assistant.transport import api_key, client_options, nebius_options, request_structured, request_tool_calls
 from app.config import Settings
 from app.schemas import Strict
 
@@ -56,8 +56,11 @@ def main(argv=None):
     except ValueError:
         print("Invalid Nebius configuration. Check SIDEKICK_NEBIUS_BASE_URL and select an NVIDIA model.")
         return 2
+    options = nebius_options(settings, 1024)
     report = {"provider": "nebius", "endpoint": settings.nebius_base_url, "model": settings.assistant_model,
-        "credential_configured": bool(api_key(settings)), "live_verified": False}
+        "credential_configured": bool(api_key(settings)), "live_verified": False,
+        "base_output_tokens_per_request": 1024, "max_output_tokens_per_request": options["max_tokens"],
+        "reasoning_effort": options["reasoning_effort"]}
     if not args.live:
         report["note"] = "Offline inspection only. Use --live to test two synthetic requests with no retries."
         print(json.dumps(report, indent=2))
@@ -74,7 +77,7 @@ def main(argv=None):
         from app.assistant.service import provider_failure
         print(provider_failure(error, settings))
         return 1
-    report.update(live_verified=True, requests=2, max_output_tokens_per_request=1024,
+    report.update(live_verified=True, requests=2,
         note="Synthetic tool round-trip and structured response verified. Real investigation quality remains unmeasured.")
     print(json.dumps(report, indent=2))
     return 0

@@ -62,12 +62,15 @@ def test_default_probe_is_offline_and_missing_key_never_falls_back_to_openai():
     root = Path(__file__).resolve().parents[1]
     env = {**os.environ, "NEBIUS_API_KEY": "", "OPENAI_API_KEY": "mock-openai-do-not-use",
         "SIDEKICK_ASSISTANT_PROVIDER": "openai", "SIDEKICK_ASSISTANT_MODEL": "gpt-4.1-mini-2025-04-14",
-        "SIDEKICK_NEBIUS_BASE_URL": "https://api.tokenfactory.nebius.com/v1/"}
+        "SIDEKICK_NEBIUS_BASE_URL": "https://api.tokenfactory.nebius.com/v1/",
+        "SIDEKICK_NEBIUS_REASONING_EFFORT": "low", "SIDEKICK_NEBIUS_REASONING_TOKENS": "4096"}
     command = [sys.executable, str(root / "scripts/check_nebius.py")]
     offline = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=15)
     assert offline.returncode == 0
     report = json.loads(offline.stdout)
     assert report["model"].startswith("nvidia/") and not report["credential_configured"] and not report["live_verified"]
+    assert report["base_output_tokens_per_request"] == 1024 and report["max_output_tokens_per_request"] == 5120
+    assert report["reasoning_effort"] == "low"
     live = subprocess.run([*command, "--live"], cwd=root, env=env, capture_output=True, text=True, timeout=15)
     assert live.returncode == 2 and "NEBIUS_API_KEY" in live.stdout
     assert "mock-openai-do-not-use" not in offline.stdout + live.stdout
@@ -105,6 +108,12 @@ def test_reasoning_budget_is_configurable_and_disabled_reasoning_adds_no_headroo
         configured(nebius_reasoning_tokens=-1)
 
 
+@pytest.mark.parametrize("tokens", [True, 1.5, "4096", None])
+def test_reasoning_reserve_requires_integer_tokens(tokens):
+    with pytest.raises(ValueError, match="REASONING_TOKENS"):
+        configured(nebius_reasoning_tokens=tokens)
+
+
 @pytest.mark.parametrize("content,expected", [
     ('<think>Check the schema first.</think>\n{"status":"ok","count":2}', 2),
     ('  {"status":"ok","count":3}  ', 3),
@@ -128,6 +137,7 @@ def test_inline_reasoning_is_not_parsed_as_the_answer(content, expected):
     ('{"status":"ok","count":"2"}', "stop", None),
     ('{"status":"ok","count":2,"extra":"untrusted"}', "stop", None),
     ("not json", "stop", None), (None, "stop", None),
+    pytest.param('<think>' + 'x' * 100001 + '</think>{"status":"ok","count":2}', "stop", None, id="oversized-inline-reasoning"),
     ('<think>unfinished reasoning {"status":"ok","count":2}', "stop", None),
     ('<think>done</think>', "stop", None),
 ])
