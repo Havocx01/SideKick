@@ -171,6 +171,7 @@ class Jobs:
                 env["SIDEKICK_TRAIN_THREADS"] = "1"
             # The worker never needs external services or their credentials.
             env.pop("OPENAI_API_KEY", None)
+            env.pop("NEBIUS_API_KEY", None)
             for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
                 env[key] = "1"
             with (directory / "worker.log").open("wb") as log:

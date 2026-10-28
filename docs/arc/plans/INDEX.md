@@ -6,6 +6,7 @@ their original completion; the current state is in the judging readiness receipt
 
 | Plan | Status | Priority | Effort | Notes |
 |---|---|---|---|---|
+| [Nebius Investigator Phase 1](2026-10-27-nebius-phase-1.md) | DONE | P1 | M | Provider adapter, endpoint-specific consent, retained reports, synthetic smoke checker. 465 backend / 28 browser / 7 protocol checks and lint/types/build pass; independent reviews approved. Uncommitted on feat/nebius-investigator; live Nebius verification needs a key. |
 | [Judging preparation](2026-10-12-judging-preparation.md) | DONE | P1 | M | 439 backend / 105 browser / 7 protocol checks, lint/types/build and fresh Docker runtime pass. Saved brief survives cold restart; current guide and 14-file offline kit prepared. Reviewed local checkpoint; no push, deployment, paid calls or user storage edits. Remote CI and physical rehearsal remain team tasks. |
 | [Minimal paid deep verification](2026-10-12-deep-live-verification.md) | DONE | P1 | S | Four requests, estimated $0.0157780. Exact final passing response retains a trace-specific explanation/check; failing/comparison explanations safely omitted. 57 mocked contexts, 434 backend / 42 browser / 7 protocol checks and lint/types/build pass. Running API needs restart; consistent engineer added value unproved. Uncommitted/undeployed. |
 | [Trace-specific deep explanations](2026-10-12-trace-explanations.md) | DONE | P1 | S | Private trace-basis choices, scoped history citations and tentative server titles; facts follow the cited history. 150 final affected backend / 22 browser / 7 protocol checks, lint/types/build pass. Zero paid calls; live added value remains unproved. Uncommitted/undeployed. |
@@ -24,4 +25,4 @@ their original completion; the current state is in the judging readiness receipt
 | [Reliability completion](2026-10-09-sidekick-reliability-completion.md) | DONE | P1 | L | Nine technical priorities resolved. Fresh deployment follow-up: 212 backend / 68 browser / 7 protocol checks; Docker builds, loopback, replay capacity/restart/expiry and hosted memory pass. Application committed in a807144; verification follow-up committed locally. No public deployment by this task. Engineer benefit remains unmeasured. |
 | [Review remediation](2026-10-09-sidekick-review-remediation-plan.md) | DONE | P1 | L | F1–F14 and follow-up fixes verified; Docker prerequisite resolved by the deployment runtime receipt. Reviewed application and verification follow-up committed locally. Field reliability and engineer study remain separate. |
 
-Last touched: 12 October 2026.
+Last touched: 27 October 2026.
