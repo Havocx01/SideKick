@@ -78,8 +78,7 @@ def replay_evaluation(directory: Path, *, trusted=False) -> FaultEvaluation:
             raise ValueError("Replay file checksum does not match its manifest")
     expected = FaultEvaluation.model_validate(read_json(directory / "evaluation.json"))
     case = FaultCase.model_validate(read_json(directory / "scenario.json"))
-    # Checksums detect accidental changes, not a malicious package. The caller's
-    # explicit trust is necessary because joblib/Python model loading can execute code.
+    # Checksums cannot establish trust: joblib loading can execute Python code.
     payload = joblib.load(directory / "context.joblib")
     if not isinstance(payload, dict) or set(payload) != {"training", "thresholds", "policy"}:
         raise ValueError("Unsupported fitted context")

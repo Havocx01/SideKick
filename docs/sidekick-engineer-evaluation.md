@@ -1,12 +1,10 @@
 # Sidekick engineer and analysis evaluation
 
-**Status:** Protocol prepared; engineer study not conducted. A [minimal two-case live/local probe](arc/audits/2026-10-09-sidekick-live-ai-priorities.md) ran on recorded/synthetic fixtures, with estimated cost $0.0037048. It found identical essential conclusions and one weaker visible next check; it is not an engineer usefulness study or a complete paid model evaluation.
-
-The [11 October deep AI usefulness review](arc/audits/2026-10-11-deep-ai-usefulness.md) compared six saved real provider outputs with regular analysis, using zero new paid calls. It found limited/potential value in diagnostic structure and several invalid or insufficiently controlled checks accepted by current processing. Three full reports, two partial reports and one fallback describe retention, not usefulness. The sample spans older prompts and repeated comparisons; it is not fresh v11 generation or a measured engineer benefit.
+**Status:** Protocol prepared; engineer study not conducted. Historical fixture reviews found limited diagnostic value and inconsistent next-check quality. They do not establish current model quality or measured engineer benefit.
 
 The decision to test is whether Sidekick helps an engineer choose a justified next action from recorded warning evidence. Passing software tests, fluent explanations and synthetic results do not demonstrate that benefit.
 
-The [matched-trace follow-up](arc/audits/2026-10-11-matched-traces-added-value.md) adds a reproducible regular-versus-deep comparison and A/B review pack. Two fresh v18 answers retained a mechanism/check, but their incremental guidance remains generic. The pack has blank human measures and a facilitator-only method key; no engineer study has been conducted.
+Use `scripts/evaluate_deep.py` to prepare an offline comparison of regular and saved deep answers. Keep the facilitator key separate and leave human measures blank until a participant supplies observations.
 
 ## Agree the study
 

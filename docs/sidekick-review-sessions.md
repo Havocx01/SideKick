@@ -1,6 +1,6 @@
 # Sidekick pilot and first-time-user review
 
-Prepared 12 October 2026. No human sessions or real-equipment pilot have been conducted. The separate [AI-assisted engineering assessment](arc/audits/2026-10-12-engineering-assessment.md) reviews recorded evidence; it must not be presented as observed engineer behavior.
+No human sessions or real-equipment pilot have been conducted. Automated checks and recorded-evidence reviews do not establish observed engineer behavior.
 
 ## Start a small review
 
@@ -10,7 +10,7 @@ Ask one reviewer to complete two or three cases first. Record prior familiarity 
 
 Agree the question before review: **What next action is justified, and what evidence would you still need?** Score scope correctness and action quality before timing. A useful outcome is a feasible check with the right model, fault, partition and missing prerequisites. Fluent prose and a preferred visual style alone do not qualify.
 
-Do not show the AI-assisted assessment as a correct-answer prompt to participants: that would coach the response. Compare participant reasoning to a separately adjudicated evidence key afterward.
+Keep the answer key separate from participant materials to avoid coaching. Compare participant reasoning to the key afterward.
 
 ## Equipment-pilot intake
 

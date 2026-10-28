@@ -87,11 +87,9 @@ class FixedDevelopmentEvaluator:
     def __init__(self, training, thresholds: dict[str, float], policy: FaultPolicy):
         self._policy = FaultPolicy.model_validate(policy.model_dump(mode="json"))
         self._validate_context(training, thresholds)
-        # Later changes to the caller's data, models or thresholds cannot silently
-        # change an investigation's fixed context.
+        # Keep the fitted context independent of later caller changes.
         self._training = deepcopy(training)
-        # Dataset row slices and equipment IDs are cached properties, not fitted
-        # state. Recreate the dataclass so stale caller caches cannot survive.
+        # Rebuild cached row indices rather than copying potentially stale ones.
         self._training.dataset = replace(self._training.dataset)
         self._validate_context(self._training, thresholds)
         for fold in self._training.folds:
