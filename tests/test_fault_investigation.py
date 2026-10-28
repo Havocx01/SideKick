@@ -1,5 +1,6 @@
 """Durable bounded execution of saved fault-scenario proposals."""
 import sqlite3
+import json
 
 import pytest
 
@@ -34,7 +35,6 @@ def rows(store, sql, *params):
         return db.execute(sql, params).fetchall()
 
 
-# 1. Load and validate -----------------------------------------------------------
 
 def test_saved_proposals_are_validated_and_bad_ones_never_run(fitted, tmp_path):
     proposals = [DROPOUT, case("unknown"), case(kind="drift", severity_sd=9.0, sign=1, ramp_cycles=10),
@@ -73,7 +73,6 @@ def test_investigation_is_bound_to_its_fitted_context_and_policy(fitted, tmp_pat
     assert store.load(investigation).slots_used == 0
 
 
-# 2. Reserve before execution ------------------------------------------------------
 
 def test_slot_is_reserved_and_running_before_the_evaluator_starts(fitted, tmp_path, monkeypatch):
     fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT, STUCK], max_experiments=1, max_failures=1)
@@ -96,7 +95,6 @@ def test_budget_holds_across_runs_and_a_later_run_continues(fitted, tmp_path):
     assert statuses(store, investigation) == ["completed", "completed", "pending"]
 
 
-# 4. Duplicates and failed attempts -----------------------------------------------
 
 def test_duplicates_are_skipped_within_and_across_runs_without_slots(fitted, tmp_path):
     reordered = {"components": list(reversed(COMPOUND["components"]))}
@@ -136,7 +134,6 @@ def test_failure_limit_stops_the_investigation(fitted, tmp_path, monkeypatch):
     assert statuses(store, investigation) == ["exhausted", "exhausted", "pending"]
 
 
-# 5. Cancellation, time limits, interrupted runs -----------------------------------
 
 def test_cancel_before_start_uses_no_slot_and_resume_continues(fitted, tmp_path):
     fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT])
@@ -219,7 +216,7 @@ def test_interrupted_run_is_recovered_counted_and_retried(fitted, tmp_path, monk
 def test_crashed_runner_lease_blocks_until_expiry_and_orphaned_reservations_are_released(fitted, tmp_path):
     fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT])
     proposal = store.load(investigation).proposals[0].id
-    rows(store, "UPDATE investigations SET lease_token='dead', lease_expires=? WHERE id=?", 1_000.0, investigation)
+    rows(store, "UPDATE investigation_runs SET lease_token='dead', lease_expires=? WHERE id=?", 1_000.0, investigation)
     rows(store, "INSERT INTO attempts(id,investigation,proposal,scenario_id,status,lease_token,reserved) VALUES('r',?,?,'x','reserved','dead',1)",
         investigation, proposal)
     with pytest.raises(InvestigationBusy):
@@ -233,11 +230,152 @@ def test_a_runner_that_loses_its_lease_cannot_record_results(fitted, tmp_path, m
     fixed, store, investigation = setup(fitted, tmp_path, [COMPOUND])
     original = fixed.evaluate
     def evaluate(scenario, *, cancelled=None):
-        rows(store, "UPDATE investigations SET lease_token='successor', lease_expires=9e12 WHERE id=?", investigation)
+        rows(store, "UPDATE investigation_runs SET lease_token='successor', lease_expires=9e12 WHERE id=?", investigation)
         return original(scenario, cancelled=cancelled)
     monkeypatch.setattr(fixed, "evaluate", evaluate)
     ticks = iter(range(0, 10_000, 2))
     with pytest.raises(LeaseLost):
         ExperimentRunner(store, fixed, monotonic=lambda: float(next(ticks))).run(investigation)
     assert [a.status for a in store.load(investigation).attempts] == ["running"]
-    assert rows(store, "SELECT lease_token FROM investigations WHERE id=?", investigation) == [("successor",)]
+    assert rows(store, "SELECT lease_token FROM investigation_runs WHERE id=?", investigation) == [("successor",)]
+
+
+def test_runner_attaches_to_existing_records_and_accepts_typed_proposals(fitted, tmp_path):
+    from app.investigator.records import InvestigationStore as RecordStore, InvestigationBudget as RecordBudget
+    fixed = evaluator(fitted)
+    records = RecordStore(tmp_path / "store")
+    record = records.create(fixed, objective="Find warning failures.",
+        budget=RecordBudget(max_experiments=2, max_proposals=3, max_seconds=120))
+    store = InvestigationStore(tmp_path / "store")
+    assert store.path == records.path
+    assert store.attachRecord(record.id) == record.id
+    store.add_proposals(record.id, [{"scenario": DROPOUT, "reason": "Inspect missing temperature readings."}])
+    summary = ExperimentRunner(store, fixed).run(record.id)
+    assert len(summary.completed) == 1
+    assert store.get(record.id) == record
+    assert store.load(record.id).budget.max_experiments == 2
+    assert store.load(record.id).budget.max_run_seconds == 120
+    with pytest.raises(ValueError):
+        store.attachRecord(record.id, InvestigationBudget(max_experiments=3, max_run_seconds=121))
+
+
+def test_attached_runner_obeys_saved_proposal_limit(fitted, tmp_path):
+    from app.investigator.records import InvestigationStore as RecordStore, InvestigationBudget as RecordBudget
+    fixed = evaluator(fitted)
+    record = RecordStore(tmp_path / "store").create(fixed, objective="Test proposal limits.",
+        budget=RecordBudget(max_experiments=2, max_proposals=1, max_seconds=120))
+    store = InvestigationStore(tmp_path / "store")
+    store.attachRecord(record.id)
+    store.add_proposals(record.id, [DROPOUT])
+    with pytest.raises(ValueError, match="proposal limit"):
+        store.add_proposals(record.id, [STUCK])
+    assert len(store.load(record.id).proposals) == 1
+
+
+def test_runner_reuses_strict_proposal_validation(fitted, tmp_path):
+    invalid = case(onset_before_failure="40")
+    fixed, store, investigation = setup(fitted, tmp_path,
+        [invalid, {"scenario": DROPOUT, "reason": "  "}, {"scenario": STUCK, "reason": "Test vibration loss."}])
+    summary = ExperimentRunner(store, fixed).run(investigation)
+    assert len(summary.rejected) == 2 and len(summary.completed) == 1
+    assert summary.slots_used == 1
+
+
+def test_cancel_arriving_at_start_releases_the_slot(fitted, tmp_path, monkeypatch):
+    fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT])
+    runner = ExperimentRunner(store, fixed)
+    original = runner._start
+
+    def start(*args):
+        store.request_cancel(investigation)
+        return original(*args)
+
+    monkeypatch.setattr(runner, "_start", start)
+    summary = runner.run(investigation)
+    assert summary.stop_reason == "cancelled" and summary.slots_used == 0
+    assert store.load(investigation).attempts == []
+
+
+def test_nested_result_identity_is_verified_before_saving(fitted, tmp_path, monkeypatch):
+    from app.faults.scenarios import FaultCase
+    fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT], max_attempts_per_scenario=1)
+    original = fixed.evaluate
+
+    def mismatched(scenario, **kwargs):
+        result = original(scenario, **kwargs)
+        result.scenario = FaultCase.model_validate(STUCK)
+        return result
+
+    monkeypatch.setattr(fixed, "evaluate", mismatched)
+    summary = ExperimentRunner(store, fixed).run(investigation)
+    assert summary.failures == 1 and summary.completed == []
+
+
+def test_checked_result_cannot_be_relabelled_with_a_new_checksum(fitted, tmp_path):
+    import hashlib
+    fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT])
+    attempt = ExperimentRunner(store, fixed).run(investigation).completed[0]
+    result = store.result(attempt).model_dump(mode="json")
+    result["scenario"] = STUCK
+    payload = json.dumps(result)
+    rows(store, "UPDATE attempts SET result=?,result_digest=? WHERE id=?", payload, hashlib.sha256(payload.encode()).hexdigest(), attempt)
+    with pytest.raises(ValueError, match="investigation"):
+        store.result(attempt)
+
+
+def test_deadline_arriving_before_start_releases_the_slot(fitted, tmp_path, monkeypatch):
+    fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT])
+    runner = ExperimentRunner(store, fixed)
+    original = runner._start
+
+    def start(investigation, token, attempt, deadline):
+        return original(investigation, token, attempt, 0)
+
+    monkeypatch.setattr(runner, "_start", start)
+    summary = runner.run(investigation)
+    assert summary.stop_reason == "time_limit" and summary.slots_used == 0
+    assert store.load(investigation).attempts == []
+
+
+def test_modified_runner_budget_cannot_exceed_the_saved_record(fitted, tmp_path):
+    fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT], max_experiments=3, max_run_seconds=120)
+    budget = store.load(investigation).budget.model_dump()
+    budget["max_experiments"] = 4
+    rows(store, "UPDATE investigation_runs SET budget=? WHERE id=?", json.dumps(budget), investigation)
+    with pytest.raises(InvestigationError, match="saved investigation budget"):
+        ExperimentRunner(store, fixed).run(investigation)
+    assert store.load(investigation).slots_used == 0
+
+
+def test_invalid_initial_proposals_leave_no_partial_record(fitted, tmp_path):
+    fixed = evaluator(fitted)
+    store = InvestigationStore(tmp_path / "store")
+    with pytest.raises(ValueError, match="proposal limit"):
+        store.create(fixed, proposals=[DROPOUT] * 257)
+    assert rows(store, "SELECT count(*) FROM investigations") == [(0,)]
+    assert rows(store, "SELECT count(*) FROM investigation_runs") == [(0,)]
+
+
+def test_two_runners_cannot_execute_the_same_investigation(fitted, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    fixed, store, investigation = setup(fitted, tmp_path, [DROPOUT])
+    entered, released = Event(), Event()
+    original = fixed.evaluate
+
+    def evaluate(scenario, **kwargs):
+        entered.set()
+        assert released.wait(5)
+        return original(scenario, **kwargs)
+
+    monkeypatch.setattr(fixed, "evaluate", evaluate)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        run = pool.submit(ExperimentRunner(store, fixed).run, investigation)
+        try:
+            assert entered.wait(5)
+            with pytest.raises(InvestigationBusy):
+                ExperimentRunner(InvestigationStore(tmp_path / "store"), evaluator(fitted)).run(investigation)
+        finally:
+            released.set()
+        assert len(run.result(timeout=5).completed) == 1
+    assert store.load(investigation).slots_used == 1

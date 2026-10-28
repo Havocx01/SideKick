@@ -66,11 +66,7 @@ def replay_evaluation(directory: Path, *, trusted=False) -> FaultEvaluation:
 
 
 def load_trusted_context(directory: Path, *, trusted=False) -> FixedDevelopmentEvaluator:
-    """Restore a package's fixed evaluator after the same integrity and identity checks as replay.
-
-    The package's recorded scenario is re-evaluated first, so a context that no
-    longer reproduces its own evidence is never used for new experiments.
-    """
+    """Check recorded evidence before using its fitted context for new experiments."""
     evaluator, case, expected = _load_package(directory, trusted=trusted)
     if fingerprint(evaluator.evaluate(case).model_dump(mode="json")) != fingerprint(expected.model_dump(mode="json")):
         raise ValueError("Restored context did not reproduce its recorded evaluation")

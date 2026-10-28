@@ -40,7 +40,7 @@ The recorded `evidence/bundle.json` must retain its exact bytes. `.gitattributes
 ## Focused checks
 
 ```powershell
-.venv\Scripts\python.exe -m pytest -q tests/test_investigation_records.py tests/test_scenario_proposals.py tests/test_compound_faults.py
+.venv\Scripts\python.exe -m pytest -q tests/test_investigation_records.py tests/test_scenario_proposals.py tests/test_compound_faults.py tests/test_fault_investigation.py
 .venv\Scripts\python.exe -m pytest -q tests/test_nebius_provider.py tests/test_deep_investigation.py
 .venv\Scripts\python.exe scripts/evaluate_deep.py --output output/deep-review-new
 ```

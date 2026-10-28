@@ -31,11 +31,12 @@ def context(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--store", type=Path, required=True, help="Directory holding investigations.sqlite3.")
+    parser.add_argument("--store", type=Path, required=True, help="Directory holding investigator.sqlite3.")
     parser.add_argument("--context", type=Path, help="Phase 2 export package providing the fixed fitted context.")
     parser.add_argument("--trust-local-artifact", action="store_true", help="Only for a package you produced and trust; joblib can execute code.")
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--create", type=Path, metavar="PROPOSALS_JSON", help="Create an investigation from a JSON list of scenarios.")
+    action.add_argument("--attach", metavar="ID", help="Enable the runner for an existing investigation record.")
     action.add_argument("--add", nargs=2, metavar=("ID", "PROPOSALS_JSON"), help="Append proposals to an investigation.")
     action.add_argument("--run", metavar="ID", help="Run pending proposals within the saved budget.")
     action.add_argument("--status", metavar="ID", help="Show saved state without loading a model context.")
@@ -45,14 +46,17 @@ def main(argv=None):
     parser.add_argument("--max-failures", type=int, default=3)
     parser.add_argument("--max-attempts-per-scenario", type=int, default=2)
     parser.add_argument("--max-run-seconds", type=float, default=600)
+    parser.add_argument("--objective", default="Test supplied fault scenarios.", help="Objective for a new investigation.")
     args = parser.parse_args(argv)
     store = InvestigationStore(args.store)
 
     if args.create:
         budget = InvestigationBudget(max_experiments=args.max_experiments, max_failures=args.max_failures,
             max_attempts_per_scenario=args.max_attempts_per_scenario, max_run_seconds=args.max_run_seconds)
-        investigation = store.create(context(args), budget, read_proposals(args.create))
+        investigation = store.create(context(args), budget, read_proposals(args.create), objective=args.objective)
         output = {"investigation_id": investigation, "proposals": len(store.load(investigation).proposals)}
+    elif args.attach:
+        output = {"investigation_id": store.attachRecord(args.attach)}
     elif args.add:
         output = {"investigation_id": args.add[0], "added": store.add_proposals(args.add[0], read_proposals(Path(args.add[1])))}
     elif args.run:

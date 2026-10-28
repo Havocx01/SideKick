@@ -1,20 +1,4 @@
-"""Durable, bounded execution of saved fault-scenario proposals.
-
-An investigation is bound to one fixed evaluator context (fitted models,
-thresholds, data and policy). Proposals are untrusted JSON, typically written
-by an agent; they are validated here and never trusted for budgets or identity.
-
-Lifecycle of one experiment attempt:
-
-    reserved -> running -> completed | failed | timed_out | cancelled | stopped
-                       \\-> interrupted (runner died; recovered by the next run)
-
-A slot is reserved in the same transaction that checks the budget, before any
-work starts. A reservation that never started is released; every started
-attempt consumes its slot. ``failed``, ``timed_out`` and ``interrupted`` are
-failures; ``cancelled`` and ``stopped`` (the run's own time limit) are not the
-scenario's fault and leave its proposal pending for a later run.
-"""
+"""Bounded execution of saved scenario proposals."""
 from contextlib import contextmanager
 import hashlib
 import json
@@ -28,10 +12,11 @@ from pydantic import Field, ValidationError, model_validator
 
 from app.faults.evaluator import EvaluationStopped, FaultEvaluation, FixedDevelopmentEvaluator
 from app.faults.scenarios import FaultCase, FaultPolicy
+from app.investigator.proposals import MAX_PROPOSAL_BYTES, validateProposal
+from app.investigator.records import Frozen, InvestigationStore as RecordStore, InvestigationBudget as RecordBudget
 from app.schemas import Strict
 
 MAX_PROPOSALS = 256
-MAX_PROPOSAL_BYTES = 64 * 1024
 MAX_RESULT_BYTES = 16 * 1024 * 1024
 LEASE_MARGIN_SECONDS = 60.0
 HEARTBEAT_SECONDS = 1.0
@@ -56,11 +41,11 @@ class LeaseLost(InvestigationError):
     """This runner's lease expired or was taken over; it must not write results."""
 
 
-class InvestigationBudget(Strict):
+class InvestigationBudget(Frozen):
     max_experiments: int = Field(default=16, ge=1, le=128, strict=True)
     max_failures: int = Field(default=3, ge=1, le=64, strict=True)
     max_attempts_per_scenario: int = Field(default=2, ge=1, le=5, strict=True)
-    max_run_seconds: float = Field(default=600, gt=0, le=3600, allow_inf_nan=False)
+    max_run_seconds: float = Field(default=600, gt=0, le=3600, strict=True)
 
     @model_validator(mode="after")
     def coherent(self):
@@ -125,20 +110,18 @@ def _short(error: BaseException) -> str:
     return f"{type(error).__name__}: {detail}"[:300]
 
 
-class InvestigationStore:
+class InvestigationStore(RecordStore):
     def __init__(self, root: Path):
-        root = Path(root)
-        root.mkdir(parents=True, exist_ok=True)
-        self.path = root / "investigations.sqlite3"
+        super().__init__(root)
         with self.transaction() as db:
             for statement in (
-                "CREATE TABLE IF NOT EXISTS investigations(id TEXT PRIMARY KEY, context_fingerprint TEXT NOT NULL,"
+                "CREATE TABLE IF NOT EXISTS investigation_runs(id TEXT PRIMARY KEY REFERENCES investigations(id), context_fingerprint TEXT NOT NULL,"
                 " policy TEXT NOT NULL, policy_fingerprint TEXT NOT NULL, budget TEXT NOT NULL, created REAL NOT NULL,"
                 " cancel_requested INTEGER NOT NULL DEFAULT 0, stop_reason TEXT, lease_token TEXT, lease_expires REAL)",
-                "CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY, investigation TEXT NOT NULL REFERENCES investigations(id),"
+                "CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY, investigation TEXT NOT NULL REFERENCES investigation_runs(id),"
                 " seq INTEGER NOT NULL, payload TEXT NOT NULL, scenario_id TEXT, status TEXT NOT NULL, reason TEXT,"
                 " duplicate_of TEXT, UNIQUE(investigation, seq))",
-                "CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY, investigation TEXT NOT NULL REFERENCES investigations(id),"
+                "CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY, investigation TEXT NOT NULL REFERENCES investigation_runs(id),"
                 " proposal TEXT NOT NULL REFERENCES proposals(id), scenario_id TEXT NOT NULL, status TEXT NOT NULL,"
                 " lease_token TEXT NOT NULL, reason TEXT, reserved REAL NOT NULL, started REAL, finished REAL,"
                 " result TEXT, result_digest TEXT)",
@@ -166,62 +149,81 @@ class InvestigationStore:
                 raise
             db.execute("COMMIT")
 
-    # ---- creation and proposals -------------------------------------------------
-
-    def create(self, evaluator: FixedDevelopmentEvaluator, budget: InvestigationBudget | None = None, proposals=()) -> str:
+    def create(self, evaluator: FixedDevelopmentEvaluator, budget: InvestigationBudget | None = None, proposals=(), *, objective="Test supplied fault scenarios.") -> str:
         budget = InvestigationBudget.model_validate((budget or InvestigationBudget()).model_dump())
         if budget.max_experiments > evaluator.policy.max_evaluations:
             raise ValueError("The experiment budget exceeds the policy's evaluation limit")
-        investigation = uuid.uuid4().hex
-        with self.transaction() as db:
-            db.execute("INSERT INTO investigations(id,context_fingerprint,policy,policy_fingerprint,budget,created) VALUES(?,?,?,?,?,?)",
-                (investigation, evaluator.context_fingerprint, json.dumps(evaluator.policy.model_dump(mode="json"), sort_keys=True),
-                 evaluator.policy.fingerprint, budget.model_dump_json(), time.time()))
-        if proposals:
-            self.add_proposals(investigation, proposals)
-        return investigation
+        payloads = self.proposalTexts(proposals)
+        record = super().create(evaluator, objective=objective,
+            budget=RecordBudget(max_experiments=budget.max_experiments, max_proposals=MAX_PROPOSALS, max_seconds=budget.max_run_seconds))
+        return self.attachRecord(record.id, budget, proposals=payloads)
 
-    def add_proposals(self, investigation: str, proposals) -> list[str]:
-        """Store untrusted proposals verbatim; validation happens when a run loads them."""
+    def attachRecord(self, recordId, budget=None, *, proposals=()) -> str:
+        record = self.get(recordId)
+        if budget is None:
+            budget = InvestigationBudget(max_experiments=record.budget.max_experiments,
+                max_failures=min(3, record.budget.max_experiments), max_run_seconds=record.budget.max_seconds)
+        budget = InvestigationBudget.model_validate(budget.model_dump())
+        if budget.max_experiments > record.budget.max_experiments or budget.max_run_seconds > record.budget.max_seconds:
+            raise ValueError("Runner budget exceeds the saved investigation budget")
+        payloads = self.proposalTexts(proposals)
+        with self.transaction() as db:
+            if db.execute("SELECT id FROM investigation_runs WHERE id=?", (record.id,)).fetchone():
+                raise ValueError("Investigation already has a runner")
+            db.execute("INSERT INTO investigation_runs(id,context_fingerprint,policy,policy_fingerprint,budget,created) VALUES(?,?,?,?,?,?)",
+                (record.id, record.context_fingerprint, record.policy.model_dump_json(), record.policy.fingerprint, budget.model_dump_json(), time.time()))
+            self.insertProposals(db, record.id, payloads, record.budget.max_proposals)
+        return record.id
+
+    @staticmethod
+    def proposalTexts(proposals):
         payloads = []
         for proposal in proposals:
+            if len(payloads) >= MAX_PROPOSALS:
+                raise ValueError("Investigation proposal limit reached")
             text = proposal if isinstance(proposal, str) else json.dumps(proposal, sort_keys=True, allow_nan=False)
             if len(text.encode()) > MAX_PROPOSAL_BYTES:
                 raise ValueError("Proposal exceeds its size limit")
             payloads.append(text)
+        return payloads
+
+    def add_proposals(self, investigation: str, proposals) -> list[str]:
+        record = self.get(investigation)
+        payloads = self.proposalTexts(proposals)
         with self.transaction() as db:
             self._row(db, investigation)
-            last, count = db.execute("SELECT COALESCE(MAX(seq),0), COUNT(*) FROM proposals WHERE investigation=?", (investigation,)).fetchone()
-            if count + len(payloads) > MAX_PROPOSALS:
-                raise ValueError("Investigation proposal limit reached")
-            ids = []
-            for offset, text in enumerate(payloads, start=1):
-                ids.append(uuid.uuid4().hex)
-                db.execute("INSERT INTO proposals(id,investigation,seq,payload,status) VALUES(?,?,?,?, 'pending')",
-                    (ids[-1], investigation, last + offset, text))
-            return ids
+            return self.insertProposals(db, record.id, payloads, record.budget.max_proposals)
 
-    # ---- cancellation ----------------------------------------------------------
+    @staticmethod
+    def insertProposals(db, investigation, payloads, limit):
+        last, count = db.execute("SELECT COALESCE(MAX(seq),0), COUNT(*) FROM proposals WHERE investigation=?", (investigation,)).fetchone()
+        if count + len(payloads) > limit:
+            raise ValueError("Investigation proposal limit reached")
+        ids = []
+        for offset, text in enumerate(payloads, start=1):
+            ids.append(uuid.uuid4().hex)
+            db.execute("INSERT INTO proposals(id,investigation,seq,payload,status) VALUES(?,?,?,?, 'pending')",
+                (ids[-1], investigation, last + offset, text))
+        return ids
 
     def request_cancel(self, investigation: str):
         """Safe from any process; an active run stops at its next cooperative check."""
         with self.transaction() as db:
             self._row(db, investigation)
-            db.execute("UPDATE investigations SET cancel_requested=1 WHERE id=?", (investigation,))
+            db.execute("UPDATE investigation_runs SET cancel_requested=1 WHERE id=?", (investigation,))
 
     def resume(self, investigation: str):
         with self.transaction() as db:
             self._row(db, investigation)
-            db.execute("UPDATE investigations SET cancel_requested=0, stop_reason=NULL WHERE id=?", (investigation,))
+            db.execute("UPDATE investigation_runs SET cancel_requested=0, stop_reason=NULL WHERE id=?", (investigation,))
 
     def cancel_requested(self, investigation: str) -> bool:
         with self.connection() as db:
             return bool(self._row(db, investigation)["cancel_requested"])
 
-    # ---- reading ---------------------------------------------------------------
-
     def load(self, investigation: str) -> InvestigationState:
         with self.connection() as db:
+            db.execute("BEGIN")
             row = self._row(db, investigation)
             failures = dict(db.execute(f"SELECT proposal, COUNT(*) FROM attempts WHERE investigation=? AND status IN ({_marks(FAILURE_STATUSES)})"
                 " GROUP BY proposal", (investigation, *FAILURE_STATUSES)).fetchall())
@@ -241,8 +243,9 @@ class InvestigationStore:
 
     def result(self, attempt: str) -> FaultEvaluation:
         with self.connection() as db:
-            found = db.execute("SELECT a.status, a.result, a.result_digest, a.scenario_id, i.context_fingerprint, i.policy_fingerprint"
-                " FROM attempts a JOIN investigations i ON i.id=a.investigation WHERE a.id=?", (attempt,)).fetchone()
+            found = db.execute("SELECT a.status, CASE WHEN length(CAST(a.result AS BLOB))<=? THEN a.result END,"
+                " a.result_digest, a.scenario_id, i.context_fingerprint, i.policy_fingerprint"
+                " FROM attempts a JOIN investigation_runs i ON i.id=a.investigation WHERE a.id=?", (MAX_RESULT_BYTES, attempt)).fetchone()
         if found is None:
             raise KeyError("Unknown experiment attempt")
         status, payload, digest, scenario, context, policy = found
@@ -251,17 +254,16 @@ class InvestigationStore:
         if hashlib.sha256(payload.encode()).hexdigest() != digest:
             raise ValueError("Recorded result does not match its checksum")
         result = FaultEvaluation.model_validate_json(payload)
-        if result.scenario_id != scenario or result.context_fingerprint != context or result.policy_fingerprint != policy:
+        if (result.scenario_id != scenario or result.scenario.scenario_id != scenario or result.context_fingerprint != context
+                or result.policy_fingerprint != policy or result.policy.fingerprint != policy):
             raise ValueError("Recorded result does not belong to this investigation")
         return result
-
-    # ---- helpers ---------------------------------------------------------------
 
     @staticmethod
     def _row(db, investigation):
         db.row_factory = sqlite3.Row
         try:
-            row = db.execute("SELECT * FROM investigations WHERE id=?", (investigation,)).fetchone()
+            row = db.execute("SELECT * FROM investigation_runs WHERE id=?", (investigation,)).fetchone()
         finally:
             db.row_factory = None
         if row is None:
@@ -335,7 +337,10 @@ class ExperimentRunner:
                         raise LeaseLost("Investigation lease was lost")
                     reason = "cancelled"
                     break
-                self._start(investigation, token, attempt)
+                reason = self._start(investigation, token, attempt, deadline)
+                if reason:
+                    self._release(investigation, token, attempt)
+                    break
                 outcome = self._execute(investigation, token, attempt, proposal, payload, scenario_id, budget, should_stop, flags, deadline)
                 if outcome == "completed":
                     summary["completed"].append(attempt)
@@ -354,22 +359,25 @@ class ExperimentRunner:
         return RunSummary(investigation_id=investigation, stop_reason=reason, slots_used=state.slots_used,
             failures=state.failures, **summary)
 
-    # ---- lease -----------------------------------------------------------------
-
     def _ttl(self) -> float:
         return float(self.evaluator.policy.max_seconds) + LEASE_MARGIN_SECONDS
 
     def _acquire(self, investigation, token):
+        record = self.store.get(investigation)
         with self.store.transaction() as db:
             row = self.store._row(db, investigation)
             if row["context_fingerprint"] != self.evaluator.context_fingerprint:
                 raise InvestigationError("Evaluator context does not match the saved investigation")
             if row["policy_fingerprint"] != self.evaluator.policy.fingerprint or FaultPolicy.model_validate_json(row["policy"]).fingerprint != row["policy_fingerprint"]:
                 raise InvestigationError("Evaluator policy does not match the saved investigation")
+            record.check_context(self.evaluator)
+            budget = InvestigationBudget.model_validate_json(row["budget"])
+            if budget.max_experiments > record.budget.max_experiments or budget.max_run_seconds > record.budget.max_seconds:
+                raise InvestigationError("Runner budget exceeds the saved investigation budget")
             now = self._wall()
             if row["lease_token"] is not None and row["lease_expires"] is not None and row["lease_expires"] > now:
                 raise InvestigationBusy("Another runner is executing this investigation")
-            db.execute("UPDATE investigations SET lease_token=?, lease_expires=? WHERE id=?", (token, now + self._ttl(), investigation))
+            db.execute("UPDATE investigation_runs SET lease_token=?, lease_expires=? WHERE id=?", (token, now + self._ttl(), investigation))
             # The previous lease is gone, so anything still in flight belongs to a dead runner.
             db.execute("DELETE FROM attempts WHERE investigation=? AND status='reserved'", (investigation,))
             orphans = [id for (id,) in db.execute("SELECT id FROM attempts WHERE investigation=? AND status='running' ORDER BY reserved",
@@ -377,12 +385,11 @@ class ExperimentRunner:
             for attempt in orphans:
                 db.execute("UPDATE attempts SET status='interrupted', finished=?, reason=? WHERE id=?",
                     (now, "Runner stopped before recording a result", attempt))
-            budget = InvestigationBudget.model_validate_json(row["budget"])
             self._settle_exhausted(db, investigation, budget)
         return budget, orphans
 
     def _owned(self, db, investigation, token):
-        found = db.execute("SELECT lease_token, lease_expires, cancel_requested FROM investigations WHERE id=?", (investigation,)).fetchone()
+        found = db.execute("SELECT lease_token, lease_expires, cancel_requested FROM investigation_runs WHERE id=?", (investigation,)).fetchone()
         if found is None or found[0] != token or found[1] is None or found[1] <= self._wall():
             raise LeaseLost("Investigation lease was lost")
         return bool(found[2])
@@ -390,19 +397,17 @@ class ExperimentRunner:
     def _heartbeat(self, investigation, token) -> bool:
         with self.store.transaction() as db:
             cancel = self._owned(db, investigation, token)
-            db.execute("UPDATE investigations SET lease_expires=? WHERE id=?", (self._wall() + self._ttl(), investigation))
+            db.execute("UPDATE investigation_runs SET lease_expires=? WHERE id=?", (self._wall() + self._ttl(), investigation))
             return cancel
 
     def _unlock(self, investigation, token):
         with self.store.transaction() as db:
-            db.execute("UPDATE investigations SET lease_token=NULL, lease_expires=NULL WHERE id=? AND lease_token=?", (investigation, token))
+            db.execute("UPDATE investigation_runs SET lease_token=NULL, lease_expires=NULL WHERE id=? AND lease_token=?", (investigation, token))
 
     def _finish(self, investigation, token, reason):
         with self.store.transaction() as db:
             self._owned(db, investigation, token)
-            db.execute("UPDATE investigations SET stop_reason=? WHERE id=?", (reason, investigation))
-
-    # ---- 1. validation and duplicates ------------------------------------------
+            db.execute("UPDATE investigation_runs SET stop_reason=? WHERE id=?", (reason, investigation))
 
     def _validate(self, investigation, token):
         rejected, duplicates = [], []
@@ -411,7 +416,7 @@ class ExperimentRunner:
             for id, payload in db.execute("SELECT id,payload FROM proposals WHERE investigation=? AND status='pending' AND scenario_id IS NULL"
                     " ORDER BY seq", (investigation,)).fetchall():
                 try:
-                    case = self._case(payload)
+                    case = self._case(payload, investigation)
                 except (ValueError, TypeError) as error:
                     db.execute("UPDATE proposals SET status='rejected', reason=? WHERE id=?", (_short(error), id))
                     rejected.append(id)
@@ -429,14 +434,13 @@ class ExperimentRunner:
                     duplicates.append(id)
         return rejected, duplicates
 
-    def _case(self, payload) -> FaultCase:
+    def _case(self, payload, investigation) -> FaultCase:
         if len(payload.encode()) > MAX_PROPOSAL_BYTES:
             raise ValueError("Proposal exceeds its size limit")
-        case = FaultCase.model_validate_json(payload)
-        self.evaluator.policy.check(case, self.evaluator.config)
-        return case
-
-    # ---- 2. admission ----------------------------------------------------------
+        value = json.loads(payload)
+        if isinstance(value, dict) and "components" in value:
+            payload = json.dumps({"scenario": value, "reason": "Imported fault scenario."}, allow_nan=False)
+        return validateProposal(payload, self.store.get(investigation), self.evaluator).scenario
 
     def _reserve(self, investigation, token, budget):
         """Check every limit and reserve a slot atomically, or return a stop reason."""
@@ -461,28 +465,30 @@ class ExperimentRunner:
             attempt = uuid.uuid4().hex
             db.execute("INSERT INTO attempts(id,investigation,proposal,scenario_id,status,lease_token,reserved) VALUES(?,?,?,?, 'reserved', ?, ?)",
                 (attempt, investigation, proposal, scenario_id, token, self._wall()))
-            db.execute("UPDATE investigations SET lease_expires=? WHERE id=?", (self._wall() + self._ttl(), investigation))
+            db.execute("UPDATE investigation_runs SET lease_expires=? WHERE id=?", (self._wall() + self._ttl(), investigation))
         return attempt, proposal, payload, scenario_id
 
     def _release(self, investigation, token, attempt):
         with self.store.transaction() as db:
-            if db.execute("SELECT lease_token FROM investigations WHERE id=?", (investigation,)).fetchone()[0] == token:
+            if db.execute("SELECT lease_token FROM investigation_runs WHERE id=?", (investigation,)).fetchone()[0] == token:
                 db.execute("DELETE FROM attempts WHERE id=? AND status='reserved' AND lease_token=?", (attempt, token))
 
-    def _start(self, investigation, token, attempt):
+    def _start(self, investigation, token, attempt, deadline):
         with self.store.transaction() as db:
-            self._owned(db, investigation, token)
+            if self._owned(db, investigation, token):
+                return "cancelled"
+            if self._monotonic() >= deadline:
+                return "time_limit"
             db.execute("UPDATE attempts SET status='running', started=? WHERE id=? AND status='reserved'", (self._wall(), attempt))
-
-    # ---- 3. execution and recording --------------------------------------------
 
     def _execute(self, investigation, token, attempt, proposal, payload, scenario_id, budget, should_stop, flags, deadline):
         try:
-            case = self._case(payload)
+            case = self._case(payload, investigation)
             if case.scenario_id != scenario_id:
                 raise ValueError("Proposal identity changed after validation")
             result = self.evaluator.evaluate(case, cancelled=should_stop)
-            if (result.scenario_id != scenario_id or result.context_fingerprint != self.evaluator.context_fingerprint
+            if (result.scenario_id != scenario_id or result.scenario.scenario_id != scenario_id
+                    or result.context_fingerprint != self.evaluator.context_fingerprint or result.policy != self.evaluator.policy
                     or result.policy_fingerprint != self.evaluator.policy.fingerprint):
                 raise ValueError("Evaluator returned a result for a different scenario or context")
             document = json.dumps(result.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), allow_nan=False)

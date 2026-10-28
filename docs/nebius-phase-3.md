@@ -1,6 +1,6 @@
 # Investigation records
 
-Investigation setup is saved locally. Typed scenario proposals can be validated against that setup; automatic selection and experiment execution are not connected yet.
+Investigation setup and experiment execution are saved locally. Typed proposals run against fixed development models. Automatic scenario selection is not connected yet.
 
 Given an existing `FixedDevelopmentEvaluator` and `backend` on the Python module path:
 
@@ -17,7 +17,7 @@ loaded.check_context(evaluator)
 
 `investigator.sqlite3` stores the objective, fixed context/config fingerprints, fault policy, model thresholds, budget and creation event. Records survive restart; they do not contain fitted models or copied sensor histories. Objectives may contain private user text.
 
-The experiment cap cannot exceed the evaluator policy. Budget consumption, elapsed-time accounting and lifecycle transitions will be added with the runner. `check_context` rejects a different evaluator; the caller must supply the original fitted context. The record alone cannot reconstruct it.
+The experiment cap cannot exceed the evaluator policy. `check_context` rejects a different evaluator; the caller must supply the original fitted context. The record alone cannot reconstruct it.
 
 This developer interface has no HTTP route and makes no provider requests. Existing workspace, consent and exposure databases are separate.
 
@@ -34,4 +34,35 @@ scenarioId = proposal.scenario.scenario_id
 
 Validation accepts JSON text up to 16 KiB. It rejects extra fields, incorrect types, empty reasons, invalid fault parameters, unknown sensors and violations of the investigation's component/group/timing/severity bounds. The record is revalidated and must match the evaluator's fixed context. Scenario IDs are computed locally from canonical parameters.
 
-This check does not determine whether a fault changes scorable readings; the evaluator reports actual applicability and coverage. Validation neither saves proposals nor consumes budget. The future runner must reload the record and validate each proposal before execution and account for duplicates, failed proposals and experiment limits.
+This check does not determine whether a fault changes scorable readings; the evaluator reports actual applicability and coverage. Validation alone neither saves proposals nor consumes budget.
+
+## Experiment runner
+
+The runner shares `investigator.sqlite3` with the record store. Add execution state to an existing record without replacing its objective, policy or limits:
+
+```python
+from app.faults.investigation import ExperimentRunner, InvestigationStore
+
+runnerStore = InvestigationStore(Path("output/investigations"))
+runnerStore.attachRecord(loaded.id)
+runnerStore.add_proposals(loaded.id, [proposal.model_dump(mode="json")])
+summary = ExperimentRunner(runnerStore, evaluator).run(loaded.id)
+```
+
+The runner checks context and policy, validates proposals through `validateProposal`, skips duplicate scenario IDs and reserves a slot transactionally before execution. Bare `FaultCase` inputs are also accepted for CLI compatibility and labelled as imported scenarios. Rejected proposals and duplicates use no experiment slots; they still count toward the saved proposal limit.
+
+Each started attempt consumes a slot, including failures, timeouts, interruptions, cancellation and run-time stops. Pre-start cancellation or an expired deadline releases the reservation. Failed scenarios are retried after untried scenarios, up to the per-scenario attempt limit and total failure limit. Completed results have checksums and must match their scenario, policy and fitted context when saved or read.
+
+The run-time limit applies to each `run()` invocation and cannot exceed the saved record's `max_seconds`. Experiment/proposal limits persist across invocations. Cancellation and deadlines are cooperative: a long model-scoring call cannot be forcibly interrupted. A lease prevents concurrent runners for the same investigation. After an abrupt process crash, recovery waits for lease expiry (the evaluator's time limit plus 60 seconds), marks started work interrupted and releases unstarted reservations. A runner that loses its lease cannot save results.
+
+For a trusted context exported with the current source and dependency versions:
+
+```powershell
+.venv/Scripts/python.exe scripts/run_fault_investigation.py --store output/investigations --context output/context-package --trust-local-artifact --create proposals.json
+.venv/Scripts/python.exe scripts/run_fault_investigation.py --store output/investigations --context output/context-package --trust-local-artifact --run <id>
+.venv/Scripts/python.exe scripts/run_fault_investigation.py --store output/investigations --status <id>
+.venv/Scripts/python.exe scripts/run_fault_investigation.py --store output/investigations --cancel <id>
+.venv/Scripts/python.exe scripts/run_fault_investigation.py --store output/investigations --resume <id>
+```
+
+`proposals.json` is a JSON list of typed proposals, bare cases or raw JSON strings. `--attach <id>` enables execution for an existing record in the same store; `--add <id> proposals.json` appends proposals. `--create` accepts an objective and experiment/failure/attempt/run-time limits. Loading a context rechecks its recorded evaluation before new work and requires explicit local artifact trust. No training, provider calls, HTTP route or agent loop is added by the runner.
