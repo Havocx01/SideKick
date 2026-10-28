@@ -4,6 +4,8 @@ Sidekick tests whether equipment failure warnings survive missing, frozen or dri
 
 Built for ABB Accelerator 2026, Theme 1
 
+The Nebius x NVIDIA adaptation is in Phase 1: explicit Nebius Token Factory configuration, validated Chat Completions transport and provider-specific permission. Adaptive experiment execution is not implemented yet. See [Phase 1 setup and verification](docs/nebius-phase-1.md).
+
 [Public demo](https://sidekick-e9lu.onrender.com/) · [Reviewer walkthrough](SUBMISSION.md)
 
 ## Features
@@ -85,7 +87,9 @@ CSVs need at least 25 distinct complete equipment histories, consecutive integer
 
 **Deep investigation** is a deliberate AI action on a completed model result in a local workspace. For two models, open **Compare selected**, then choose **Deep investigation**. It connects recorded fault patterns, proposes tentative explanations with alternatives, identifies evidence gaps, and prioritizes concrete next tests with expected signals and conditional outcomes. Citations lead to server-computed observations; they establish relevance, not causation. Numbers, limits, verdicts and links remain server-owned. No training or reserved validation is launched.
 
-Set `OPENAI_API_KEY` on the server and keep `SIDEKICK_ASSISTANT_LIVE_ENABLED=1`, then restart Sidekick. Keep the current model (`gpt-4.1-mini-2025-04-14` by default). Enable workspace permission through **AI settings** or the deep-investigation prompt. Each new deep context uses one structured provider request with no automatic provider retries. Reopening uses the saved report, including after a server restart; model or prompt changes label historical output rather than automatically regenerating it. Permission alone never starts a request. If you explicitly restrict `SIDEKICK_ASSISTANT_TASKS`, include `deep` to enable this action. Hosted demo and replay remain evidence-only for new work.
+For Nebius, set `SIDEKICK_ASSISTANT_PROVIDER=nebius` and `NEBIUS_API_KEY` on the server; the default model is `nvidia/nemotron-3-super-120b-a12b`. Remove an old `SIDEKICK_ASSISTANT_MODEL` override or set it explicitly to a model available on your endpoint. Keep `SIDEKICK_ASSISTANT_LIVE_ENABLED=1`, restart Sidekick, and enable workspace permission through **AI settings** or the deep-investigation prompt. A new Nebius endpoint needs its own approval; existing OpenAI approval does not transfer. See [configuration and the bounded connectivity check](docs/nebius-phase-1.md).
+
+Existing OpenAI setups remain supported with `SIDEKICK_ASSISTANT_PROVIDER=openai` (the compatibility default), `OPENAI_API_KEY`, and the default `gpt-4.1-mini-2025-04-14` model. Each new deep context uses one structured provider request with no automatic provider retries. Reopening uses the saved report, including after a server restart; provider, model or prompt changes label historical output rather than automatically regenerating it. Permission alone never starts a request. If you explicitly restrict `SIDEKICK_ASSISTANT_TASKS`, include `deep` to enable this action. Hosted demo and replay remain evidence-only for new work.
 
 The server inspects all recorded required fault rows in the chosen partition and supplies at most 24 prioritized model/channel/type/duration patterns, including timing and severity ranges. Larger sets explicitly disclose omitted patterns. Aggregate patterns are descriptive, not independent samples or controlled causal comparisons. Missing values and unknown coverage remain explicit. A failed, interrupted or unavailable investigation offers recovery where permitted; verification failures show local evidence and do not retry automatically.
 

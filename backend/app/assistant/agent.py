@@ -4,6 +4,7 @@ from openai import AsyncOpenAI
 from pydantic import Field
 
 from app.schemas import Strict
+from app.assistant.transport import client_options, request_structured, request_tool_calls
 
 
 class InvestigationChoices(Strict):
@@ -45,7 +46,7 @@ async def investigate(tools, settings):
             packet = tools.call(name, {}, server_inspection=True)
             history.append({"role": "user", "content": json.dumps(
                 {"server_inspection": {"name": name, "result": packet}}, separators=(",", ":"))})
-    async with AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0, timeout=40) as client:
+    async with AsyncOpenAI(**client_options(settings)) as client:
         for roundIndex in range(0 if sequence else maxCalls):
             completed = {call.name for call in tools.calls}
             if sequence and set(sequence) <= completed:
@@ -55,9 +56,8 @@ async def investigate(tools, settings):
                 forced = "get_model_metrics"
             if len(json.dumps(history).encode()) + overhead > MAX_HISTORY_BYTES:
                 raise ValueError("Investigation exceeds the evidence input budget.")
-            response = await client.responses.create(model=settings.assistant_model, store=False, max_output_tokens=700,
-                input=history, tools=tools.specs, tool_choice={"type": "function", "name": forced} if forced else "auto", parallel_tool_calls=False)
-            requested = [item for item in response.output if item.type == "function_call"]
+            requested = await request_tool_calls(client, settings, history=history, tools=tools.specs,
+                forced=forced, max_output_tokens=700)
             if not requested:
                 break
             if calls + len(requested) > maxCalls:
@@ -89,8 +89,7 @@ async def investigate(tools, settings):
                         "Use only identifiers in this catalog. Choose one useful next action or null. " + json.dumps(catalog)})
         if len(json.dumps(history).encode()) + overhead > MAX_HISTORY_BYTES:
             raise ValueError("Investigation exceeds the evidence input budget.")
-        final = await client.responses.parse(model=settings.assistant_model, store=False, max_output_tokens=700, input=history, text_format=InvestigationChoices)
-        choices = final.output_parsed
+        choices = await request_structured(client, settings, history=history, response_model=InvestigationChoices, max_output_tokens=700)
         if not isinstance(choices, InvestigationChoices):
             raise ValueError("Investigation returned an unsupported result.")
         return tools.finish(choices.finding_ids, choices.claim_ids, choices.action_id, settings.assistant_model)

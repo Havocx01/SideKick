@@ -11,6 +11,7 @@ from app.api.routes_experiments import check_access
 from app.assistant.exports import export_brief
 from app.assistant.schemas import AnalysisRequest, AnalysisRecord, AnalysisDetail, AssistantAccess, AssistantCapabilities, BriefUpdate, ConsentState, ConsentUpdate
 from app.assistant.store import AnalysisCapacityError, AnalysisRevokedError
+from app.assistant.transport import api_key, provider_name
 from app.experiments.demo import owner as demo_owner, public_origin
 from app.schemas import ExperimentEngineerContext
 
@@ -23,6 +24,13 @@ DISCLOSURE = ("Sent to OpenAI for deep investigation: pseudonymous model and cha
               "Saved equipment type, sensor meaning, decision context and the investigation focus you explicitly enter are sent as unverified context. Other pilot text and contact details are not included. "
               "Routine analysis and data checks run locally. Excluded from automatic evidence: CSV files, raw sensor readings, equipment IDs, model names, channel names, filenames and pilot contact details. "
               "Requests use store=false, but OpenAI may retain API abuse-monitoring logs for up to 30 days, and exceptions may apply.")
+
+
+def disclosure(settings):
+    if provider_name(settings) == "nebius":
+        common = DISCLOSURE.split("Requests use store=false,")[0].replace("Sent to OpenAI", "Sent to Nebius Token Factory", 1)
+        return common + "Nebius processes these requests under its service data policies. Sidekick does not configure or promise zero retention."
+    return DISCLOSURE
 
 
 def service(request: Request):
@@ -184,10 +192,10 @@ def capabilities(request: Request, response: Response, experiment_id: str | None
     return AssistantCapabilities(tasks=[task for task in assistant.settings.assistant_tasks if task != "deep" or assistant.settings.mode == "full"], live_available=False,
         unlock_available=False,
         unlocked=assistant.settings.mode == "full" or assistant.store.unlocked(who), consent_required=assistant.settings.mode == "full" or required,
-        consent_granted=bool(assistant.store.workspace_consent()) if assistant.settings.mode == "full" else not required or assistant.store.consent(who, scope), mode=assistant.settings.mode,
+        consent_granted=bool(assistant.workspace_consent()) if assistant.settings.mode == "full" else not required or assistant.store.consent(who, scope), mode=assistant.settings.mode,
         note="Routine analysis uses recorded evidence and makes no AI requests.",
         deep_available=not dataset_id and "deep" in assistant.settings.assistant_tasks and assistant.settings.mode == "full"
-            and assistant.settings.assistant_live_enabled and bool(assistant.settings.openai_api_key))
+            and assistant.settings.assistant_live_enabled and bool(api_key(assistant.settings)))
 
 
 @router.post("/analyses", response_model=AnalysisRecord, dependencies=[Depends(guard)])
@@ -239,8 +247,8 @@ def consent(experiment_id: str, request: Request, response: Response):
     who = visitor(request, response)
     assistant = service(request)
     local = assistant.settings.mode == "full"
-    return ConsentState(experiment_id=experiment_id, allowed=bool(assistant.store.workspace_consent()) if local else assistant.store.consent(who, experiment_id),
-                        disclosure=("Applies to all existing and future analyses in this local workspace. " if local else "") + DISCLOSURE)
+    return ConsentState(experiment_id=experiment_id, allowed=bool(assistant.workspace_consent()) if local else assistant.store.consent(who, experiment_id),
+                        disclosure=("Applies to all existing and future analyses in this local workspace for the selected provider and endpoint. " if local else "") + disclosure(assistant.settings))
 
 
 @router.post("/consent/{experiment_id}", response_model=ConsentState, dependencies=[Depends(guard)])
@@ -250,7 +258,7 @@ async def set_consent(experiment_id: str, payload: ConsentUpdate, request: Reque
     assistant = service(request)
     if assistant.settings.mode == "full":
         if payload.allowed:
-            assistant.store.set_workspace_consent(True)
+            assistant.allow_workspace()
         else:
             await assistant.revoke_workspace()
     elif payload.allowed:
@@ -258,7 +266,7 @@ async def set_consent(experiment_id: str, payload: ConsentUpdate, request: Reque
     else:
         await assistant.revoke(who, experiment_id)
     return ConsentState(experiment_id=experiment_id, allowed=payload.allowed,
-                        disclosure=("Applies to all existing and future analyses in this local workspace. " if assistant.settings.mode == "full" else "") + DISCLOSURE)
+                        disclosure=("Applies to all existing and future analyses in this local workspace for the selected provider and endpoint. " if assistant.settings.mode == "full" else "") + disclosure(assistant.settings))
 
 
 @router.post("/access", dependencies=[Depends(guard)])

@@ -11,6 +11,7 @@ from openai import APIConnectionError, APIStatusError, AuthenticationError, Perm
 from app.assistant.deep import DeepVerificationError
 from app.assistant.schemas import AnalysisRecord, AnalysisStage
 from app.assistant.store import AssistantStore, RESULT_GROWTH_BYTES, AnalysisRevokedError
+from app.assistant.transport import api_key, key_variable, provider_identity, provider_label, provider_name
 
 
 def normalized_context(context):
@@ -20,18 +21,19 @@ def normalized_context(context):
     return context.model_copy(update={"task": task})
 
 
-def provider_failure(error):
+def provider_failure(error, settings=None):
     """Explain known provider failures without exposing its response or credentials."""
+    label = provider_label(settings)
     if isinstance(error, AuthenticationError):
-        return "OpenAI rejected the API key. Replace OPENAI_API_KEY and restart the server."
+        return f"{label} rejected the API key. Replace {key_variable(settings)} and restart the server."
     if isinstance(error, PermissionDeniedError):
-        return "The API key lacks access. Check the OpenAI project and model permissions."
+        return f"The API key lacks access. Check the {label} project and model permissions."
     if isinstance(error, RateLimitError):
         if error.code in {"insufficient_quota", "billing_hard_limit_reached", "organization_spend_limit_exceeded"}:
-            return "OpenAI API credit or spending limit reached. Check API billing and limits."
-        return "OpenAI rate limit reached. Wait a moment, then try again."
+            return f"{label} API credit or spending limit reached. Check API billing and limits."
+        return f"{label} rate limit reached. Wait a moment, then try again."
     if isinstance(error, APIConnectionError):
-        return "Cannot reach OpenAI. Check the server's internet connection, then try again."
+        return f"Cannot reach {label}. Check the server's internet connection, then try again."
     if isinstance(error, APIStatusError) and error.status_code == 404:
         return "The configured AI model is unavailable. Check SIDEKICK_ASSISTANT_MODEL and model access."
     return "Live analysis is unavailable. Try again later."
@@ -46,14 +48,25 @@ class AssistantService:
         self.tasks = {}
         self.contexts = {}
 
+    def workspace_consent(self):
+        if provider_name(self.settings) == "nebius":
+            return self.store.provider_consent(provider_identity(self.settings))
+        return self.store.workspace_consent()
+
+    def allow_workspace(self):
+        if provider_name(self.settings) == "nebius":
+            self.store.allow_provider(provider_identity(self.settings))
+        else:
+            self.store.set_workspace_consent(True)
+
     def live_reason(self, owner, experiment, consent_required):
         settings = self.settings
-        if settings.mode == "replay" or not settings.assistant_live_enabled or not settings.openai_api_key:
+        if settings.mode == "replay" or not settings.assistant_live_enabled or not api_key(settings):
             return "Recorded evidence analysis. Live AI is not configured."
         if settings.mode == "demo" and not self.store.unlocked(owner):
             return "Recorded evidence analysis. Presenter access enables live AI."
         if settings.mode == "full":
-            return None if self.store.workspace_consent() else "Enable AI analysis for this workspace."
+            return None if self.workspace_consent() else "Enable AI analysis for this workspace."
         if consent_required and not self.store.consent(owner, experiment):
             return "Cloud analysis is off for this experiment."
         return None
@@ -64,8 +77,13 @@ class AssistantService:
             return "Cloud analysis is unavailable in replay mode."
         if self.settings.mode == "demo" and not self.store.unlocked(owner):
             return "Presenter access has expired."
-        if self.settings.mode == "full" and self.store.workspace_consent() is not None:
-            return None if self.store.workspace_consent() else "AI permission is off for this workspace."
+        if self.settings.mode == "full":
+            # Reading retained output does not send data to the currently selected
+            # provider. New requests are separately gated by live_reason().
+            if self.store.has_provider_consent():
+                return None
+            if self.store.workspace_consent() is not None:
+                return None if self.store.workspace_consent() else "AI permission is off for this workspace."
         if consent_required and not self.store.consent(owner, experiment):
             return "Cloud consent is off for this experiment."
         return None
@@ -91,7 +109,7 @@ class AssistantService:
             **({"diagnostics": deep_digest} if deep_digest else {}),
             "context": context_data}, sort_keys=True).encode()).hexdigest()
         # Hash the actual prompt and server tool/output contracts, including task-specific data rules.
-        contracts = ["agent.py", "investigation.py", "evidence.py", "schemas.py"]
+        contracts = ["agent.py", "investigation.py", "evidence.py", "schemas.py", "transport.py"]
         if context.task == "deep":
             contracts.extend(["deep.py", "deep_support.py", "diagnostic_checks.py", "trace_reasoning.py"])
         if context.task == "data":
@@ -100,7 +118,7 @@ class AssistantService:
         from app.assistant import agent, investigation
         identity = {"draft": draft, "contracts": version, "mode": self.settings.mode,
                     "prompt": investigation.PROMPT_VERSION, "instruction": agent.INSTRUCTION,
-                    "provider": "openai" if live else "evidence", "model": self.settings.assistant_model if live else None}
+                    "provider": provider_identity(self.settings) if live else "evidence", "model": self.settings.assistant_model if live else None}
         return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(), draft, result.evidence_digest
 
     def historical_deep(self, loaded, context, owner):
@@ -174,8 +192,8 @@ class AssistantService:
                         saved.brief_saved_at = None
                     return self.restore(saved, context, tools.result.title)
         if context.task == "deep" and reason:
-            if not self.settings.assistant_live_enabled or not self.settings.openai_api_key:
-                reason = "Deep investigation needs OPENAI_API_KEY and SIDEKICK_ASSISTANT_LIVE_ENABLED=1 in the server environment. Restart Sidekick after changing them."
+            if not self.settings.assistant_live_enabled or not api_key(self.settings):
+                reason = f"Deep investigation needs {key_variable(self.settings)} and SIDEKICK_ASSISTANT_LIVE_ENABLED=1 in the server environment. Restart Sidekick after changing them."
             raise PermissionError(reason)
         result = tools.local()
         now = time.time()
@@ -241,7 +259,7 @@ class AssistantService:
             record.result.fallback_reason = "Live analysis failed verification. Showing recorded evidence."
         except Exception as error:
             record.status = "completed"
-            record.result.fallback_reason = provider_failure(error) + " Showing recorded evidence."
+            record.result.fallback_reason = provider_failure(error, self.settings) + " Showing recorded evidence."
         finally:
             for stage in record.stages:
                 stage.status = "completed" if record.status == "completed" else "failed"

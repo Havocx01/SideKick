@@ -16,6 +16,7 @@ from pydantic import Field, ValidationError, create_model
 from app.assistant.evidence import percent
 from app.assistant.schemas import DeepHypothesis, DeepObservation, DeepReport, DeepSynthesis, InvestigationCall
 from app.schemas import Strict
+from app.assistant.transport import client_options, request_structured
 
 PROMPT_VERSION = "sidekick-deep-v20"
 MAX_PATTERNS = 24
@@ -484,16 +485,16 @@ async def investigate_deep(tools, settings):
         raise ValueError("Deep evidence exceeds the input budget.")
     response_schema = provider_synthesis_schema([row.id for row in observations], packet=packet)
     try:
-        async with AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0, timeout=40) as client:
-            response = await client.responses.parse(model=settings.assistant_model, store=False, max_output_tokens=2800,
-                input=[{"role": "system", "content": INSTRUCTION}, {"role": "user", "content": serialized}], text_format=response_schema)
+        async with AsyncOpenAI(**client_options(settings)) as client:
+            output = await request_structured(client, settings, max_output_tokens=2800,
+                history=[{"role": "system", "content": INSTRUCTION}, {"role": "user", "content": serialized}], response_model=response_schema)
     except ValidationError as error:
         problems = error.errors(include_input=False, include_context=False, include_url=False)
         code = "citation" if problems and all("observation_ids" in problem["loc"] for problem in problems) else "format"
         raise DeepVerificationError(code) from error
-    output = response.output_parsed
     if not isinstance(output, response_schema):
         raise DeepVerificationError("format")
+    proposed_explanation = bool(output.hypotheses)
     from app.assistant.diagnostic_checks import compose_checks
     output, sections_rejected = compose_checks(output, packet, observations, aliases)
     # Resolve only known aliases, longest first, after validation. Raw names are never sent.
@@ -527,7 +528,7 @@ async def investigate_deep(tools, settings):
         raise DeepVerificationError("priority")
     output.summary = (f"Suggested focus: {output.next_tests[0].title.rstrip('.')}. "
         "These explanations require checking against recorded evidence.")
-    explanation_status = "retained" if output.hypotheses else "rejected" if response.output_parsed.hypotheses else "abstained"
+    explanation_status = "retained" if output.hypotheses else "rejected" if proposed_explanation else "abstained"
     no_explanation = ("AI did not propose an explanation from the available evidence." if explanation_status == "abstained"
         else "No AI explanation passed verification.")
     result = tools.result.model_copy(deep=True)
