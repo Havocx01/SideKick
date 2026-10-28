@@ -58,6 +58,26 @@ def export_evaluation(evaluator: FixedDevelopmentEvaluator, result: FaultEvaluat
 
 
 def replay_evaluation(directory: Path, *, trusted=False) -> FaultEvaluation:
+    evaluator, case, expected = _load_package(directory, trusted=trusted)
+    actual = evaluator.evaluate(case)
+    if fingerprint(actual.model_dump(mode="json")) != fingerprint(expected.model_dump(mode="json")):
+        raise ValueError("Replay did not reproduce the original evaluation")
+    return actual
+
+
+def load_trusted_context(directory: Path, *, trusted=False) -> FixedDevelopmentEvaluator:
+    """Restore a package's fixed evaluator after the same integrity and identity checks as replay.
+
+    The package's recorded scenario is re-evaluated first, so a context that no
+    longer reproduces its own evidence is never used for new experiments.
+    """
+    evaluator, case, expected = _load_package(directory, trusted=trusted)
+    if fingerprint(evaluator.evaluate(case).model_dump(mode="json")) != fingerprint(expected.model_dump(mode="json")):
+        raise ValueError("Restored context did not reproduce its recorded evaluation")
+    return evaluator
+
+
+def _load_package(directory: Path, *, trusted: bool):
     if not trusted:
         raise ValueError("Explicit trust is required to load a locally produced Python model artifact")
     directory = Path(directory).resolve()
@@ -85,7 +105,4 @@ def replay_evaluation(directory: Path, *, trusted=False) -> FaultEvaluation:
     evaluator = FixedDevelopmentEvaluator(payload["training"], payload["thresholds"], FaultPolicy.model_validate(payload["policy"]))
     if evaluator.context_fingerprint != manifest.context_fingerprint:
         raise ValueError("Restored fitted context does not reproduce its identity")
-    actual = evaluator.evaluate(case)
-    if fingerprint(actual.model_dump(mode="json")) != fingerprint(expected.model_dump(mode="json")):
-        raise ValueError("Replay did not reproduce the original evaluation")
-    return actual
+    return evaluator, case, expected

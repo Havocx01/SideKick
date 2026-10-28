@@ -137,6 +137,14 @@ class FixedDevelopmentEvaluator:
     def context_fingerprint(self):
         return self._context_fingerprint
 
+    @property
+    def remaining_evaluations(self) -> int:
+        """New (uncached) scenarios this evaluator can still execute."""
+        return max(0, self.policy.max_evaluations - self._evaluations)
+
+    def is_cached(self, scenario_id: str) -> bool:
+        return scenario_id in self._cache
+
     def _validate_context(self, training, thresholds):
         validate_splits(training.splits)
         config = training.config
