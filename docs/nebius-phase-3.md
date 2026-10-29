@@ -84,3 +84,34 @@ Provider call and completion-token reservations persist across restarts. Errors 
 The controller holds the runner lease while the model thinks. Cancellation and the saved run-time deadline also apply while awaiting a provider response. Another runner cannot execute the same investigation concurrently, and a lost lease cannot publish a reply. Local validation failures can lead to a new proposal within the remaining limits; malformed responses and provider errors stop the invocation. Changing the saved model, endpoint, prompt or limits requires a new investigation. Rotating a key does not reset counters.
 
 `--status <id>` shows controller configuration, reservations and call outcomes without a key or model context. The final controller report includes cumulative calls/experiments used and result references. A model stop is not evidence that all failure modes were tested. Scenario reduction, remedy testing, search baselines and a browser interface remain separate work.
+
+## Finding criteria
+
+A finding is the server's classification of a recorded result. It is computed only from a saved evaluation and a saved, versioned criterion, so the same evidence always gets the same classification, and no provider call is involved. Nemotron's reasons remain hypotheses; findings are measurements.
+
+Save the criterion with `--create proposals.json --criterion criterion.json` (or `--attach ID --criterion …`, or later with `--set-criterion ID criterion.json`). A criterion is fixed for its investigation; a different one needs a new investigation so earlier findings stay comparable.
+
+```json
+{
+  "version": 1,
+  "candidate": "logistic_regression/lr-probe",
+  "min_coverage": 0.8,
+  "min_histories": 10,
+  "min_clean_detection": 0.8,
+  "min_lost_warnings": 1,
+  "max_alarm_burden": 0.05,
+  "min_burden_increase": 0.01
+}
+```
+
+Only `candidate` is required; it must be one of the investigation's fixed models. The other values above are the defaults.
+
+`--findings ID` classifies every rejected proposal and finished experiment, saves the classifications and prints them. It needs no model context or key. Outcomes:
+
+- `measured_failure` is the only discovery. On matched clean and faulted histories, at least `min_lost_warnings` useful clean warnings became missed or late (`missed_warnings`, `late_warnings`), or the early alarm burden rose by at least `min_burden_increase` to above `max_alarm_burden` (`alarm_burden`).
+- `no_measured_failure` means coverage and clean behavior were adequate and no effect met the criterion. It is not evidence of robustness beyond the tested scenario.
+- `inconclusive` means coverage is below `min_coverage` or `min_histories`, the clean model misses `min_clean_detection` or already exceeds `max_alarm_burden`, or burden is unavailable. Observed effects are still listed, but they do not count.
+- `not_applicable` means no eligible history had changed scorable readings.
+- `invalid_proposal` and `execution_error` record rejected proposals and failed, timed-out or interrupted experiments.
+
+Each finding stores the criterion and its fingerprint, the evaluation's SHA-256 digest, scenario and context identities, coverage, absolute clean and faulted detection and burden, the effects with supporting equipment IDs, and every matched history whose warning state, lead or episode count changed. Re-running `--findings` recomputes each classification and rejects a saved finding that no longer matches its evidence.
