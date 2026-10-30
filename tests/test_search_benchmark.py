@@ -1,17 +1,21 @@
+import importlib.util
 import json
+from pathlib import Path
 
 import numpy as np
 
 from app.faults.evaluator import FixedDevelopmentEvaluator
 from app.faults.profiles import loadPolicy
+from app.faults.replay import export_evaluation
 from app.faults.scenarios import FaultCase
-from app.investigator.benchmark import DEDUP_RULE, STRATEGIES, benchmark, climbStrategy, recordedStrategy, runStrategy
-from app.investigator.findings import FindingCriterion
+from app.investigator.benchmark import DEDUP_RULE, STRATEGIES, benchmark, climbStrategy, recordedRun, suppliedCases
+from app.investigator.findings import FindingCriterion, classify, saveCriterion
 from app.investigator.search import fixedSuite, neighbor, randomCase, seedSuite
 from test_compound_faults import component, fitted as fitted  # noqa: F401
 
 LR = "logistic_regression/lr-probe"
 POLICY = loadPolicy("synthetic-rotating-v1", max_evaluations=128)
+SUPPLIED = {"components": [component("temp_bearing", kind="stuck", onset_before_failure=60)]}
 STUCK_PAIR = {"components": [component("vibration_rms", kind="stuck", onset_before_failure=60), component("oil_particles", kind="stuck", onset_before_failure=60)]}
 
 
@@ -54,19 +58,40 @@ def test_benchmark_is_reproducible_for_the_same_seeds(fitted):
     assert withoutTiming(first) == withoutTiming(second)
 
 
-def test_rejected_duplicate_and_provider_work_is_counted_not_hidden(fitted):
-    cases = [{"components": [component("temp_bearing")]}, {"components": [component("temp_bearing")]},
-        {"components": [component("rated_voltage")]}, {"scenario": STUCK_PAIR, "reason": "recorded controller proposal"}]
-    engine = FixedDevelopmentEvaluator(fitted, {LR: .95}, POLICY)
-    propose = recordedStrategy(cases, providerCalls=4)(POLICY, engine.config, np.random.default_rng(0))
-    run = runStrategy(engine, FindingCriterion(candidate=LR), propose, budget=8)
-    assert (run["proposals"], run["experiments"], run["duplicates"], run["infeasible"]) == (4, 2, 1, 1)
-    assert run["feasibleRate"] == .75 and run["providerCalls"] == 4
-    assert run["firstDiscovery"] == 2 and run["discoveryFamilies"] == ["oil_particles:stuck+vibration_rms:stuck"]
-    result = engine.evaluate(FaultCase.model_validate(STUCK_PAIR)).models[0]
-    lost = sum(pair.clean.detected and not pair.faulted.detected for pair in result.pairs)
-    assert run["mostLostWarnings"] == lost and lost > 0
-    assert run["strongestDrop"] == lost / len(result.pairs)
+def recordedInvestigation(fitted, tmp_path, monkeypatch):
+    from test_nemotron_controller import proposal, provider, run, setup, stop
+    fixed, store, investigation, config = setup(fitted, tmp_path, experiments=4)
+    saveCriterion(store, investigation, FindingCriterion(candidate=LR))
+    store.add_proposals(investigation, [SUPPLIED])
+    provider(monkeypatch, [proposal("channel-99"), proposal("channel-1"), proposal("channel-1"), stop()])
+    run(store, fixed, config, investigation)
+    return fixed, store, investigation
+
+
+def test_a_recorded_nemotron_run_counts_rejected_duplicate_and_provider_work(fitted, tmp_path, monkeypatch):
+    fixed, store, investigation = recordedInvestigation(fitted, tmp_path, monkeypatch)
+    run = recordedRun(store, investigation, FindingCriterion(candidate=LR))
+    assert (run["proposals"], run["experiments"], run["duplicates"], run["infeasible"], run["errors"]) == (4, 2, 1, 1, 0)
+    assert run["feasibleRate"] == .75 and run["providerCalls"] == 4 and run["invalidReplies"] == 1 and run["reductionExperiments"] == 0
+    assert run["reservedCompletionTokens"] == 4 * 1024 and run["reportedCompletionTokens"] == 160 and run["prompt"].startswith("nemotron-fault-search")
+    assert [FaultCase.model_validate(item).scenario_id for item in suppliedCases(store, investigation)] == [FaultCase.model_validate(SUPPLIED).scenario_id]
+    measured = [store.result(item.id) for item in store.load(investigation).attempts]
+    expected = [classify(result, FindingCriterion(candidate=LR)) for result in measured]
+    assert run["discoveries"] == sum(item.is_discovery for item in expected) and run["familiesTested"] == 2
+    assert run["strongestDrop"] == max(item.clean_detection - item.faulted_detection for item in expected)
+
+
+def test_benchmark_cli_compares_a_recorded_run_on_its_own_context_and_allowance(fitted, tmp_path, monkeypatch, capsys):
+    fixed, store, investigation = recordedInvestigation(fitted, tmp_path, monkeypatch)
+    export_evaluation(fixed, fixed.evaluate(FaultCase.model_validate(SUPPLIED)), tmp_path / "context")
+    output = tmp_path / "report.json"
+    assert cli().main(["--output", str(output), "--seeds", "0", "1", "--recorded", str(tmp_path / "store"), investigation,
+        "--context", str(tmp_path / "context"), "--trust-local-artifact"]) == 0
+    report = json.loads(output.read_text())
+    assert report["budget"] == 4 and report["seedCases"] == 1 and report["recorded"]["investigation"] == investigation
+    assert set(report["summary"]) == {"nemotron", "fixed", "random", "climb"} and report["summary"]["nemotron"]["runs"] == 1
+    assert all(run["context"] == "recorded-context" and run["experiments"] <= 4 for run in report["runs"])
+    assert "invalidReplies=1" in capsys.readouterr().out
 
 
 def test_generators_stay_inside_the_profile(fitted):
@@ -97,16 +122,16 @@ def test_climber_refines_the_best_measured_case_without_repeating_it(fitted):
     assert len(near) >= 20
 
 
-def test_benchmark_cli_writes_a_report(tmp_path, capsys):
-    import importlib.util
-    from pathlib import Path
+def cli():
     spec = importlib.util.spec_from_file_location("benchmark_cli", Path(__file__).resolve().parents[1] / "scripts/benchmark_search.py")
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    recorded = tmp_path / "recorded.json"
-    recorded.write_text(json.dumps([STUCK_PAIR]))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_benchmark_cli_writes_a_report_on_the_synthetic_fixture(tmp_path, capsys):
     output = tmp_path / "report.json"
-    assert cli.main(["--output", str(output), "--budget", "6", "--seeds", "0", "--recorded", str(recorded)]) == 0
+    assert cli().main(["--output", str(output), "--budget", "6", "--seeds", "0"]) == 0
     report = json.loads(output.read_text())
-    assert set(report["summary"]) == {"fixed", "random", "climb", "recorded"} and report["budget"] == 6
-    assert "recorded" in capsys.readouterr().out
+    assert set(report["summary"]) == {"fixed", "random", "climb"} and report["budget"] == 6
+    assert "climb" in capsys.readouterr().out

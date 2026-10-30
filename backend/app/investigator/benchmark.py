@@ -4,8 +4,11 @@ import time
 
 import numpy as np
 
+from app.faults.investigation import FAILURE_STATUSES
 from app.faults.scenarios import FaultCase
+from app.investigator.controller import controllerStatus
 from app.investigator.findings import classify, family
+from app.investigator.reduction import ensureTable as ensureReductions
 from app.investigator.search import fixedSuite, neighbor, randomCase
 
 DEDUP_RULE = "A discovery family is the sorted set of sensor:kind pairs; timing and severity are ignored."
@@ -34,15 +37,6 @@ def climbStrategy(policy, config, rng):
                 return candidate
         return randomCase(policy, config, rng)
     return propose
-
-
-def recordedStrategy(cases, providerCalls=0):
-    def factory(policy, config, rng):
-        queue = list(cases)
-        propose = lambda history: queue.pop(0) if queue else None  # noqa: E731
-        propose.providerCalls = providerCalls
-        return propose
-    return factory
 
 
 STRATEGIES = {"fixed": fixedStrategy, "random": randomStrategy, "climb": climbStrategy}
@@ -75,11 +69,18 @@ def runStrategy(evaluator, criterion, propose, budget, seedCases=()):
         except (ValueError, RuntimeError):
             counts["errors"] += 1
             continue
-        drop = finding.clean_detection - finding.faulted_detection if finding.faulted_detection is not None else None
-        lost = sum(len(effect.histories) for effect in finding.effects if effect.kind != "alarm_burden")
-        history.append({"experiment": len(history) + 1, "case": case.model_dump(mode="json"), "family": family(case),
-            "status": finding.status, "drop": drop, "lost": lost, "coverage": finding.coverage})
+        history.append(entry(len(history) + 1, case, finding))
+    return outcome(history, counts, time.monotonic() - started, 0)
 
+
+def entry(number, case, finding):
+    drop = finding.clean_detection - finding.faulted_detection if finding.faulted_detection is not None else None
+    lost = sum(len(effect.histories) for effect in finding.effects if effect.kind != "alarm_burden")
+    return {"experiment": number, "case": case.model_dump(mode="json"), "family": family(case), "status": finding.status, "drop": drop, "lost": lost,
+        "coverage": finding.coverage}
+
+
+def outcome(history, counts, elapsed, providerCalls, **extra):
     discoveries = [item for item in history if item["status"] == "measured_failure"]
     measured = [item for item in history if item["status"] in {"measured_failure", "no_measured_failure"}]
     return {"experiments": len(history), **counts,
@@ -90,12 +91,41 @@ def runStrategy(evaluator, criterion, propose, budget, seedCases=()):
         "mostLostWarnings": max((item["lost"] for item in measured), default=0),
         "meanCoverage": float(np.mean([item["coverage"] for item in history])) if history else None,
         "familiesTested": len({item["family"] for item in history}),
-        "elapsedSeconds": round(time.monotonic() - started, 3), "providerCalls": getattr(propose, "providerCalls", 0)}
+        "elapsedSeconds": round(elapsed, 3), "providerCalls": providerCalls, "reductionExperiments": 0, **extra}
 
 
-def benchmark(contexts, criterion, strategies, *, budget=16, seeds=(0, 1, 2), seedCases=()) -> dict:
+def suppliedCases(store, investigation):
+    # The cases a recorded run started from, so every strategy gets the same initial evidence.
+    chosen = {call["proposalId"] for call in controllerStatus(store, investigation)["calls"] if call["proposalId"]}
+    with store.connection() as db:
+        rows = db.execute("SELECT id, payload FROM proposals WHERE investigation=? ORDER BY seq", (investigation,)).fetchall()
+    return [json.loads(payload) for proposal, payload in rows if proposal not in chosen]
+
+
+def recordedRun(store, investigation, criterion):
+    """The saved controller run as it happened: nothing is re-executed, and every call, rejection and failure counts."""
+    state, controller = store.load(investigation), controllerStatus(store, investigation)
+    if controller is None:
+        raise ValueError("This investigation has no recorded controller run")
+    rejectedCalls = sum(call["status"] == "rejected" for call in controller["calls"])
+    counts = {"proposals": len(state.proposals) + rejectedCalls, "infeasible": rejectedCalls + sum(item.status == "rejected" for item in state.proposals),
+        "duplicates": sum(item.status == "duplicate" for item in state.proposals),
+        "errors": sum(item.status in FAILURE_STATUSES for item in state.attempts)}
+    history = [entry(number, result.scenario, classify(result, criterion)) for number, result in
+        enumerate((store.result(item.id) for item in state.attempts if item.status == "completed"), 1)]
+    elapsed = sum(call["elapsedSeconds"] or 0 for call in controller["calls"]) + sum(
+        item.finished_at - item.started_at for item in state.attempts if item.started_at and item.finished_at)
+    with store.transaction() as db:
+        ensureReductions(db)
+        rows = db.execute("SELECT payload FROM reductions WHERE investigation=?", (investigation,)).fetchall()
+    return outcome(history, counts, elapsed, controller["callsUsed"], reductionExperiments=sum(json.loads(row[0])["experiments"] for row in rows),
+        invalidReplies=rejectedCalls, reservedCompletionTokens=controller["reservedCompletionTokens"],
+        reportedCompletionTokens=controller["reportedCompletionTokens"], model=controller["configuration"]["model"], prompt=controller["configuration"]["prompt"])
+
+
+def benchmark(contexts, criterion, strategies, *, budget=16, seeds=(0, 1, 2), seedCases=(), recorded=None) -> dict:
     """contexts maps a label to a factory returning a fresh evaluator, so no strategy reuses another's cache."""
-    runs = []
+    runs = [{"context": label, "strategy": "nemotron", "seed": None, **run} for label, run in (recorded or {}).items()]
     for label, makeEvaluator in contexts.items():
         for name, factory in strategies.items():
             for seed in seeds:
@@ -104,7 +134,7 @@ def benchmark(contexts, criterion, strategies, *, budget=16, seeds=(0, 1, 2), se
                 runs.append({"context": label, "strategy": name, "seed": seed, **runStrategy(evaluator, criterion, propose, budget, seedCases)})
 
     summary = {}
-    for name in strategies:
+    for name in dict.fromkeys(run["strategy"] for run in runs):
         rows = [run for run in runs if run["strategy"] == name]
         found = [run["firstDiscovery"] for run in rows if run["firstDiscovery"] is not None]
         drops = [run["strongestDrop"] for run in rows if run["strongestDrop"] is not None]
@@ -115,7 +145,8 @@ def benchmark(contexts, criterion, strategies, *, budget=16, seeds=(0, 1, 2), se
             "meanFeasibleRate": float(np.mean([run["feasibleRate"] for run in rows if run["feasibleRate"] is not None])),
             "duplicates": sum(run["duplicates"] for run in rows), "errors": sum(run["errors"] for run in rows),
             "meanElapsedSeconds": float(np.mean([run["elapsedSeconds"] for run in rows])),
-            "providerCalls": sum(run["providerCalls"] for run in rows)}
+            "providerCalls": sum(run["providerCalls"] for run in rows), "reductionExperiments": sum(run["reductionExperiments"] for run in rows),
+            "invalidReplies": sum(run.get("invalidReplies", 0) for run in rows), "reportedCompletionTokens": sum(run.get("reportedCompletionTokens", 0) for run in rows)}
     return {"dedupRule": DEDUP_RULE, "budget": budget, "seeds": list(seeds), "seedCases": len(seedCases),
         "criterion": criterion.model_dump(mode="json"), "runs": runs, "summary": summary,
         "note": "Out-of-fold development evidence. Adaptively selected findings are exploratory and need separate validation."}
