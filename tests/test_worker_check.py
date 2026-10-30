@@ -54,3 +54,15 @@ def test_local_command_check_still_runs_real_replay(checker, capsys):
     assert cli.main(["--command", f'"{sys.executable}" scripts/run_fault_job.py']) == 0
     assert "matches local evaluation" in capsys.readouterr().out
     assert (work / "expected.json").is_file()
+
+
+def test_container_directories_are_writable_before_preparation(checker, monkeypatch):
+    cli, work = checker
+    modes = {}
+    monkeypatch.setattr(Path, "chmod", lambda path, mode: modes.update({path: mode}))
+    def inspect(command, **kwargs):
+        assert all(modes.get(path) == 0o777 for path in (work, work / "outbox", work / "inbox"))
+        raise RuntimeError("permissions inspected")
+    monkeypatch.setattr(cli.subprocess, "run", inspect)
+    with pytest.raises(RuntimeError, match="permissions inspected"):
+        cli.main(["--image", "same-runtime"])

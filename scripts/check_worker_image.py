@@ -45,6 +45,7 @@ def main(argv=None):
     (work / "outbox").mkdir()
     (work / "inbox").mkdir()
     work.chmod(0o777)
+    (work / "outbox").chmod(0o777)
     (work / "inbox").chmod(0o777)
 
     if args.command:
