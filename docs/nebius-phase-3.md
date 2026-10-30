@@ -163,3 +163,23 @@ Every attempt is saved with its change, case, finding status, evidence digest, e
 The comparison reruns every discovered case, every finished reduction, any regression files (`--regressions a.json b.json`, which must match the context and policy) and every other tested case. For each case it reports the original and remedy finding status, evaluated histories, exclusions, clean and faulted detection and burden, faulted median lead, and whether the matched cohort is the same. `improved` counts failures that became `no_measured_failure` on the same cohort. `degraded` counts previously passing cases that now fail. Clean performance on all development histories is shown for both. `meetsCriteria` means the remedy's clean detection and burden satisfy the saved criterion and nothing degraded. Preparation and evaluation time are recorded as cost.
 
 Reports are saved in the store. They are development-only and were chosen using these cases, so a promising remedy needs fresh validation. Nothing replaces a deployed model.
+
+## Search benchmark
+
+`scripts/benchmark_search.py --output report.json` compares search strategies on the synthetic fixture. Every strategy gets:
+
+- a fresh evaluator for each run, so no strategy reuses another's cache
+- the same profile and the same finding criterion
+- the same three seed cases, which count toward the budget
+- the same experiment budget (`--budget`, default 24)
+
+Each strategy runs once per context (`--thresholds`) and seed (`--seeds`). Strategies:
+
+- `fixed`: every permitted single-channel fault at the warning horizon, in order.
+- `random`: constrained random sampling within the profile's groups, kinds, severity caps and onsets.
+- `climb`: (1+1) hill climbing on a discrete encoding. It changes one onset, one severity or one kind, or adds or drops one channel in the same group, around the case with the largest detection drop, never repeats a tested case, and restarts at random one time in five.
+- `recorded` (`--recorded cases.json --provider-calls N`): the cases a Nemotron run proposed, replayed under the same budget.
+
+Infeasible proposals, duplicates and failed executions are counted. Each run reports discoveries, discovery families (the dedup rule is stated in the report), experiments to the first discovery, the strongest detection drop, the most lost warnings, mean coverage, families tested, feasibility rate, elapsed time and provider calls. Results are out-of-fold development evidence; findings chosen adaptively are exploratory.
+
+A first run (budget 24, five seeds, thresholds 0.95 and 0.9) found 3 discovery families with `random` in 2 of 10 runs, and none with `fixed` or `climb`. The climber has no signal to follow when early cases change nothing, so random sampling did better here. That is the result to report. A Nemotron comparison needs a recorded live run.
