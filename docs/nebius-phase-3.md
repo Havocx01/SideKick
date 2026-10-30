@@ -225,3 +225,31 @@ In local full mode, **Investigations** in the sidebar lists the fitted contexts 
 5. Compare a threshold remedy, or approved augmented retraining, and export everything shown as JSON.
 
 Opening a saved investigation never starts work. The page polls only while an operation is running, and keeps its inputs across refreshes. Cancelled, interrupted, failed, budget-exhausted and provider-error states are each shown separately. Reserved token ceilings are labelled as ceilings, not usage or cost. `tests/fault-investigations.spec.ts` covers the flow, including keyboard consent and 390px layout.
+
+## Remote execution
+
+Experiments can run on finite remote workers while SQLite stays with one coordinator:
+
+```powershell
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/investigations --context output/context-package --trust-local-artifact --run <id> --remote-outbox jobs/outbox --remote-inbox jobs/inbox --allow-transfer
+docker build -f docker/worker.Dockerfile -t sidekick-worker .
+docker run --rm -v ${PWD}/jobs:/jobs -v ${PWD}/output/context-package:/context:ro sidekick-worker --manifest /jobs/outbox/<job>.json --context /context --inbox /jobs/inbox --trust-local-artifact
+```
+
+For each case, the coordinator writes a job manifest with:
+
+- a job ID
+- the context fingerprint and the checksums of the context package files
+- the policy fingerprint and the source digest
+- the case and its time limit
+
+The worker checks every one of these, evaluates exactly one case under kernel CPU and memory limits (`--cpu-seconds`, `--memory-mb`), writes one result artifact atomically, and exits. Native scoring calls are stopped by those limits even when cooperative cancellation cannot reach them.
+
+The coordinator accepts only a result whose job ID and manifest digest match the job it issued and whose evaluation checksum, case, context and policy all agree. The runner then applies its normal lease and identity checks.
+
+- Duplicate deliveries are expected and ignored after the first match. Forged or stale results are never read as valid.
+- A failed or timed-out job is retried with a new job ID up to three times, then recorded as one failed attempt.
+- A result that arrives after cancellation is never published.
+- Remote results are identical to local execution, because the evaluation is deterministic.
+
+Context packages contain raw development data, so remote execution needs `--allow-transfer`, and local execution remains the default. The outbox and inbox can be shared folders or a synced object store. Workers never touch the SQLite file. GPUs and serverless endpoints are unnecessary for these small tabular models; measure a real workload before adding them.

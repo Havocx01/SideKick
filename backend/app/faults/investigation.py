@@ -287,9 +287,10 @@ def _marks(values) -> str:
 class ExperimentRunner:
     """Run one saved investigation against its fixed evaluator. One live runner per investigation."""
 
-    def __init__(self, store: InvestigationStore, evaluator: FixedDevelopmentEvaluator, *, wall=time.time, monotonic=time.monotonic):
+    def __init__(self, store: InvestigationStore, evaluator: FixedDevelopmentEvaluator, *, wall=time.time, monotonic=time.monotonic, execute=None):
         self.store = store
         self.evaluator = evaluator
+        self.execute = execute or evaluator.evaluate
         self._wall = wall
         self._monotonic = monotonic
 
@@ -506,7 +507,7 @@ class ExperimentRunner:
             case = self.validateCase(payload, investigation)
             if case.scenario_id != scenario_id:
                 raise ValueError("Proposal identity changed after validation")
-            result = self.evaluator.evaluate(case, cancelled=should_stop)
+            result = self.execute(case, cancelled=should_stop)
             if (result.scenario_id != scenario_id or result.scenario.scenario_id != scenario_id
                     or result.context_fingerprint != self.evaluator.context_fingerprint or result.policy != self.evaluator.policy
                     or result.policy_fingerprint != self.evaluator.policy.fingerprint):

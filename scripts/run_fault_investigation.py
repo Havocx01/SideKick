@@ -89,6 +89,9 @@ def main(argv=None):
     parser.add_argument("--max-output-tokens", type=int, default=1024)
     parser.add_argument("--max-completion-tokens", type=int, default=32768)
     parser.add_argument("--max-input-bytes", type=int, default=32768)
+    parser.add_argument("--remote-outbox", type=Path, help="With --run, write job manifests here for remote workers.")
+    parser.add_argument("--remote-inbox", type=Path, help="With --run, read remote worker results from here.")
+    parser.add_argument("--allow-transfer", action="store_true", help="Consent to workers receiving the private context package.")
     parser.add_argument("--capture", type=Path, help="With --agent, write a sanitized run capture (no key, objective or raw data) to this file.")
     args = parser.parse_args(argv)
     if args.agent and not args.allow_nebius:
@@ -131,7 +134,13 @@ def main(argv=None):
                 if args.capture:
                     writeCapture(args.capture, store, args.agent, output, time.monotonic() - started)
             else:
-                output = ExperimentRunner(store, fixed).run(args.run, cancelled=lambda: interrupted["flag"]).model_dump(mode="json")
+                execute = None
+                if args.remote_outbox or args.remote_inbox:
+                    if not (args.remote_outbox and args.remote_inbox and args.context):
+                        parser.error("Remote execution needs --remote-outbox, --remote-inbox and --context")
+                    from app.faults.remote import RemoteExecutor
+                    execute = RemoteExecutor(fixed, args.context, args.remote_outbox, args.remote_inbox, transferConsent=args.allow_transfer)
+                output = ExperimentRunner(store, fixed, execute=execute).run(args.run, cancelled=lambda: interrupted["flag"]).model_dump(mode="json")
                 output["provider_requests"] = 0
         finally:
             signal.signal(signal.SIGINT, previous)
