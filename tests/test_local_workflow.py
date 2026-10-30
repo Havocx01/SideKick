@@ -1,3 +1,5 @@
+import importlib.util
+from pathlib import Path
 import time
 from dataclasses import replace
 
@@ -90,3 +92,23 @@ def test_training_freeze_validation_and_exports(local_settings, monkeypatch):
         assert strict["outcome"] == "none_qualified"
         assert client.post(f"/api/experiments/{strict_id}/freeze").status_code == 409
         assert client.get("/api/final-evaluation", params={"experiment_id": strict_id}).json()["available"] is False
+
+
+def test_source_identity_ignores_line_endings_but_not_content(tmp_path):
+    import shutil
+    from app.experiments import provenance
+    copy = tmp_path / "app"
+    shutil.copytree(Path(provenance.__file__).resolve().parents[1], copy, ignore=shutil.ignore_patterns("__pycache__"))
+    module = copy / "experiments" / "provenance.py"
+
+    def digestOf():
+        spec = importlib.util.spec_from_file_location("copiedProvenance", module)
+        loaded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(loaded)
+        return loaded.source_digest()
+    original = digestOf()
+    for path in copy.rglob("*.py"):
+        path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    assert digestOf() == original
+    (copy / "schemas.py").write_bytes((copy / "schemas.py").read_bytes() + b"# changed\n")
+    assert digestOf() != original

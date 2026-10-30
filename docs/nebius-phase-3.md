@@ -247,7 +247,7 @@ For each case, the coordinator writes a job manifest with:
 
 - a job ID
 - the context fingerprint and the checksums of the context package files
-- the policy fingerprint and the source digest
+- the policy fingerprint and the source digest (it hashes `backend/app` with line endings normalized, so a Windows checkout and a Linux worker built from the same commit agree)
 - the case and its time limit
 
 The worker checks every one of these, evaluates exactly one case under kernel CPU and memory limits (`--cpu-seconds`, `--memory-mb`), writes one result artifact atomically, and exits. Native scoring calls are stopped by those limits even when cooperative cancellation cannot reach them.
