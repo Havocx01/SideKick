@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
-from app.api import routes_assistant, routes_copilot, routes_evidence, routes_experiments, routes_library, routes_pilot
+from app.api import routes_assistant, routes_copilot, routes_evidence, routes_experiments, routes_investigations, routes_library, routes_pilot
 from app.assistant.service import AssistantService
 from app.config import get_settings
 from app.utils.logging_setup import get_logger, setup_logging
@@ -59,6 +59,10 @@ async def lifespan(app: FastAPI):
 
             cleanupTask = asyncio.create_task(expireResults())
     app.state.assistant = AssistantService(settings)
+    if settings.mode == "full":
+        from app.investigator.service import InvestigationService
+
+        app.state.investigations = InvestigationService(settings.artifacts_dir / "investigations", settings)
     logger.info("Read-only evidence investigation ready; live AI is optional")
     # Warm the bundle so a cold start pays the parse cost before the first request.
     try:
@@ -74,6 +78,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await app.state.assistant.close()
+        if settings.mode == "full":
+            app.state.investigations.close()
         if cleanupTask:
             cleanupTask.cancel()
             with suppress(asyncio.CancelledError):
@@ -145,6 +151,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_library.router)
     app.include_router(routes_pilot.router)
     app.include_router(routes_assistant.router)
+    app.include_router(routes_investigations.router)
 
     if not _mount_frontend(app, settings.static_dir):
 

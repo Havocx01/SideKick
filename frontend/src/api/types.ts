@@ -175,6 +175,18 @@ export interface AssistantCapabilities {
   deep_available?: boolean;
 }
 
+export interface AttemptState {
+  id: string;
+  proposal_id: string;
+  scenario_id: string;
+  status: "reserved" | "running" | "completed" | "failed" | "timed_out" | "cancelled" | "stopped" | "interrupted";
+  reason: string | null;
+  reserved_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  result_digest: string | null;
+}
+
 export interface BriefUpdate {
   text: string;
   draft_only?: boolean;
@@ -220,6 +232,13 @@ export interface CandidateVerdict {
   coverage_complete?: boolean | null;
 }
 
+export interface CleanMetrics {
+  detection: number;
+  alarmBurden: number | null;
+  medianLead: number | null;
+  histories: number;
+}
+
 export interface ColumnMapping {
   equipment_id: string;
   cycle_index: string;
@@ -235,6 +254,15 @@ export interface ConsentState {
   experiment_id: string;
   allowed: boolean;
   disclosure: string;
+}
+
+export interface ContextInfo {
+  name: string;
+  contextFingerprint: string;
+  profile: string | null;
+  sensors: string[];
+  thresholds: Record<string, number>;
+  clean: Record<string, CleanMetrics>;
 }
 
 export interface CopilotAnswer {
@@ -353,6 +381,14 @@ export interface DeepTest {
   readiness?: "inspect_now" | "needs_evidence" | null;
   prerequisites?: string[];
   controls?: string[];
+}
+
+export interface Effect {
+  kind: "missed_warnings" | "late_warnings" | "alarm_burden";
+  histories: string[];
+  /** Matched clean aggregate for aggregate effects such as alarm burden. */
+  clean_value?: number | null;
+  faulted_value?: number | null;
 }
 
 export interface EngineOutcome {
@@ -515,6 +551,51 @@ export interface FaultSpec {
   seed?: number | null;
 }
 
+export interface Finding {
+  version?: "1";
+  status: "measured_failure" | "no_measured_failure" | "inconclusive" | "not_applicable" | "invalid_proposal" | "execution_error";
+  reasons?: string[];
+  criterion: FindingCriterion;
+  criterion_fingerprint: string;
+  proposal_id?: string | null;
+  attempt_id?: string | null;
+  scenario_id?: string | null;
+  /** Sensor and fault-kind combination, ignoring timing and severity. */
+  family?: string | null;
+  /** SHA-256 of the canonical evaluation this finding was computed from. */
+  evidence_digest?: string | null;
+  context_fingerprint?: string | null;
+  expected_histories?: number | null;
+  evaluated_histories?: number | null;
+  coverage?: number | null;
+  clean_detection?: number | null;
+  faulted_detection?: number | null;
+  clean_burden?: number | null;
+  faulted_burden?: number | null;
+  /** Profile constraints the tested scenario relies on. */
+  assumptions?: string[];
+  /** Observed effects; only a measured_failure is a discovery. */
+  effects?: Effect[];
+  /** Matched histories whose warning outcome changed. */
+  support?: HistorySupport[];
+}
+
+export interface FindingCriterion {
+  version?: "1";
+  candidate: string;
+  /** Evaluated / expected development histories. */
+  min_coverage?: number;
+  min_histories?: number;
+  /** Useful-warning fraction the clean model must reach on matched histories. */
+  min_clean_detection?: number;
+  /** Clean useful warnings that became missed or late. */
+  min_lost_warnings?: number;
+  /** Highest acceptable early alarm burden. */
+  max_alarm_burden?: number;
+  /** Smallest consequential faulted-minus-clean burden increase. */
+  min_burden_increase?: number;
+}
+
 export interface FoldFaultSummary {
   candidate: string;
   scenario_id: string;
@@ -546,10 +627,91 @@ export interface GuideAnswer {
   link_label: string;
 }
 
+export interface HistorySupport {
+  equipment_id: string;
+  clean: "detected" | "late" | "missed";
+  faulted: "detected" | "late" | "missed";
+  clean_lead: number | null;
+  faulted_lead: number | null;
+  clean_episodes: number;
+  faulted_episodes: number;
+}
+
+export interface InvestigationBudget {
+  max_experiments?: number;
+  max_failures?: number;
+  max_attempts_per_scenario?: number;
+  max_run_seconds?: number;
+}
+
 export interface InvestigationCall {
   name: string;
   label: string;
   source_ids?: string[];
+}
+
+export interface InvestigationCreate {
+  context: string;
+  objective?: string;
+  maxExperiments?: number;
+  maxFailures?: number;
+  maxAttemptsPerScenario?: number;
+  maxRunSeconds?: number;
+  criterion?: FindingCriterion | null;
+  seed?: number;
+  proposals?: Record<string, unknown>[];
+}
+
+export interface InvestigationEvent {
+  sequence: number;
+  kind: string;
+  detail: string | null;
+  at: number;
+}
+
+export interface InvestigationState {
+  id: string;
+  context_fingerprint: string;
+  policy_fingerprint: string;
+  budget: InvestigationBudget;
+  cancel_requested: boolean;
+  stop_reason: "completed" | "budget_exhausted" | "failure_limit" | "cancelled" | "time_limit" | "evaluator_budget" | null;
+  slots_used: number;
+  failures: number;
+  proposals: ProposalState[];
+  attempts: AttemptState[];
+}
+
+export interface InvestigationSummary {
+  id: string;
+  context: string;
+  objective: string;
+  createdAt: number;
+  active: string | null;
+  stopReason: string | null;
+  experimentsUsed: number;
+  maxExperiments: number;
+  discoveries: number;
+}
+
+export interface InvestigationView {
+  id: string;
+  context: string;
+  objective: string;
+  createdAt: number;
+  active: string | null;
+  stopReason: string | null;
+  experimentsUsed: number;
+  maxExperiments: number;
+  discoveries: number;
+  state: InvestigationState;
+  criterion: FindingCriterion | null;
+  findings: Finding[];
+  discoveryFamilies: string[];
+  controller: Record<string, unknown> | null;
+  events: InvestigationEvent[];
+  reductions: Record<string, unknown>[];
+  remedies: Record<string, unknown>[];
 }
 
 export interface LibraryFolder {
@@ -700,6 +862,16 @@ export interface ProfileFinding {
   detail?: Record<string, unknown>;
 }
 
+export interface ProposalState {
+  id: string;
+  seq: number;
+  status: "pending" | "rejected" | "duplicate" | "completed" | "exhausted";
+  scenario_id: string | null;
+  reason: string | null;
+  duplicate_of: string | null;
+  failed_attempts: number;
+}
+
 export interface RecordedPreprocessing {
   partition?: Partition;
   feature_window: number;
@@ -711,12 +883,32 @@ export interface RecordedPreprocessing {
   scaling: Record<string, string>;
 }
 
+export interface ReduceRequest {
+  requestId: string;
+  attempt: string;
+  maxExperiments?: number;
+}
+
 export interface ReliabilityBin {
   lower: number;
   upper: number;
   count: number;
   mean_predicted: number;
   observed_rate: number;
+}
+
+export interface RemedyRequest {
+  requestId: string;
+  kind: "threshold" | "augmented";
+  threshold?: number | null;
+  approveTraining?: boolean;
+}
+
+export interface ReplayCheck {
+  attempt: string;
+  scenarioId: string;
+  matches: boolean;
+  evidenceDigest: string;
 }
 
 export interface ReplayPoint {
@@ -822,6 +1014,14 @@ export interface SplitAssignment {
   folds: string[][];
   seed: number;
   config_fingerprint: string;
+}
+
+export interface StartRequest {
+  requestId: string;
+  mode?: "run" | "agent";
+  allowProvider?: boolean;
+  maxProviderCalls?: number;
+  maxCompletionTokens?: number;
 }
 
 export interface ToolInvocation {

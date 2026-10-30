@@ -183,3 +183,33 @@ Each strategy runs once per context (`--thresholds`) and seed (`--seeds`). Strat
 Infeasible proposals, duplicates and failed executions are counted. Each run reports discoveries, discovery families (the dedup rule is stated in the report), experiments to the first discovery, the strongest detection drop, the most lost warnings, mean coverage, families tested, feasibility rate, elapsed time and provider calls. Results are out-of-fold development evidence; findings chosen adaptively are exploratory.
 
 A first run (budget 24, five seeds, thresholds 0.95 and 0.9) found 3 discovery families with `random` in 2 of 10 runs, and none with `fixed` or `climb`. The climber has no signal to follow when early cases change nothing, so random sampling did better here. That is the result to report. A Nemotron comparison needs a recorded live run.
+
+## HTTP API
+
+In local full mode, `/api/investigations` exposes the same engine through background workers. Fitted contexts come only from the server's registry folder, `artifacts/investigations/contexts/<name>/`. Create one with:
+
+```powershell
+.venv\Scripts\python.exe scripts/evaluate_fault_scenarios.py --profile synthetic-rotating-v1 --output artifacts/investigations/contexts/synthetic
+```
+
+Browser uploads are never loaded as contexts. Hosted demo and replay modes return 403.
+
+| Operation | Route |
+| --- | --- |
+| List contexts with clean performance | `GET /api/investigations/contexts` |
+| Create (context, objective, limits, criterion, seed cases, proposals) | `POST /api/investigations` |
+| List or read your investigations | `GET /api/investigations`, `GET /api/investigations/{id}` |
+| Start the runner or Nemotron controller | `POST /{id}/start` with `requestId`, `mode` (`run` or `agent`), `allowProvider` |
+| Cancel, or clear a cancellation | `POST /{id}/cancel`, `POST /{id}/resume` |
+| Reduce a measured failure | `POST /{id}/reduce` with `requestId`, `attempt`, `maxExperiments` |
+| Compare a remedy | `POST /{id}/remedies` with `requestId`, `kind`, `threshold`, `approveTraining` |
+| Replay a saved result | `POST /{id}/results/{attempt}/replay` |
+| Export everything shown | `GET /{id}/export` |
+
+How the API behaves:
+
+- Each investigation records its owner, context and lifecycle events; another workspace gets 404 for reads and starts.
+- A start, reduction or remedy runs once per `requestId`, so refreshing or retrying never starts duplicate paid work. Only one operation runs per investigation at a time (409 otherwise).
+- Events are saved before they are shown. After a server restart, unfinished operations are marked `interrupted`; starting again recovers them within the saved limits.
+- Agent runs need `allowProvider` and the workspace's provider permission. Revoking that permission stops the run, and a reply that arrives afterwards is not saved.
+- The frontend types are generated from these models.

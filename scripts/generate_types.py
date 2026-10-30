@@ -13,6 +13,7 @@ from pydantic import BaseModel  # noqa: E402
 
 from app import schemas  # noqa: E402
 from app.assistant import schemas as assistant  # noqa: E402
+from app.investigator import schemas as investigator  # noqa: E402
 
 OUTPUT = REPO_ROOT / "frontend" / "src" / "api" / "types.ts"
 
@@ -59,6 +60,14 @@ ROOTS: list[type[BaseModel]] = [
     schemas.EvidenceBundle,
     schemas.CopilotAnswer,
     schemas.CopilotRequest,
+    investigator.ContextInfo,
+    investigator.InvestigationCreate,
+    investigator.StartRequest,
+    investigator.ReduceRequest,
+    investigator.RemedyRequest,
+    investigator.InvestigationSummary,
+    investigator.InvestigationView,
+    investigator.ReplayCheck,
 ]
 
 SCALARS = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean", "null": "null"}
