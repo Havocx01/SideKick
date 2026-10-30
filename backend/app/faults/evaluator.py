@@ -212,6 +212,51 @@ class FixedDevelopmentEvaluator:
             if any(name not in fold.candidates or not fold.candidates[name].fitted or fold.candidates[name].name != name for name in thresholds):
                 raise ValueError("Every selected model must already be fitted in every fold")
 
+    def _inject(self, fold, block, equipment, case):
+        injection = apply_case(self._training.dataset.sensor_matrix(equipment), block.rul, case, fold.builder, self._config)
+        if not injection.applied:
+            return None, list(injection.reasons)
+        features = block.features.copy()
+        for atom in case.components:
+            index = fold.builder.preprocessor.index_of(atom.sensor)
+            fold.builder.rebuild_sensor(features, injection.values[:, index], atom.sensor)
+        for atom in case.components:
+            columns = fold.builder.block(atom.sensor)
+            if np.array_equal(features[block.scorable, columns], block.features[block.scorable, columns], equal_nan=True):
+                return None, ["A component changed no scorable features"]
+        return features, list(injection.components)
+
+    def preview(self, case: FaultCase) -> dict:
+        """Which development histories a case would change, without scoring or using the evaluation budget."""
+        case = FaultCase.model_validate(case.model_dump(mode="json"))
+        self.policy.check(case, self._config)
+        reasons, applicable = {}, 0
+        for fold, blocks in self._prepared:
+            for equipment in fold.validation_engines:
+                features, outcome = self._inject(fold, blocks[equipment], equipment, case)
+                if features is None:
+                    for reason in outcome:
+                        reasons[reason] = reasons.get(reason, 0) + 1
+                else:
+                    applicable += 1
+        expected = len(self._training.splits.development)
+        return {"applicable": applicable, "expected": expected, "coverage": applicable / expected, "reasons": reasons}
+
+    def timing(self) -> dict:
+        """Onsets the development histories can actually reach, after feature-window warmup."""
+        reach = []
+        for fold, blocks in self._prepared:
+            for equipment in fold.validation_engines:
+                block = blocks[equipment]
+                scorable = np.flatnonzero(block.scorable)
+                # resolve_onset accepts any target up to the first recorded cycle's distance from failure.
+                reach.append(int(block.rul.max()) if scorable.size and block.rul.size > 1 else 0)
+        reach.sort()
+        start = -(-self._config.min_useful_lead // 10) * 10
+        coverage = [{"onset": onset, "histories": sum(value >= onset for value in reach)} for onset in range(start, reach[-1] + 11, 10)]
+        return {"histories": len(reach), "maxReachableOnset": reach[-1], "medianReachableOnset": reach[len(reach) // 2],
+            "minReachableOnset": reach[0], "featureWindow": self._config.feature_window, "onsetCoverage": coverage}
+
     def evaluate(self, case: FaultCase, *, cancelled=None) -> FaultEvaluation:
         case = FaultCase.model_validate(case.model_dump(mode="json"))
         self.policy.check(case, self._config)
@@ -235,20 +280,12 @@ class FixedDevelopmentEvaluator:
             for equipment in fold.validation_engines:
                 check()
                 block = blocks[equipment]
-                injection = apply_case(self._training.dataset.sensor_matrix(equipment), block.rul, case, fold.builder, self._config)
-                if not injection.applied:
-                    exclusions.append(Exclusion(equipment_id=equipment, reasons=list(injection.reasons)))
-                    continue
-                features = block.features.copy()
-                for atom in case.components:
-                    index = fold.builder.preprocessor.index_of(atom.sensor)
-                    fold.builder.rebuild_sensor(features, injection.values[:, index], atom.sensor)
-                if any(np.array_equal(features[block.scorable, fold.builder.block(atom.sensor)],
-                        block.features[block.scorable, fold.builder.block(atom.sensor)], equal_nan=True) for atom in case.components):
-                    exclusions.append(Exclusion(equipment_id=equipment, reasons=["A component changed no scorable features"]))
+                features, outcome = self._inject(fold, block, equipment, case)
+                if features is None:
+                    exclusions.append(Exclusion(equipment_id=equipment, reasons=outcome))
                     continue
                 faulted[equipment] = EngineBlock(equipment, features, block.labels, block.cycles, block.rul, block.rows, block.scorable)
-                applications.append(HistoryApplication(equipment_id=equipment, components=list(injection.components)))
+                applications.append(HistoryApplication(equipment_id=equipment, components=outcome))
             if not faulted:
                 continue
             design = design_from_blocks(faulted, fold.builder.feature_names())

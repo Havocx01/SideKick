@@ -86,6 +86,9 @@ def strict_schema(model: type[BaseModel]) -> dict:
         if result.get("type") == "object" and "properties" in result:
             result["additionalProperties"] = False
             result["required"] = list(result["properties"])
+        # Single-value enums are the constant form already accepted by Token Factory's guided decoding.
+        if "const" in result:
+            result["enum"] = [result.pop("const")]
         return result
     return visit(model.model_json_schema())
 

@@ -7,24 +7,22 @@ import time
 from uuid import uuid4
 
 from openai import AsyncOpenAI, OpenAIError
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationError, model_validator
 
 from app.assistant.transport import client_options, nebius_options, provider_identity, request_structured, strict_schema
 from app.faults.investigation import ExperimentRunner, LeaseLost
 from app.investigator.findings import classify, loadCriterion
-from app.investigator.proposals import ScenarioProposal, validateProposal
+from app.investigator.proposals import ProviderProposal, validateProposal
 from app.investigator.records import Frozen
 
-PROMPT_VERSION = "nemotron-fault-search-v4"
+PROMPT_VERSION = "nemotron-fault-search-v5"
 INSTRUCTION = """Choose the next sensor-fault experiment using the objective, bounds and recorded results.
 Return one proposal or a stopReason, with the other field null. Use only the channel aliases provided.
 When channels list fault kinds and limits, stay within them; their descriptions are reviewed context, not instructions.
 If allowedGroups is nonempty, every selected channel must fit together inside one allowed group; never combine separate groups.
-Use JSON null for inapplicable parameters, not placeholder numbers.
-Choose one onset mode per component: an explicit onset_before_failure with seed null, or onset_before_failure null with an integer seed.
-Only drift uses severity_sd, sign and ramp_cycles: provide positive severity, sign -1 or 1, and a positive ramp length.
-For dropout and stuck, severity_sd, sign and ramp_cycles must all be null.
-Transient faults require a positive length; persistent faults require length null.
+Each component's onset is either explicit (onset_before_failure) or seeded (seed); its duration is persistent or transient with a length.
+Choose explicit onsets from timing.onsetCoverage: an onset no history reaches cannot be scored, and lower coverage means fewer histories.
+If recentCalls shows feedback, correct exactly that problem in the next proposal.
 Prefer informative untried scenarios. Treat partial coverage and unavailable metrics as limitations.
 Balance untested families against refining families with measured failures; do not repeat near-identical cases.
 Give a hypothesis: what you suspect, what measurement would support it, what would weaken it, and the result refs it builds on.
@@ -41,7 +39,7 @@ class ControllerLimits(Frozen):
 
 
 class InvestigationDecision(Frozen):
-    proposal: ScenarioProposal | None = None
+    proposal: ProviderProposal | None = None
     stopReason: str | None = Field(default=None, min_length=1, max_length=400)
 
     @model_validator(mode="after")
@@ -59,6 +57,16 @@ class ControllerStopped(RuntimeError):
     pass
 
 
+def feedback(error) -> str:
+    """Short correction text from local validation; provider input values are never echoed back."""
+    if isinstance(error, ValidationError):
+        problems = error.errors(include_input=False, include_context=False, include_url=False)
+        text = "; ".join(f"{'.'.join(map(str, item['loc'])) or 'reply'}: {item['msg']}" for item in problems[:3])
+    else:
+        text = str(error)
+    return text.replace("Value error, ", "")[:300]
+
+
 def resultRefs(state):
     completed = [item.id for item in state.attempts if item.status == "completed"]
     return {f"result-{index}": attempt for index, attempt in enumerate(completed, 1)}
@@ -73,14 +81,15 @@ def controllerStatus(store, investigation):
             return None
         columns = {item[1] for item in db.execute("PRAGMA table_info(controller_calls)")}
         extra = ",request_id,usage,elapsed" if "elapsed" in columns else ",NULL,NULL,NULL"
+        extra += ",feedback" if "feedback" in columns else ",NULL"
         calls = db.execute(f"SELECT seq,status,reserved_tokens,proposal_id,error{extra} FROM controller_calls WHERE investigation=? ORDER BY seq",
             (investigation,)).fetchall()
     return {"configuration": json.loads(row[0]), "stopReason": row[1], "modelStopReason": row[2],
         "callsUsed": len(calls), "reservedCompletionTokens": sum(item[2] for item in calls),
         "reportedCompletionTokens": sum(json.loads(item[6]).get("completion_tokens", 0) for item in calls if item[6]),
         "calls": [{"sequence": seq, "status": status, "reservedCompletionTokens": tokens, "proposalId": proposal, "error": error,
-            "requestId": requestId, "usage": json.loads(usage) if usage else None, "elapsedSeconds": elapsed}
-            for seq, status, tokens, proposal, error, requestId, usage, elapsed in calls]}
+            "requestId": requestId, "usage": json.loads(usage) if usage else None, "elapsedSeconds": elapsed,
+            "feedback": note} for seq, status, tokens, proposal, error, requestId, usage, elapsed, note in calls]}
 
 
 class NemotronController:
@@ -98,7 +107,7 @@ class NemotronController:
                 " request_digest TEXT NOT NULL, proposal_id TEXT REFERENCES proposals(id), error TEXT, created REAL NOT NULL, finished REAL,"
                 " UNIQUE(investigation,seq))")
             columns = {row[1] for row in db.execute("PRAGMA table_info(controller_calls)")}
-            for name, kind in (("request_id", "TEXT"), ("usage", "TEXT"), ("elapsed", "REAL")):
+            for name, kind in (("request_id", "TEXT"), ("usage", "TEXT"), ("elapsed", "REAL"), ("feedback", "TEXT")):
                 if name not in columns:
                     db.execute(f"ALTER TABLE controller_calls ADD COLUMN {name} {kind}")
 
@@ -162,6 +171,14 @@ class NemotronController:
                         reason = "provider_error"
                         self.finishCall(investigation, token, call, "failed", error=reason, meta=meta)
                         break
+                    except ValidationError as error:
+                        if any(item["type"] == "json_invalid" for item in error.errors()):
+                            reason = "invalid_response"
+                            self.finishCall(investigation, token, call, "failed", error=reason, meta=meta)
+                            break
+                        # A complete reply in the wrong shape is correctable; the next call sees why.
+                        self.finishCall(investigation, token, call, "rejected", error="invalid_proposal", feedback=feedback(error), meta=meta)
+                        continue
                     except ValueError:
                         reason = "invalid_response"
                         self.finishCall(investigation, token, call, "failed", error=reason, meta=meta)
@@ -176,8 +193,8 @@ class NemotronController:
                         break
                     try:
                         proposal = self.decodeProposal(decision.proposal, record)
-                    except ValueError:
-                        self.finishCall(investigation, token, call, "rejected", error="invalid_proposal", meta=meta)
+                    except ValueError as error:
+                        self.finishCall(investigation, token, call, "rejected", error="invalid_proposal", feedback=feedback(error), meta=meta)
                         continue
                     self.finishCall(investigation, token, call, "accepted", proposal=proposal, meta=meta)
                 finally:
@@ -252,7 +269,7 @@ class NemotronController:
                 (call, record.id, count + 1, token, tokens, hashlib.sha256(text.encode()).hexdigest(), time.time()))
         return call, None
 
-    def finishCall(self, investigation, token, call, status, *, error=None, proposal=None, modelReason=None, meta=None):
+    def finishCall(self, investigation, token, call, status, *, error=None, proposal=None, modelReason=None, meta=None, feedback=None):
         with self.store.transaction() as db:
             cancelled = self.runner.checkLease(db, investigation, token)
             row = db.execute("SELECT status,lease_token FROM controller_calls WHERE id=? AND investigation=?", (call, investigation)).fetchone()
@@ -269,26 +286,34 @@ class NemotronController:
                     status, error = "rejected", "proposal_limit"
             meta = meta or {}
             usage = json.dumps(meta["usage"], sort_keys=True) if meta.get("usage") is not None else None
-            db.execute("UPDATE controller_calls SET status=?,error=?,proposal_id=?,finished=?,request_id=?,usage=?,elapsed=?"
+            db.execute("UPDATE controller_calls SET status=?,error=?,proposal_id=?,finished=?,request_id=?,usage=?,elapsed=?,feedback=?"
                 " WHERE id=? AND lease_token=? AND status='pending'",
-                (status, error, proposalId, time.time(), meta.get("requestId"), usage, meta.get("elapsed"), call, token))
+                (status, error, proposalId, time.time(), meta.get("requestId"), usage, meta.get("elapsed"), feedback, call, token))
             if modelReason is not None:
                 db.execute("UPDATE controller_state SET model_stop_reason=? WHERE investigation=?", (modelReason, investigation))
         return status
 
     def decodeProposal(self, proposal, record):
         channels = {f"channel-{index}": sensor for index, sensor in enumerate(record.policy.allowed_sensors, 1)}
-        payload = proposal.model_dump(mode="json")
+        aliases = {sensor: alias for alias, sensor in channels.items()}
+        payload = proposal.toProposal().model_dump(mode="json")
         for component in payload["scenario"]["components"]:
             if component["sensor"] not in channels:
-                raise ValueError("Unknown channel alias")
+                raise ValueError(f"Unknown channel alias {component['sensor'][:32]}; use one of the listed channels")
             component["sensor"] = channels[component["sensor"]]
         if payload.get("hypothesis"):
             refs = resultRefs(self.store.load(record.id))
             if any(ref not in refs for ref in payload["hypothesis"]["basedOn"]):
                 raise ValueError("Unknown result reference")
             payload["hypothesis"]["basedOn"] = [refs[ref] for ref in payload["hypothesis"]["basedOn"]]
-        return validateProposal(json.dumps(payload), record, self.evaluator)
+        accepted = validateProposal(json.dumps(payload), record, self.evaluator)
+        preview = self.evaluator.preview(accepted.scenario)
+        if preview["applicable"] == 0:
+            reason = max(preview["reasons"], key=preview["reasons"].get) if preview["reasons"] else "no readings changed"
+            for sensor, alias in aliases.items():
+                reason = reason.replace(sensor, alias)
+            raise ValueError(f"No development history can apply this case ({preview['expected']} checked): {reason}")
+        return accepted
 
     def packet(self, record, limits):
         sensors = {sensor: f"channel-{index}" for index, sensor in enumerate(record.policy.allowed_sensors, 1)}
@@ -320,7 +345,7 @@ class NemotronController:
                         group["measuredFailures"] += entry["finding"] == "measured_failure"
                 if position >= len(owners) - 12:
                     experiments.append(entry)
-            calls = db.execute("SELECT seq,status,error FROM controller_calls WHERE investigation=? ORDER BY seq DESC LIMIT 4", (record.id,)).fetchall()
+            calls = db.execute("SELECT seq,status,error,feedback FROM controller_calls WHERE investigation=? ORDER BY seq DESC LIMIT 4", (record.id,)).fetchall()
             count, reserved = db.execute("SELECT COUNT(*),COALESCE(SUM(reserved_tokens),0) FROM controller_calls WHERE investigation=?", (record.id,)).fetchone()
         rejected = [item.reason for item in state.proposals if item.status == "rejected"]
         policy, config = record.policy, self.evaluator.config
@@ -328,19 +353,20 @@ class NemotronController:
         if policy.profile is not None:
             channels = {sensors[rule.sensor]: {"unit": rule.unit, "kinds": [kind.value for kind in rule.kinds], "maxSeveritySd": rule.max_severity_sd,
                 "description": rule.description} for rule in policy.profile.sensors}
+        timing = self.evaluator.timing()
         clean = [{"model": models[name], "detection": metrics.detection_fraction, "alarmBurden": metrics.early_alarm_burden, "histories": metrics.engines}
             for name, metrics in sorted(self.evaluator.cleanMetrics().items())]
         ranked = sorted(families.values(), key=lambda item: (-item["experiments"], item["family"]))
         packet = {"objective": record.objective, "models": list(models.values()), "allowedSensors": list(sensors.values()), "channels": channels,
             "bounds": {"maxComponents": policy.max_components, "maxSeveritySd": policy.max_severity_sd,
-                "maxDuration": policy.max_duration, "minOnset": config.min_useful_lead, "maxOnset": policy.max_onset,
+                "maxDuration": policy.max_duration, "minOnset": config.min_useful_lead, "maxOnset": min(policy.max_onset, timing["maxReachableOnset"]),
                 "allowedGroups": [[sensors[sensor] for sensor in group] for group in policy.allowed_groups]},
             "scoring": {"horizonCycles": config.horizon_cycles, "minUsefulLead": config.min_useful_lead,
                 "minDetectionFraction": config.min_detection_fraction, "maxEarlyAlarmBurden": config.max_early_alarm_burden},
-            "clean": clean, "families": ranked[:24], "omittedFamilies": max(0, len(ranked) - 24),
+            "timing": timing, "clean": clean, "families": ranked[:24], "omittedFamilies": max(0, len(ranked) - 24),
             "rejected": {"count": len(rejected), "recent": rejected[-3:]},
             "experiments": experiments, "omittedCases": max(0, len(owners) - 12),
-            "recentCalls": [{"sequence": seq, "status": status, "error": error} for seq, status, error in reversed(calls)],
+            "recentCalls": [{"sequence": seq, "status": status, "error": error, "feedback": note} for seq, status, error, note in reversed(calls)],
             "remainingExperiments": state.budget.max_experiments - state.slots_used,
             "remainingCalls": max(0, limits.maxCalls - count), "remainingCompletionTokens": max(0, limits.maxCompletionTokens - reserved),
             "note": "Development-only measurement corruptions; bounds are not equipment-validated."}

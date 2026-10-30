@@ -11,9 +11,20 @@ from app.faults.investigation import ExperimentRunner, InvestigationBudget, Inve
 from test_compound_faults import evaluator, fitted as fitted
 
 
+def providerComponent(flat):
+    component = {"kind": flat["kind"], "sensor": flat["sensor"]}
+    component["onset"] = ({"mode": "seeded", "seed": flat["seed"]} if flat.get("onset_before_failure") is None
+        else {"mode": "explicit", "onset_before_failure": flat["onset_before_failure"]})
+    component["duration"] = {"mode": "transient", "length": flat["length"]} if flat["duration"] == "transient" else {"mode": "persistent"}
+    if flat["kind"] == "drift":
+        component.update(severity_sd=flat["severity_sd"], sign=flat["sign"], ramp_cycles=flat["ramp_cycles"])
+    return component
+
+
 def proposal(sensor="channel-1", **changes):
-    component = {"sensor": sensor, "kind": "dropout", "duration": "persistent", "onset_before_failure": 40, **changes}
-    return {"proposal": {"scenario": {"components": [component]}, "reason": "Inspect loss of this channel."}, "stopReason": None}
+    flat = {"sensor": sensor, "kind": "dropout", "duration": "persistent", "onset_before_failure": 40, **changes}
+    return {"proposal": {"scenario": {"components": [providerComponent(flat)]}, "reason": "Inspect loss of this channel.", "hypothesis": None},
+        "stopReason": None}
 
 
 def stop():
@@ -91,16 +102,22 @@ def test_local_policy_rejection_counts_a_call_without_using_an_experiment(fitted
     assert len(store.load(investigation).proposals) == 1
 
 
+FLAT = {"sensor": "channel-1", "kind": "dropout", "duration": "persistent", "onset_before_failure": 40}
+
+
 @pytest.mark.parametrize("parameters", [{"seed": 101}, {"severity_sd": 1.0, "sign": 0, "ramp_cycles": 5}, {"length": 30}])
 def test_inconsistent_provider_fault_parameters_never_reach_the_evaluator(fitted, tmp_path, monkeypatch, parameters):
     fixed, store, investigation, config = setup(fitted, tmp_path)
-    calls = provider(monkeypatch, [json.dumps(proposal(**parameters))])
+    flat = {"proposal": {"scenario": {"components": [{**FLAT, **parameters}]}, "reason": "Old flat shape.", "hypothesis": None}, "stopReason": None}
+    calls = provider(monkeypatch, [json.dumps(flat), stop()])
     report = run(store, fixed, config, investigation, maxCalls=2)
-    assert report["stopReason"] == "invalid_response" and report["callsUsed"] == len(calls) == 1
+    assert report["stopReason"] == "model_stopped" and report["callsUsed"] == len(calls) == 2
     assert report["experimentsUsed"] == 0 and store.load(investigation).proposals == []
     from app.investigator.controller import controllerStatus
     saved = controllerStatus(store, investigation)["calls"][0]
-    assert saved["status"] == "failed" and saved["requestId"] == "req-1" and saved["usage"]["completion_tokens"] == 40
+    assert saved["status"] == "rejected" and saved["error"] == "invalid_proposal" and saved["feedback"]
+    assert saved["requestId"] == "req-1" and saved["usage"]["completion_tokens"] == 40
+    assert calls[1]["recentCalls"][0]["feedback"] == saved["feedback"]
 
 
 def test_explicit_null_parameters_accept_a_persistent_dropout(fitted, tmp_path, monkeypatch):

@@ -1,5 +1,5 @@
 """Scenario proposals and local policy checks."""
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field, field_validator
 
@@ -37,6 +37,69 @@ class ScenarioProposal(Frozen):
         if not value.strip():
             raise ValueError("Explain why this scenario should be tested")
         return value.strip()
+
+
+class ExplicitOnset(Frozen):
+    mode: Literal["explicit"]
+    onset_before_failure: int = Field(ge=1, le=100000)
+
+
+class SeededOnset(Frozen):
+    mode: Literal["seeded"]
+    seed: int = Field(ge=0, le=2**32 - 1)
+
+
+class Persistent(Frozen):
+    mode: Literal["persistent"]
+
+
+class Transient(Frozen):
+    mode: Literal["transient"]
+    length: int = Field(ge=1, le=100000)
+
+
+class DriftFault(Frozen):
+    kind: Literal["drift"]
+    sensor: str = Field(min_length=1, max_length=128)
+    onset: ExplicitOnset | SeededOnset
+    duration: Persistent | Transient
+    severity_sd: float = Field(gt=0, le=100)
+    sign: Literal[-1, 1]
+    ramp_cycles: int = Field(ge=1, le=100000)
+
+
+class LossFault(Frozen):
+    kind: Literal["dropout", "stuck"]
+    sensor: str = Field(min_length=1, max_length=128)
+    onset: ExplicitOnset | SeededOnset
+    duration: Persistent | Transient
+
+
+class ProviderScenario(Frozen):
+    components: list[DriftFault | LossFault] = Field(min_length=1, max_length=4)
+
+
+class ProviderProposal(Frozen):
+    """Provider-facing shape: each alternative only has fields that apply to it."""
+    scenario: ProviderScenario
+    reason: str = Field(min_length=1, max_length=1600)
+    hypothesis: Hypothesis | None
+
+    def toProposal(self) -> ScenarioProposal:
+        components = []
+        for item in self.scenario.components:
+            component = {"sensor": item.sensor, "kind": item.kind, "duration": item.duration.mode}
+            if item.onset.mode == "explicit":
+                component["onset_before_failure"] = item.onset.onset_before_failure
+            else:
+                component["seed"] = item.onset.seed
+            if item.duration.mode == "transient":
+                component["length"] = item.duration.length
+            if item.kind == "drift":
+                component.update(severity_sd=item.severity_sd, sign=item.sign, ramp_cycles=item.ramp_cycles)
+            components.append(component)
+        return ScenarioProposal.model_validate({"scenario": {"components": components}, "reason": self.reason,
+            "hypothesis": self.hypothesis.model_dump() if self.hypothesis else None})
 
 
 def validateProposal(payload: str, record: InvestigationRecord, evaluator: "FixedDevelopmentEvaluator") -> ScenarioProposal:
