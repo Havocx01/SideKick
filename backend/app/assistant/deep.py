@@ -18,7 +18,7 @@ from app.assistant.schemas import DeepHypothesis, DeepObservation, DeepReport, D
 from app.schemas import Strict
 from app.assistant.transport import client_options, request_structured
 
-PROMPT_VERSION = "sidekick-deep-v20"
+PROMPT_VERSION = "sidekick-deep-v21"
 MAX_PATTERNS = 24
 MAX_INPUT_BYTES = 40000
 INSTRUCTION = """Help an engineer choose an informative diagnostic of a warning model.
@@ -154,6 +154,7 @@ class DeepVerificationError(ValueError):
         "priority": "the next tests omitted the recorded failing patterns",
         "scope": "a diagnostic was outside its model or development evidence scope",
         "capability": "a diagnostic was incompatible with the recorded model",
+        "premise": "every proposed check rested on a premise the recorded warnings contradict",
     }
 
     def __init__(self, code):
@@ -185,7 +186,8 @@ class DeepProviderHypothesis(DeepHypothesis):
 
 class DeepProviderSynthesis(Strict):
     hypotheses: list[DeepProviderHypothesis] = Field(min_length=1, max_length=3)
-    gaps: list[Annotated[str, Field(min_length=1, max_length=220)]] = Field(min_length=1, max_length=3)
+    gaps: list[Annotated[str, Field(min_length=1, max_length=220, description="One short sentence naming evidence that is missing or unrecorded, "
+        "for example: The fitted preprocessing for model-1 was not recorded. No paths, file names, numbers or URLs.")]] = Field(min_length=1, max_length=3)
     next_tests: list[DeepProviderTest] = Field(min_length=1, max_length=3)
 
 
@@ -477,6 +479,14 @@ def verified_synthesis(provider_output, observations, aliases, *, fault_kinds=()
     return output, True
 
 
+# Nemotron often writes aliases with non-breaking hyphens ("model‑1"); alias checks and resolution expect plain ones.
+TYPOGRAPHY = str.maketrans({"\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2212": "-", "\u00a0": " ", "\u2009": " ", "\u202f": " "})
+
+
+def plainTypography(output):
+    return type(output).model_validate_json(output.model_dump_json().translate(TYPOGRAPHY))
+
+
 async def investigate_deep(tools, settings):
     started = time.monotonic()
     observations, packet, aliases, priorities = collect_deep_evidence(tools)
@@ -494,6 +504,7 @@ async def investigate_deep(tools, settings):
         raise DeepVerificationError(code) from error
     if not isinstance(output, response_schema):
         raise DeepVerificationError("format")
+    output = plainTypography(output)
     proposed_explanation = bool(output.hypotheses)
     from app.assistant.diagnostic_checks import compose_checks
     output, sections_rejected = compose_checks(output, packet, observations, aliases)

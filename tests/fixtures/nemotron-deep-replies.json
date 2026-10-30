@@ -1,0 +1,147 @@
+{
+ "model": "nvidia/nemotron-3-super-120b-a12b",
+ "captured": "2026-10-30, live deep investigations on the recorded bundle",
+ "cases": [
+  {
+   "candidates": [
+    "logistic_regression/lr1"
+   ],
+   "reply": {
+    "hypotheses": [
+     {
+      "title": "High threshold delays warning for channel‑3 dropout",
+      "explanation": "The model's threshold may be set too high for channel‑3 dropout faults, so scores stay below the warning level until late in the fault, producing delayed warnings.",
+      "observation_ids": [
+       "pattern-1"
+      ],
+      "alternative": "The fault could introduce transient noise that intermittently pushes scores above threshold, but insufficient persistence prevents warning activation despite early crossings.",
+      "trace_basis": null
+     }
+    ],
+    "gaps": [
+     "/models/model-1/checks/score_persistence"
+    ],
+    "next_tests": [
+     {
+      "title": "Score persistence check for channel‑3 dropout",
+      "model": "model-1",
+      "check_type": "score_persistence",
+      "focus": "Does the faulted score trace remain below model‑1's threshold long enough to delay warning?",
+      "signal": "scores_below_own_threshold",
+      "observation_ids": [
+       "pattern-1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "candidates": [
+    "logistic_regression/lr2"
+   ],
+   "reply": {
+    "hypotheses": [
+     {
+      "title": "Sidekick supplies a tentative title",
+      "explanation": "The model’s scores may remain below its decision threshold because the fault‑induced signal change is small relative to the model’s learned weighting, preventing the score from crossing enough to trigger a warning.",
+      "observation_ids": [
+       "pattern-1",
+       "pattern-2",
+       "pattern-3"
+      ],
+      "alternative": "The model’s threshold could be set higher than necessary, so even when the fault produces a modest score increase the crossing does not occur, leaving the warning inactive.",
+      "trace_basis": null
+     }
+    ],
+    "gaps": [
+     "/out_of_fold/model-1/score_persistence/scores_below_own_threshold"
+    ],
+    "next_tests": [
+     {
+      "title": "Sidekick supplies a tentative title",
+      "model": "model-1",
+      "check_type": "score_persistence",
+      "focus": "Do the recorded fault histories show scores staying beneath the model’s own threshold despite the fault signal?",
+      "signal": "scores_below_own_threshold",
+      "observation_ids": [
+       "pattern-1",
+       "pattern-2",
+       "pattern-3"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "candidates": [
+    "xgboost_augmented/aug3"
+   ],
+   "reply": {
+    "hypotheses": [
+     {
+      "title": "Sidekick suggests delayed fault crossing",
+      "explanation": "Faulted scores for channel‑12 drift may fall just below the model‑1 threshold for a few cycles, shifting the first sustained crossing later and reducing useful lead while warnings stay active.",
+      "observation_ids": [
+       "pattern-2",
+       "history-summary-1"
+      ],
+      "alternative": "Transient score spikes could intermittently reset the consecutive‑crossing counter, delaying warning activation even though the fault persists and warnings eventually fire.",
+      "trace_basis": "warning_retained"
+     }
+    ],
+    "gaps": [
+     "/api/v1/experiments/out_of_fold/models/model-1/diagnostics/score_persistence/check"
+    ],
+    "next_tests": [
+     {
+      "title": "Score persistence check",
+      "model": "model-1",
+      "check_type": "score_persistence",
+      "focus": "Do faulted scores for channel‑12 drift dip below the model‑1 threshold long enough to break the required two‑consecutive‑above‑threshold streak?",
+      "signal": "scores_below_own_threshold",
+      "observation_ids": [
+       "pattern-2",
+       "history-summary-1"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "candidates": [
+    "logistic_regression/lr2",
+    "xgboost_augmented/aug3"
+   ],
+   "reply": {
+    "hypotheses": [
+     {
+      "title": "Persistence‑rule delay",
+      "explanation": "The model-2 might require two consecutive scores above its threshold before activating a warning, so isolated above‑threshold readings could delay the alert despite the fault being present.",
+      "observation_ids": [
+       "pattern-14",
+       "history-summary-1"
+      ],
+      "alternative": "The model-2 could have its threshold positioned such that scores frequently linger just below it, producing only brief excursions that fail to meet the persistence rule.",
+      "trace_basis": "warning_retained"
+     }
+    ],
+    "gaps": [
+     "/gaps/gap-1.json"
+    ],
+    "next_tests": [
+     {
+      "title": "Score‑persistence check",
+      "model": "model-2",
+      "check_type": "score_persistence",
+      "focus": "Why does model-2 sometimes show above‑threshold scores without an active warning?",
+      "signal": "crossings_without_warning",
+      "observation_ids": [
+       "pattern-14",
+       "history-summary-1"
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -92,6 +92,9 @@ def diagnostic_contract(packet):
         "availability": "The server derives inspect_now or needs_evidence for the exact model and cited patterns. Never claim unavailable records were inspected."}
 
 
+# Sidekick's own wording when every provider gap is unusable; gaps are the least important section.
+FALLBACK_GAP = "Some evidence needed to test these explanations was not recorded; see the prerequisites of each check."
+
 TITLES = {"score_persistence": "Inspect score response and warning persistence",
     "preprocessing_audit": "Audit recorded preprocessing", "sensor_quality": "Inspect recorded channel quality",
     "threshold_sensitivity": "Assess the detection and early-alarm tradeoff",
@@ -269,11 +272,16 @@ def compose_checks(provider, packet, observations, aliases):
             interpretation="The recorded signal would guide the proposed investigation."))
     # Review independently generated paragraphs/questions. Do not invent an
     # explanation to accompany an otherwise feasible diagnostic question.
+    if not raw_tests:
+        raise DeepVerificationError("premise")
+    # Nemotron sometimes answers gaps with paths or file names instead of a sentence.
+    gaps = [gap for gap in provider.gaps if not re.search(r"(?:^|\s)/\w|\.json\b", gap)]
+    partial = partial or len(gaps) < len(provider.gaps)
     class DiagnosticSynthesis(DeepSynthesis):
         hypotheses: list[DeepHypothesis] = Field(min_length=0, max_length=3)
     verified = DiagnosticSynthesis(summary="Possible explanations and checks for the inspected fault patterns.",
-        hypotheses=[], next_tests=raw_tests, gaps=list(provider.gaps))
-    for field, values in (("hypotheses", hypotheses), ("next_tests", raw_tests), ("gaps", provider.gaps)):
+        hypotheses=[], next_tests=raw_tests, gaps=gaps or [FALLBACK_GAP])
+    for field, values in (("hypotheses", hypotheses), ("next_tests", raw_tests), ("gaps", gaps)):
         retained = []
         for item in values:
             isolated = verified.model_copy(update={"hypotheses": [], "next_tests": [], "gaps": [], field: [item]})
@@ -286,8 +294,9 @@ def compose_checks(provider, packet, observations, aliases):
             else:
                 retained.append(item)
         setattr(verified, field, retained)
-    if not verified.next_tests or not verified.gaps:
+    if not verified.next_tests:
         raise DeepVerificationError("claims")
+    verified.gaps = verified.gaps or [FALLBACK_GAP]
     for item in verified.next_tests:
         info = metadata[item.title]
         item.procedure = info.pop("procedure")
