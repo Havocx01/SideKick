@@ -66,6 +66,7 @@ class Finding(Frozen):
     faulted_detection: float | None = None
     clean_burden: float | None = None
     faulted_burden: float | None = None
+    assumptions: tuple[str, ...] = Field(default=(), description="Profile constraints the tested scenario relies on.")
     effects: tuple[Effect, ...] = Field(default=(), description="Observed effects; only a measured_failure is a discovery.")
     support: tuple[HistorySupport, ...] = Field(default=(), description="Matched histories whose warning outcome changed.")
 
@@ -98,6 +99,7 @@ def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, propos
     base = {"criterion": criterion, "criterion_fingerprint": criterion.fingerprint, "proposal_id": proposal_id,
         "attempt_id": attempt_id, "scenario_id": evaluation.scenario_id, "evidence_digest": digest(evaluation.model_dump(mode="json")),
         "context_fingerprint": evaluation.context_fingerprint, "expected_histories": evaluation.expected_histories,
+        "assumptions": evaluation.policy.assumptionsFor(evaluation.scenario),
         "evaluated_histories": evaluation.evaluated_histories,
         "coverage": evaluation.evaluated_histories / evaluation.expected_histories if evaluation.expected_histories else 0.0}
     if evaluation.status == "not_applicable" or model.clean_matched is None or model.faulted is None or not model.pairs:

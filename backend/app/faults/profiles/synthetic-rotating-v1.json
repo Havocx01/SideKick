@@ -1,0 +1,34 @@
+{
+  "id": "synthetic-rotating-v1",
+  "version": 1,
+  "equipment": "Synthetic rotating pump fixture",
+  "synthetic": true,
+  "bounds": {"max_components": 2, "max_severity_sd": 3.0, "max_duration": 120, "max_onset": 500},
+  "groups": [
+    ["temp_bearing", "vibration_rms", "oil_particles"],
+    ["pressure_out", "flow_rate", "valve_position"],
+    ["current_draw", "speed_rpm"],
+    ["temp_bearing", "ambient_temp"]
+  ],
+  "sensors": [
+    {"sensor": "temp_bearing", "unit": "degC", "kinds": ["dropout", "stuck", "drift"], "max_severity_sd": 3.0, "description": "Bearing housing temperature from the condition-monitoring module."},
+    {"sensor": "vibration_rms", "unit": "mm/s", "kinds": ["dropout", "stuck", "drift"], "max_severity_sd": 3.0, "description": "Overall bearing vibration velocity from the condition-monitoring module."},
+    {"sensor": "oil_particles", "unit": "ppm", "kinds": ["dropout", "stuck"], "description": "Lubricant particle count from the condition-monitoring module."},
+    {"sensor": "pressure_out", "unit": "bar", "kinds": ["dropout", "stuck", "drift"], "max_severity_sd": 2.0, "description": "Discharge pressure from the hydraulic I/O card."},
+    {"sensor": "flow_rate", "unit": "L/min", "kinds": ["dropout", "stuck", "drift"], "max_severity_sd": 2.0, "description": "Discharge flow from the hydraulic I/O card."},
+    {"sensor": "valve_position", "unit": "%", "kinds": ["dropout", "stuck"], "description": "Control valve position feedback from the hydraulic I/O card."},
+    {"sensor": "current_draw", "unit": "A", "kinds": ["dropout", "stuck", "drift"], "max_severity_sd": 2.0, "description": "Motor current reported by the drive."},
+    {"sensor": "speed_rpm", "unit": "rpm", "kinds": ["dropout", "stuck"], "description": "Shaft speed reported by the drive."},
+    {"sensor": "ambient_temp", "unit": "degC", "kinds": ["dropout", "stuck"], "description": "Ambient reference temperature."}
+  ],
+  "constraints": [
+    {"rule": "Channels on one acquisition module or I/O card may fail together; other combinations are not tested.", "provenance": "prototype_assumption"},
+    {"rule": "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled.", "provenance": "prototype_assumption"},
+    {"rule": "Bearing temperature, vibration and particle count share one condition-monitoring module.", "provenance": "prototype_assumption", "sensors": ["temp_bearing", "vibration_rms", "oil_particles"]},
+    {"rule": "Particle counts saturate or stop rather than drift.", "provenance": "prototype_assumption", "sensors": ["oil_particles"]},
+    {"rule": "Pressure, flow and valve feedback share one hydraulic I/O card; drift is capped at 2 SD.", "provenance": "prototype_assumption", "sensors": ["pressure_out", "flow_rate", "valve_position"]},
+    {"rule": "Drive-reported current and speed fail together on a drive communication fault; speed does not drift.", "provenance": "prototype_assumption", "sensors": ["current_draw", "speed_rpm"]},
+    {"rule": "The ambient reference is only combined with bearing temperature and is not drift-tested.", "provenance": "prototype_assumption", "sensors": ["ambient_temp"]},
+    {"rule": "Constant nameplate channels are excluded because corrupting them changes no readings.", "provenance": "prototype_assumption"}
+  ]
+}

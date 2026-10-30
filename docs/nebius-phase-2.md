@@ -68,3 +68,11 @@ Budgets limit context rows/histories, model/fold counts and new scenario evaluat
 `context.joblib` contains fitted Python objects and **raw development data and identifiers**. Keep real-data packages local unless disclosure is authorized. This is not the public submission export format. No reserved history rows are included.
 
 Only load a package you created and trust. `--trust-local-artifact` is required because Python/joblib deserialization can execute code. Checksums detect accidental modification; they do not authenticate a malicious package. Replay requires the same source and dependency versions, checks file sizes/checksums before loading, and compares the complete recomputed result. It makes no changes to the original package or application exposure ledger.
+
+## Fault profiles
+
+A profile is a versioned `FaultPolicy` for one equipment and sensor setup. It lists each channel's unit, permitted fault kinds, an optional drift cap and a one-line reviewed description, plus the permitted sensor groups and the constraints behind them. Each constraint records its provenance: `prototype_assumption`, `documented_behavior` or `engineer_reviewed`. Profiles live in `backend/app/faults/profiles/`; load one with `loadPolicy("synthetic-rotating-v1")`, or pass `--profile synthetic-rotating-v1` to `scripts/evaluate_fault_scenarios.py`.
+
+The policy check rejects a case with an unlisted fault kind, an over-cap drift or a sensor combination outside every group before any history is scored. Every search strategy that uses the same policy gets exactly the same constraints. Findings list the constraints the tested case relies on. The controller sends Nemotron each channel's alias, unit, kinds, cap and description, never the raw sensor name.
+
+`synthetic-rotating-v1` describes the synthetic fixture. All of its constraints are prototype assumptions, not physical evidence. Do not give anonymous real channels, such as NASA FD001 sensors, physical meanings without supporting documentation. A policy without a profile keeps its original fingerprint, so existing packages and investigations stay valid. Same-sensor overlap and coupled physical failures are still unsupported.

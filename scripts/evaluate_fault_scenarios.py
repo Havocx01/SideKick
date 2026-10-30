@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.config import EXPERIMENT
 from app.data.synthetic import make_synthetic_dataset
 from app.faults.evaluator import FixedDevelopmentEvaluator
+from app.faults.profiles import loadPolicy
 from app.faults.replay import export_evaluation, replay_evaluation
 from app.faults.scenarios import FaultCase, FaultPolicy
 from app.models.candidates import AgeBaselineCandidate, LogisticRegressionCandidate
@@ -26,6 +27,7 @@ def main(argv=None):
     mode.add_argument("--replay", type=Path, help="Reproduce a previously exported local evaluation without fitting.")
     parser.add_argument("--trust-local-artifact", action="store_true", help="Only for a package you produced and trust; joblib can execute code.")
     parser.add_argument("--scenario", type=Path, help="Optional bounded FaultCase JSON for the synthetic fixture.")
+    parser.add_argument("--profile", help="Fault profile to constrain scenarios, e.g. synthetic-rotating-v1.")
     args = parser.parse_args(argv)
     if args.replay:
         if args.scenario:
@@ -43,7 +45,7 @@ def main(argv=None):
         config = replace(EXPERIMENT, holdout_engines=4, n_folds=2, feature_window=5,
             horizon_cycles=20, min_useful_lead=5, late_window_end=4, transition_band_end=30, configs_per_candidate=1)
         dataset = make_synthetic_dataset(n_equipment=26, min_life=85, max_life=100, config=config)
-        policy = FaultPolicy(allowed_sensors=tuple(dataset.sensors))
+        policy = loadPolicy(args.profile) if args.profile else FaultPolicy(allowed_sensors=tuple(dataset.sensors))
         policy.check(case, config)
         training = train_development(dataset, config=config,
             candidates=[LogisticRegressionCandidate("lr-probe", {"max_iter": 300}), AgeBaselineCandidate("age-probe")])

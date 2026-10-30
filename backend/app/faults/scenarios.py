@@ -2,6 +2,7 @@
 from dataclasses import dataclass, replace
 import hashlib
 import json
+from typing import Literal
 
 import numpy as np
 from pydantic import ConfigDict, Field, model_validator
@@ -63,6 +64,49 @@ class FaultCase(Strict):
         return prefix + fingerprint(self.model_dump(mode="json"))[:24]
 
 
+class Constraint(Strict):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    rule: str = Field(min_length=1, max_length=400)
+    provenance: Literal["prototype_assumption", "documented_behavior", "engineer_reviewed"]
+    sensors: tuple[str, ...] = Field(default=(), max_length=128, description="Empty applies to every sensor.")
+    source: str | None = Field(default=None, max_length=400)
+
+
+class SensorRule(Strict):
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+    sensor: str = Field(min_length=1, max_length=128)
+    unit: str | None = Field(default=None, max_length=32)
+    kinds: tuple[FaultKind, ...] = Field(min_length=1, max_length=3)
+    max_severity_sd: float | None = Field(default=None, gt=0, le=100)
+    description: str = Field(default="", max_length=200)
+
+    @model_validator(mode="after")
+    def plainDescription(self):
+        # Descriptions reach the provider, so keep them short, single-line reviewed text.
+        if "\n" in self.description or "\r" in self.description or len(set(self.kinds)) != len(self.kinds):
+            raise ValueError("Sensor descriptions must be one line and fault kinds unique")
+        return self
+
+
+class Profile(Strict):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
+    version: int = Field(ge=1, strict=True)
+    equipment: str = Field(min_length=1, max_length=200)
+    synthetic: bool
+    sensors: tuple[SensorRule, ...] = Field(min_length=1, max_length=128)
+    constraints: tuple[Constraint, ...] = Field(default=(), max_length=64)
+
+    @model_validator(mode="after")
+    def knownSensors(self):
+        names = [rule.sensor for rule in self.sensors]
+        if len(set(names)) != len(names):
+            raise ValueError("Profile sensors must be unique")
+        if any(not set(item.sensors) <= set(names) for item in self.constraints):
+            raise ValueError("Profile constraints must name profile sensors")
+        return self
+
+
 class FaultPolicy(Strict):
     """Declared prototype bounds; these do not certify physical plausibility."""
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
@@ -78,6 +122,7 @@ class FaultPolicy(Strict):
     max_seconds: float = Field(default=30, gt=0, le=300)
     assumptions: str = Field(default="Independent bounded measurement corruptions; prototype bounds are not equipment-validated.",
         min_length=1, max_length=2000)
+    profile: Profile | None = None
 
     @model_validator(mode="after")
     def known_groups(self):
@@ -85,11 +130,24 @@ class FaultPolicy(Strict):
             raise ValueError("Allowed sensors must be unique nonempty names")
         if any(not group or not set(group) <= set(self.allowed_sensors) for group in self.allowed_groups):
             raise ValueError("Allowed groups must contain known sensors")
+        if self.profile is not None and {rule.sensor for rule in self.profile.sensors} != set(self.allowed_sensors):
+            raise ValueError("Profile sensors must match the allowed sensors")
         return self
 
     @property
     def fingerprint(self) -> str:
-        return fingerprint(self.model_dump(mode="json"))
+        data = self.model_dump(mode="json")
+        # Policies without a profile keep their original identity.
+        if data["profile"] is None:
+            del data["profile"]
+        return fingerprint(data)
+
+    def assumptionsFor(self, case: FaultCase) -> tuple[str, ...]:
+        if self.profile is None:
+            return ()
+        sensors = {atom.sensor for atom in case.components}
+        return tuple(f"{item.rule} ({item.provenance.replace('_', ' ')})" for item in self.profile.constraints
+            if not item.sensors or sensors & set(item.sensors))
 
     def check(self, case: FaultCase, config: ExperimentConfig):
         if len(case.components) > self.max_components:
@@ -106,6 +164,14 @@ class FaultPolicy(Strict):
                 raise ValueError("Scenario drift severity exceeds the declared bound")
             if (atom.length or 0) > self.max_duration or (atom.ramp_cycles or 0) > self.max_duration:
                 raise ValueError("Scenario duration or ramp exceeds the declared bound")
+        if self.profile is not None:
+            rules = {rule.sensor: rule for rule in self.profile.sensors}
+            for atom in case.components:
+                rule = rules[atom.sensor]
+                if atom.kind not in rule.kinds:
+                    raise ValueError(f"Fault kind is outside the {self.profile.id} profile for this sensor")
+                if atom.severity_sd is not None and rule.max_severity_sd is not None and atom.severity_sd > rule.max_severity_sd:
+                    raise ValueError(f"Drift severity exceeds the {self.profile.id} profile for this sensor")
 
 
 class ComponentApplication(Strict):
