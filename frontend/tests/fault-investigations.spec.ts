@@ -125,7 +125,7 @@ test("a run is started explicitly, polled to completion and its finding can be i
   const card = page.getByRole("article", { name: /Measured failure/ });
   await expect(card).toContainText("100% → 73%");
   await expect(card).toContainText("22 / 22 histories");
-  await card.getByText("1 histories changed").click();
+  await card.getByText("1 history changed").click();
   await expect(card.getByRole("cell", { name: "SYN-001" })).toBeVisible();
   await card.getByText("Profile assumptions").click();
   await expect(card).toContainText("(prototype assumption)");

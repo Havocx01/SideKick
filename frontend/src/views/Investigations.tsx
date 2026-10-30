@@ -12,6 +12,7 @@ import { percent } from "../format";
 import styles from "./investigations.module.css";
 
 const errorText = (error: unknown) => error instanceof ApiError ? error.detail || error.message : error instanceof Error ? error.message : "Request failed. Try again.";
+const histories = (count: number) => `${count} ${count === 1 ? "history" : "histories"}`;
 const requestId = () => crypto.randomUUID().replace(/-/g, "");
 
 const stops: Record<string, [string, Tone]> = {
@@ -290,8 +291,8 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
       </dl>
       {unscored && <p><strong>Why this was not scored as a finding:</strong></p>}
       {finding.reasons?.map(reason => <p key={reason} className={styles.reason}>{reason}</p>)}
-      {finding.effects?.map(effect => <p key={effect.kind}>{effect.kind.replace(/_/g, " ")}: {effect.histories.length} histories</p>)}
-      {(finding.support?.length ?? 0) > 0 && <details><summary>{finding.support?.length} histories changed</summary>
+      {finding.effects?.map(effect => <p key={effect.kind}>{effect.kind.replace(/_/g, " ")}: {histories(effect.histories.length)}</p>)}
+      {(finding.support?.length ?? 0) > 0 && <details><summary>{histories(finding.support?.length ?? 0)} changed</summary>
         <div className="table-scroll"><table><thead><tr><th>History</th><th>Clean</th><th>Faulted</th><th className="num">Lead</th></tr></thead>
           <tbody>{finding.support?.map(row => <tr key={row.equipment_id}><td>{row.equipment_id}</td><td>{row.clean}</td><td>{row.faulted}</td>
             <td className="num">{row.clean_lead ?? "—"} → {row.faulted_lead ?? "—"}</td></tr>)}</tbody></table></div>
