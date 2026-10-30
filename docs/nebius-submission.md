@@ -59,7 +59,9 @@ Sanitized captures from the first live runs are kept privately. With prompt v3 e
 
 ### Tavily runtime verification
 
-The initial research action made one successful Tavily request, reporting one credit, and one Nemotron request, reporting 265 completion tokens. The search returned unrelated Microsoft pages; Nemotron declined sensor-specific advice. The final technical-term filter rejects those captured sources offline. Useful live retrieval remains unverified, and no further paid call was made under that allowance.
+The initial research action made one successful Tavily request, reporting one credit, and one Nemotron request, reporting 265 completion tokens. The search returned unrelated Microsoft pages; Nemotron declined sensor-specific advice. The final technical-term filter rejects those captured sources offline.
+
+A second live check with the final code, on the demonstration's measured stuck-sensor failure, used one Tavily credit and one Nemotron request (369 reported completion tokens). Two general predictive-maintenance pages passed the filter. Nemotron stated that they do not describe diagnostics for stuck signals and suggested three supervised checks: high-rate logging of the affected channels, cross-channel comparison and an injected test signal. Each test cited a source, but the sources support only the general premise, not the specific procedures; the third citation in particular is loose. The workbench therefore labels research as unverified context that never changes a measured finding.
 
 ## Service feedback
 
