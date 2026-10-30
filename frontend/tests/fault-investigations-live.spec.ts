@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
-// Paid: runs only with SIDEKICK_BROWSER_LIVE=1 and a Nebius key in the server's environment, within 2 calls and 10240 completion tokens.
+// Paid: runs only with SIDEKICK_BROWSER_LIVE=1 and Nebius and Tavily keys in the server's environment: a Nemotron search within 2 calls and
+// 10240 completion tokens, then one fault research action (one Tavily search and at most one Nemotron request).
 const artifacts = process.env.SIDEKICK_BROWSER_ARTIFACTS!;
 test.skip(process.env.SIDEKICK_BROWSER_LIVE !== "1", "Live browser test needs SIDEKICK_BROWSER_LIVE=1");
 
@@ -41,9 +42,23 @@ test("a consented Nemotron search runs from the browser within its allowance", a
   if (view.controller.calls.some((call: { status: string }) => call.status === "accepted")) await expect(page.getByText("Chosen by Nemotron").first()).toBeVisible();
   await page.screenshot({ path: `../${artifacts}/live-investigation.png`, fullPage: true });
 
+  const card = page.getByRole("article", { name: /^Measured failure: oil_particles:stuck\+vibration_rms:stuck/ });
+  await card.getByRole("button", { name: "Research this fault" }).click();
+  await card.getByRole("checkbox", { name: "Allow Tavily search and Nemotron research for this fault" }).check();
+  await card.getByRole("button", { name: "Start fault research" }).click();
+  await expect.poll(async () => (await (await page.request.get(`/api/investigations/${id}`)).json()).research?.[0]?.status, { timeout: 120_000, intervals: [2000] })
+    .toMatch(/^(completed|failed)$/);
+  const research = (await (await page.request.get(`/api/investigations/${id}`)).json()).research[0];
+  expect(research.searchRequests).toBe(1);
+  expect(research.modelRequests).toBeLessThanOrEqual(1);
+  await page.reload();
+  await expect(card).toContainText(`Fault research · ${research.status}`);
+  await card.screenshot({ path: `../${artifacts}/live-research.png` });
+
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Public evidence" }).click();
   const evidence = JSON.parse(readFileSync(await (await download).path(), "utf-8"));
   expect(evidence.controller.callsUsed).toBe(view.controller.callsUsed);
   expect(JSON.stringify(evidence)).not.toContain("Demo: find sensor faults");
+
 });

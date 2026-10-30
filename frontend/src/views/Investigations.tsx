@@ -54,7 +54,7 @@ interface RecordedRow { ref: string; family: string; status: Finding["status"]; 
 interface RecordedEvidence { generatedAt: string; digest: string; demonstration?: { note: string } | null; experiments: RecordedRow[];
   controller?: { model: string; prompt: string; callsUsed: number; reservedCompletionTokens: number; reportedCompletionTokens: number } | null;
   reductions: { status: string; family: string; claims: string[] }[]; remedies: { threshold: number | null; improved: number; degraded: number; stillFailing?: number }[];
-  validations?: { status: string; freshHistories: number; cases: { label: string; original: { status: string } }[] }[] }
+  validations?: { status: string; freshHistories: number; cases: { label: string; original: { status: string }; remedy?: { status: string } }[] }[] }
 
 function Recorded() {
   const recorded = useApi(() => investigations.recorded(), []);
@@ -69,8 +69,8 @@ function RecordedRun({ item }: { item: RecordedInvestigation }) {
   return <Panel title={`Recorded: ${item.name}`} aside={<Badge tone="neutral">Recorded, not live</Badge>}
     description={`Generated ${evidence.generatedAt}. Digest ${evidence.digest.slice(0, 12)}.`}>
     <div className={styles.stack}>
-      {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note}</Callout>}
-      <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} calls: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
+      {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note.replace(/^Demonstration setting:\s*/, "")}</Callout>}
+      <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} ${controller.callsUsed === 1 ? "call" : "calls"}: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
         : "No Nemotron calls; every case was supplied."}</p>
       <div className="table-scroll"><table aria-label={`Recorded experiments: ${item.name}`}><thead><tr><th>Result</th><th>Case family</th><th>Chosen by</th><th>Status</th>
         <th className="num">Coverage</th><th className="num">Useful warnings</th></tr></thead>
@@ -81,7 +81,7 @@ function RecordedRun({ item }: { item: RecordedInvestigation }) {
       {evidence.remedies.map((remedy, index) => <p key={index}><strong>Remedy, threshold {remedy.threshold}:</strong> {remedy.improved} improved, {remedy.degraded} degraded
         {remedy.stillFailing !== undefined ? `, ${remedy.stillFailing} still failing` : ""}. Development-only; it needs fresh validation.</p>)}
       {evidence.validations?.map((validation, index) => <p key={index}><strong>Validation on {validation.freshHistories} fresh histories ({validation.status}):</strong>{" "}
-        {validation.cases.map(row => `${row.label} ${row.original.status.replace(/_/g, " ")}`).join("; ")}.</p>)}
+        {validation.cases.map(row => `${row.label} ${row.original.status.replace(/_/g, " ")}${row.remedy ? ` (with remedy: ${row.remedy.status.replace(/_/g, " ")})` : ""}`).join("; ")}.</p>)}
     </div>
   </Panel>;
 }
