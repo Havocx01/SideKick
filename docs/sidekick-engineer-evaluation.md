@@ -65,6 +65,35 @@ For any later paid evaluation, explicitly agree the provider/model, maximum spen
 
 Reject an output that invents a measurement or link, crosses evidence/owner/partition boundaries, asserts a physical failure cause, approves deployment, or launches a job. Count rejected output and evidence-only fallback as separate outcomes. A fallback can remain useful but is not a successful AI response. Keep edited human briefs and original evidence distinct.
 
+## Compare fixed-suite review with an adaptive investigation
+
+Use the agreed sheet above with one equipment family, one model-selection decision and one reviewing engineer. Prepare two arms on the same fitted context, criterion, fault profile and experiment budget:
+
+- **Fixed suite:** the `fixed` benchmark strategy's cases, run with `--run` and reviewed in the workbench.
+- **Adaptive investigation:** a Nemotron or `climb` investigation started from the same seed cases, with its reductions and remedy comparisons.
+
+Before the sessions, have the engineer review the profile's constraints and mark each as relevant, doubtful or wrong. A constraint marked wrong blocks the study until the profile is revised. Rotate the arm order across matched cases and record prior familiarity.
+
+For each arm, ask without coaching:
+
+1. Is the discovered scenario relevant to this equipment? Why?
+2. Are the assumptions it relies on defensible?
+3. Does the evidence change your proposed next action? What would you do now?
+
+| Measure | Observed or self-reported | Fixed suite | Adaptive |
+|---|---|---|---|
+| Time to a recorded decision (seconds, excluding waiting) | Observed | | |
+| Waiting time for experiments or provider calls | Observed | | |
+| Relevant findings, by the engineer's answer | Observed | | |
+| Incorrect interpretations (coverage, partition, hypothesis read as measurement) | Observed | | |
+| Manual verification steps the engineer needed | Observed | | |
+| Clarity of the next action (rating and reason) | Self-reported | | |
+| Would use this to choose a model (yes/no and reason) | Self-reported | | |
+
+Keep observed measures and impressions in separate columns. Record provider calls, reported tokens and experiment counts from the public export of each arm. Success is decided before the sessions, for example more relevant findings with no more incorrect interpretations and no more manual verification. If the fixed suite does as well, report that.
+
+The study is complete when the engineer can explain the result, name its limits and choose a supported next action. MotionLogger can later serve as a sensor-acquisition testbed, but it needs a defined maintenance task, labels, provenance and a baseline before it counts as maintenance evidence. Synthetic evidence alone does not establish equipment or financial impact.
+
 ## Report honestly
 
 Save the agreed sheet, anonymized case-level observations, method order, verified answer key, versions and limitations. State whether data are synthetic, historical or representative field records. Report study size, selection bias and learning effects. One successful synthetic workflow does not establish equipment performance or engineering benefit.
