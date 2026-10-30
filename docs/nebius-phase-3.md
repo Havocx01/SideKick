@@ -152,3 +152,14 @@ Each finding stores the criterion and its fingerprint, the evaluation's SHA-256 
 Every attempt is saved with its change, case, finding status, evidence digest, evaluated-history count and whether the matched cohort changed. Reduction has its own allowance (`--max-reduction-experiments`, default 16); cached cases are free. It never adds proposals, attempts or findings to the investigation, so a family is still counted once. Outcomes are `complete`, `partial` (allowance used up), `cancelled`, `interrupted` or `not_reproduced`. Claims only cover what was tested: "component-minimal under tested single-component removals", "minimal on the tested grid for …", and always "not a proof of a global minimum".
 
 `--regression <reduction-id> file.json` exports the final case with its criterion, expected status, context and policy fingerprints, profile and source IDs. `checkRegression` reruns it and refuses a different fitted context or policy.
+
+## Remedies
+
+`--remedy <id> threshold --threshold 0.5` or `--remedy <id> augmented --approve-training` compares a remedy against the original fixed context. Remedies:
+
+- `threshold` reuses the same fitted models with an explicitly chosen warning threshold for the target model. It is an explicit candidate change, so it has its own context fingerprint.
+- `augmented` retrains the same development folds with sampled sensor-fault augmentation and selects its threshold on clean out-of-fold predictions. Training needs `--approve-training` and never reads reserved histories.
+
+The comparison reruns every discovered case, every finished reduction, any regression files (`--regressions a.json b.json`, which must match the context and policy) and every other tested case. For each case it reports the original and remedy finding status, evaluated histories, exclusions, clean and faulted detection and burden, faulted median lead, and whether the matched cohort is the same. `improved` counts failures that became `no_measured_failure` on the same cohort. `degraded` counts previously passing cases that now fail. Clean performance on all development histories is shown for both. `meetsCriteria` means the remedy's clean detection and burden satisfy the saved criterion and nothing degraded. Preparation and evaluation time are recorded as cost.
+
+Reports are saved in the store. They are development-only and were chosen using these cases, so a promising remedy needs fresh validation. Nothing replaces a deployed model.

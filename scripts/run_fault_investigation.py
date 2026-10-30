@@ -15,6 +15,7 @@ from app.faults.investigation import ExperimentRunner, InvestigationBudget, Inve
 from app.faults.replay import load_trusted_context  # noqa: E402
 from app.investigator.findings import FindingCriterion, recordFindings, saveCriterion, summarize  # noqa: E402
 from app.investigator.reduction import reduce, regressionCase  # noqa: E402
+from app.investigator.remedies import compareRemedy  # noqa: E402
 from app.investigator.search import seedSuite  # noqa: E402
 
 MAX_PROPOSAL_FILE_BYTES = 4 * 1024 * 1024
@@ -69,12 +70,16 @@ def main(argv=None):
     action.add_argument("--set-criterion", nargs=2, metavar=("ID", "CRITERION_JSON"), help="Save the finding criterion for an existing investigation.")
     action.add_argument("--reduce", metavar="ATTEMPT_ID", help="Simplify a measured failure through recorded reruns.")
     action.add_argument("--regression", nargs=2, metavar=("REDUCTION_ID", "OUTPUT_JSON"), help="Export a finished reduction as a regression case.")
+    action.add_argument("--remedy", nargs=2, metavar=("ID", "KIND"), help="Compare a remedy (threshold or augmented) on recorded cases.")
     action.add_argument("--cancel", metavar="ID", help="Ask an active or future run to stop.")
     action.add_argument("--resume", metavar="ID", help="Clear a cancellation so the investigation can run again.")
     parser.add_argument("--seed", type=int, default=0, help="Add this many deterministic seed cases with --create.")
     parser.add_argument("--criterion", type=Path, metavar="CRITERION_JSON", help="Finding criterion to save with --create or --attach.")
     parser.add_argument("--max-experiments", type=int, default=16)
     parser.add_argument("--max-reduction-experiments", type=int, default=16)
+    parser.add_argument("--threshold", type=float, help="Warning threshold for a threshold remedy.")
+    parser.add_argument("--approve-training", action="store_true", help="Allow a remedy to retrain development folds.")
+    parser.add_argument("--regressions", type=Path, nargs="*", default=[], help="Regression case files to rerun with --remedy.")
     parser.add_argument("--max-failures", type=int, default=3)
     parser.add_argument("--max-attempts-per-scenario", type=int, default=2)
     parser.add_argument("--max-run-seconds", type=float, default=600)
@@ -148,6 +153,10 @@ def main(argv=None):
         case = regressionCase(store, args.regression[0])
         Path(args.regression[1]).write_text(json.dumps(case, indent=2) + "\n", encoding="utf-8")
         output = {"reduction": args.regression[0], "scenarioId": case["scenarioId"], "path": args.regression[1]}
+    elif args.remedy:
+        regressions = [json.loads(path.read_text(encoding="utf-8")) for path in args.regressions]
+        output = compareRemedy(store, context(args), args.remedy[0], args.remedy[1], threshold=args.threshold,
+            approveTraining=args.approve_training, regressions=regressions)
     elif args.cancel:
         store.request_cancel(args.cancel)
         output = {"investigation_id": args.cancel, "cancel_requested": True}

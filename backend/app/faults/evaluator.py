@@ -142,6 +142,9 @@ class FixedDevelopmentEvaluator:
         """New (uncached) scenarios this evaluator can still execute."""
         return max(0, self.policy.max_evaluations - self._evaluations)
 
+    def snapshot(self):
+        return deepcopy(self._training)
+
     def cleanMetrics(self):
         return {name: aggregate(list(outcomes.values()), config=self._config) for name, outcomes in self._clean.items()}
 
