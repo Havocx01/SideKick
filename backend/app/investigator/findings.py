@@ -10,8 +10,7 @@ from app.faults.evaluator import FaultEvaluation
 from app.faults.investigation import FAILURE_STATUSES
 from app.investigator.records import Frozen
 
-FindingStatus = Literal["measured_failure", "no_measured_failure", "inconclusive", "not_applicable",
-    "invalid_proposal", "execution_error"]
+FindingStatus = Literal["measured_failure", "no_measured_failure", "inconclusive", "not_applicable", "invalid_proposal", "execution_error"]
 EffectKind = Literal["missed_warnings", "late_warnings", "alarm_burden"]
 WarningState = Literal["detected", "late", "missed"]
 
@@ -145,8 +144,7 @@ def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, propos
     if (clean.early_alarm_burden is not None and faulted.early_alarm_burden is not None
             and faulted.early_alarm_burden > criterion.max_alarm_burden
             and faulted.early_alarm_burden - clean.early_alarm_burden >= criterion.min_burden_increase):
-        effects.append(Effect(kind="alarm_burden", histories=tuple(noisier),
-            clean_value=clean.early_alarm_burden, faulted_value=faulted.early_alarm_burden))
+        effects.append(Effect(kind="alarm_burden", histories=tuple(noisier), clean_value=clean.early_alarm_burden, faulted_value=faulted.early_alarm_burden))
     status = "inconclusive" if reasons else "measured_failure" if effects else "no_measured_failure"
     return Finding(status=status, reasons=tuple(reasons), effects=tuple(effects), support=tuple(support), **base)
 

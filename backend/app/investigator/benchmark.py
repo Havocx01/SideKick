@@ -101,8 +101,7 @@ def benchmark(contexts, criterion, strategies, *, budget=16, seeds=(0, 1, 2), se
             for seed in seeds:
                 evaluator = makeEvaluator()
                 propose = factory(evaluator.policy, evaluator.config, np.random.default_rng(seed))
-                runs.append({"context": label, "strategy": name, "seed": seed,
-                    **runStrategy(evaluator, criterion, propose, budget, seedCases)})
+                runs.append({"context": label, "strategy": name, "seed": seed, **runStrategy(evaluator, criterion, propose, budget, seedCases)})
 
     summary = {}
     for name in strategies:

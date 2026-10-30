@@ -19,8 +19,7 @@ UNREACHABLE = {"components": [component(onset_before_failure=500)]}
 
 
 def fixed(fitted, lr=.95):
-    return FixedDevelopmentEvaluator(fitted, {LR: lr, AGE: 60.0},
-        FaultPolicy(allowed_sensors=("temp_bearing", "vibration_rms", "oil_particles")))
+    return FixedDevelopmentEvaluator(fitted, {LR: lr, AGE: 60.0}, FaultPolicy(allowed_sensors=("temp_bearing", "vibration_rms", "oil_particles")))
 
 
 def evaluate(engine, scenario):

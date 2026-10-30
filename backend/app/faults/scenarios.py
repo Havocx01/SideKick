@@ -146,8 +146,7 @@ class FaultPolicy(Strict):
         if self.profile is None:
             return ()
         sensors = {atom.sensor for atom in case.components}
-        return tuple(f"{item.rule} ({item.provenance.replace('_', ' ')})" for item in self.profile.constraints
-            if not item.sensors or sensors & set(item.sensors))
+        return tuple(f"{item.rule} ({item.provenance.replace('_', ' ')})" for item in self.profile.constraints if not item.sensors or sensors & set(item.sensors))
 
     def check(self, case: FaultCase, config: ExperimentConfig):
         if len(case.components) > self.max_components:

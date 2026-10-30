@@ -215,8 +215,7 @@ class InvestigationService:
         recorded = self.store.result(attempt)
         rerun = self.evaluator(context).evaluate(recorded.scenario)
         expected = digest(recorded.model_dump(mode="json"))
-        return {"attempt": attempt, "scenarioId": recorded.scenario_id, "matches": digest(rerun.model_dump(mode="json")) == expected,
-            "evidenceDigest": expected}
+        return {"attempt": attempt, "scenarioId": recorded.scenario_id, "matches": digest(rerun.model_dump(mode="json")) == expected, "evidenceDigest": expected}
 
     def export(self, owner, investigation):
         return self.view(owner, investigation).model_dump(mode="json")

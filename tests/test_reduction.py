@@ -5,9 +5,10 @@ import pytest
 from app.faults.evaluator import FixedDevelopmentEvaluator
 from app.faults.investigation import ExperimentRunner, InvestigationBudget, InvestigationStore
 from app.faults.profiles import loadPolicy
-from app.faults.scenarios import FaultPolicy
+from app.faults.scenarios import FaultCase, FaultPolicy
 from app.investigator.findings import FindingCriterion, recordFindings, saveCriterion
-from app.investigator.reduction import ReductionError, checkRegression, loadReduction, reduce, regressionCase
+from app.investigator.findings import classify
+from app.investigator.reduction import ReductionError, loadReduction, reduce, regressionCase
 from test_compound_faults import component, fitted as fitted  # noqa: F401
 
 LR = "logistic_regression/lr-probe"
@@ -118,11 +119,9 @@ def test_regression_case_reproduces_and_is_bound_to_its_context(fitted, tmp_path
     assert regression["expected"] == "measured_failure" and regression["profile"] == "synthetic-rotating-v1"
     assert regression["source"] == {"investigation": investigation, "attempt": finding.attempt_id, "reduction": reduction["id"]}
     json.dumps(regression)
-    result, passed = checkRegression(engine, regression)
-    assert passed and result.status == "measured_failure"
-    other = FixedDevelopmentEvaluator(fitted, {LR: .9}, engine.policy)
-    with pytest.raises(ReductionError, match="different fitted context"):
-        checkRegression(other, regression)
+    assert regression["contextFingerprint"] == engine.context_fingerprint and regression["policyFingerprint"] == engine.policy.fingerprint
+    rerun = classify(engine.evaluate(FaultCase.model_validate(regression["scenario"])), FindingCriterion.model_validate(regression["criterion"]))
+    assert rerun.status == regression["expected"]
     cancelled = reduce(store, engine, finding.attempt_id, cancelled=lambda: True)
     with pytest.raises(ReductionError, match="finished reduction"):
         regressionCase(store, cancelled["id"])

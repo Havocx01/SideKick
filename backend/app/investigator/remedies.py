@@ -34,8 +34,7 @@ def augmentedRemedy(evaluator, *, approveTraining=False):
     snapshot = evaluator.snapshot()
     config = snapshot.config
     # Development-only retraining on the same folds; reserved histories are never used.
-    training = train_development(snapshot.dataset, config=config, splits=snapshot.splits,
-        candidates=[AugmentedXGBoostCandidate("remedy", {"n_estimators": 120})])
+    training = train_development(snapshot.dataset, config=config, splits=snapshot.splits, candidates=[AugmentedXGBoostCandidate("remedy", {"n_estimators": 120})])
     choices = pick_thresholds(training, default_criteria(config), config=config)
     name = next(iter(choices))
     return FixedDevelopmentEvaluator(training, {name: choices[name].threshold}, evaluator.policy), name
@@ -55,8 +54,7 @@ def caseSuite(store, investigation, evaluator, regressions):
             cases.append({"label": f"{label}:{finding.family}", "source": finding.attempt_id, "scenario": store.result(finding.attempt_id).scenario})
     with store.transaction() as db:
         ensureReductions(db)
-        rows = db.execute("SELECT id, payload FROM reductions WHERE investigation=? AND status IN ('complete','partial') ORDER BY created",
-            (investigation,)).fetchall()
+        rows = db.execute("SELECT id, payload FROM reductions WHERE investigation=? AND status IN ('complete','partial') ORDER BY created", (investigation,)).fetchall()
     for reduction, payload in rows:
         cases.append({"label": f"reduced:{json.loads(payload)['family']}", "source": reduction, "scenario": FaultCase.model_validate(json.loads(payload)["final"])})
     for regression in regressions:

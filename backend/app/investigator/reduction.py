@@ -184,10 +184,3 @@ def regressionCase(store, reduction) -> dict:
         "contextFingerprint": record.context_fingerprint, "policyFingerprint": record.policy.fingerprint,
         "profile": record.policy.profile.id if record.policy.profile else None,
         "source": {"investigation": saved["investigation"], "attempt": saved["sourceAttempt"], "reduction": saved["id"]}}
-
-
-def checkRegression(evaluator, regression: dict):
-    if regression["contextFingerprint"] != evaluator.context_fingerprint or regression["policyFingerprint"] != evaluator.policy.fingerprint:
-        raise ReductionError("Regression case belongs to a different fitted context or policy")
-    finding = classify(evaluator.evaluate(FaultCase.model_validate(regression["scenario"])), FindingCriterion.model_validate(regression["criterion"]))
-    return finding, finding.status == regression["expected"]

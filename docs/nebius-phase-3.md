@@ -151,7 +151,7 @@ Each finding stores the criterion and its fingerprint, the evaluation's SHA-256 
 
 Every attempt is saved with its change, case, finding status, evidence digest, evaluated-history count and whether the matched cohort changed. Reduction has its own allowance (`--max-reduction-experiments`, default 16); cached cases are free. It never adds proposals, attempts or findings to the investigation, so a family is still counted once. Outcomes are `complete`, `partial` (allowance used up), `cancelled`, `interrupted` or `not_reproduced`. Claims only cover what was tested: "component-minimal under tested single-component removals", "minimal on the tested grid for …", and always "not a proof of a global minimum".
 
-`--regression <reduction-id> file.json` exports the final case with its criterion, expected status, context and policy fingerprints, profile and source IDs. `checkRegression` reruns it and refuses a different fitted context or policy.
+`--regression <reduction-id> file.json` exports the final case with its criterion, expected status, context and policy fingerprints, profile and source IDs. `--remedy … --regressions file.json` reruns it and refuses a different fitted context or policy.
 
 ## Remedies
 
