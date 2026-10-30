@@ -4,7 +4,9 @@ Sidekick tests whether equipment failure warnings survive missing, frozen or dri
 
 Built for ABB Accelerator 2026, Theme 1
 
-The Nebius x NVIDIA adaptation includes Token Factory configuration and provider-specific permission ([setup](docs/nebius-phase-1.md)), a compound-fault evaluator with fixed development models and local replay ([evaluation guide](docs/nebius-phase-2.md)), and a Nemotron controller that chooses experiments from measured results under saved call/token limits ([investigation guide](docs/nebius-phase-3.md)). The controller is a developer CLI; existing browser protocols remain single-sensor.
+The Nebius x NVIDIA adaptation adds fault investigations. NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b` on Nebius Token Factory) proposes compound sensor-fault experiments under saved call and token limits. Sidekick runs them against fixed development models, classifies the results with code, reduces failures to simpler cases and compares remedies. Use it from the **Investigations** workbench, the HTTP API or the CLI. See the [setup](docs/nebius-phase-1.md), [evaluation](docs/nebius-phase-2.md) and [investigation](docs/nebius-phase-3.md) guides and the [submission notes](docs/nebius-submission.md). Existing experiment protocols remain single-sensor.
+
+Run the whole investigation on synthetic data with one command, with no API key: `.venv\Scripts\python.exe scripts/demo_investigation.py`.
 
 [Public demo](https://sidekick-e9lu.onrender.com/) · [Reviewer walkthrough](SUBMISSION.md)
 
