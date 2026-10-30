@@ -22,12 +22,12 @@ For real Nemotron proposals, configure the server-side Nebius key and explicit w
 
 ## Evidence to inspect
 
-- [Live Nemotron run](evidence/investigations/nemotron-live-recorded.json): three accepted proposals with full 22-history coverage; no qualifying failure.
-- [Compound demonstration](evidence/investigations/compound-demo-recorded.json): a supplied stuck-sensor case reduced useful warnings from 22/22 to 8/22 at the demonstration threshold, then replayed and reduced.
-- [Fresh synthetic validation](evidence/investigations/fresh-validation-recorded.json): the remedy resolved the reduced case but left the stronger case failing.
+- [Nemotron on the default context](evidence/investigations/nemotron-live-default.json): three accepted proposals with full 22-history coverage; no qualifying failure. Its [recorded comparison](evidence/benchmarks/nemotron-default-context.json) found no failure for any strategy.
+- [A failure Nemotron chose](evidence/investigations/nemotron-live-browser.json): started from the browser; one lost warning that replayed and reduced but did not reproduce on fresh histories.
+- [Supplied compound demonstration](evidence/investigations/nemotron-live-demo.json): 22/22 to 18/22 useful warnings at the demonstration threshold; replayed, reduced, remedied in development, still failing on fresh histories.
 - [Default-threshold example](evidence/investigations/synthetic-recorded.json): six supplied cases with no measured failure.
 
-These aggregate exports contain no raw histories, equipment identifiers, private objectives, fitted objects or credentials. Their digests establish integrity, not authenticity. They preserve their original source/context identities; rerunning current code may produce different fitted results.
+These aggregate exports contain no raw histories, equipment identifiers, private objectives, fitted objects or credentials. Their digests establish integrity, not authenticity. They were made from the final code; a fresh checkout reproduces their measurements, while replay digests are checked per platform.
 
 ## Three-minute demonstration
 
