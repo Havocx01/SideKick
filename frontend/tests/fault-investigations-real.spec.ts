@@ -38,7 +38,8 @@ test("a real run starts once despite repeated clicks and a refresh", async ({ pa
 test("a finished investigation replays, reduces, compares a remedy and exports through the browser", async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true"));
   await page.goto("/investigations");
-  await page.getByRole("link", { name: /^Demo: find sensor faults/ }).click();
+  await page.getByRole("link", { name: /^Demo: find sensor faults/ }).first().click();
+  await expect(page).toHaveURL(/\/investigations\/[0-9a-f-]{36}$/);
   const id = page.url().split("/").pop()!;
   const before = await saved(page, id);
   const card = page.getByRole("article", { name: /Measured failure: oil_particles:stuck\+vibration_rms:stuck/ });

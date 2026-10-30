@@ -46,3 +46,8 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/settings.json
+/Idea Phase/
+/media/
+/evidence/archive/
+/docs/judging-guide.md
+/docs/sidekick-review-sessions.md
