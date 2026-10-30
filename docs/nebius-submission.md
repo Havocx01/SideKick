@@ -40,5 +40,4 @@ No live Nemotron inference has been verified yet. Everything below comes from lo
 ## Still needed from the owner
 
 - A live smoke run on Windows: `docs/nebius-phase-3.md` → Live smoke run, saving `output/live-capture.json`. Then add Nemotron to the benchmark with `--recorded`.
-- A project licence at the repository root. Component notices (MIT) are preserved.
 - The demo URL, a public video of at most three minutes, and Nebius/NVIDIA feedback based on that live usage: structured output, reasoning controls, latency, errors.
