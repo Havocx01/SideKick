@@ -10,6 +10,7 @@ from app.faults.investigation import ExperimentRunner, InvestigationBudget, Inve
 from app.faults.replay import load_trusted_context
 from app.investigator.controller import ControllerLimits, NemotronController, controllerStatus
 from app.investigator.findings import digest, loadCriterion, recordFindings, saveCriterion, summarize
+from app.investigator.publication import publicExport
 from app.investigator.reduction import ensureTable as ensureReductions, reduce
 from app.investigator.remedies import compareRemedy, ensureTable as ensureRemedies
 from app.investigator.schemas import CleanMetrics, ContextInfo, InvestigationEvent, InvestigationSummary, InvestigationView, ProposalDetail
@@ -219,6 +220,10 @@ class InvestigationService:
 
     def export(self, owner, investigation):
         return self.view(owner, investigation).model_dump(mode="json")
+
+    def publicExport(self, owner, investigation):
+        context, _ = self.owned(owner, investigation)
+        return publicExport(self.store, investigation, contextName=context)
 
     def wait(self, investigation, timeout=60):
         with self.lock:

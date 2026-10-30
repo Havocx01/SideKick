@@ -107,3 +107,8 @@ def replay(investigation: str, attempt: str, request: Request):
 @router.get("/{investigation}/export")
 def export(investigation: str, request: Request):
     return call(service(request).export, library_owner(request), investigation)
+
+
+@router.get("/{investigation}/public-export")
+def publicExport(investigation: str, request: Request):
+    return call(service(request).publicExport, library_owner(request), investigation)

@@ -144,13 +144,14 @@ function Detail({ data, reload }: { data: InvestigationView; reload: () => void 
     try { await action(); reload(); } catch (failure) { setError(errorText(failure)); } finally { setBusy(""); }
   }
 
-  async function exportEvidence() {
-    await act("export", async () => {
-      const response = await fetch(investigations.exportUrl(data.id), { headers: { "X-Sidekick-Request": "1" } });
+  async function exportEvidence(kind: "export" | "public") {
+    await act(kind, async () => {
+      const url = kind === "public" ? investigations.publicExportUrl(data.id) : investigations.exportUrl(data.id);
+      const response = await fetch(url, { headers: { "X-Sidekick-Request": "1" } });
       if (!response.ok) throw new Error(`Export failed (${response.status}). Try again.`);
       const link = document.createElement("a");
       link.href = URL.createObjectURL(new Blob([JSON.stringify(await response.json(), null, 2)], { type: "application/json" }));
-      link.download = `sidekick-investigation-${data.id.slice(0, 8)}.json`;
+      link.download = `sidekick-investigation-${data.id.slice(0, 8)}${kind === "public" ? "-public" : ""}.json`;
       document.body.append(link); link.click(); link.remove();
     });
   }
@@ -177,7 +178,11 @@ function Detail({ data, reload }: { data: InvestigationView; reload: () => void 
     <Proposals proposals={data.proposals} />
     {data.reductions.length > 0 && <Reductions reductions={data.reductions} />}
     <Remedies data={data} busy={busy} act={act} />
-    <div className={styles.actions}><Button variant="secondary" onClick={exportEvidence} loading={busy === "export"}><Download size={16} aria-hidden="true" />Export evidence</Button></div>
+    <div className={styles.actions}>
+      <Button variant="secondary" onClick={() => exportEvidence("export")} loading={busy === "export"}><Download size={16} aria-hidden="true" />Export evidence</Button>
+      <Button variant="ghost" onClick={() => exportEvidence("public")} loading={busy === "public"}><Download size={16} aria-hidden="true" />Public evidence</Button>
+      <span className={styles.footnote}>Public evidence leaves out the concern, equipment IDs and raw readings.</span>
+    </div>
   </>;
 }
 

@@ -253,3 +253,19 @@ The coordinator accepts only a result whose job ID and manifest digest match the
 - Remote results are identical to local execution, because the evaluation is deterministic.
 
 Context packages contain raw development data, so remote execution needs `--allow-transfer`, and local execution remains the default. The outbox and inbox can be shared folders or a synced object store. Workers never touch the SQLite file. GPUs and serverless endpoints are unnecessary for these small tabular models; measure a real workload before adding them.
+
+## Public evidence
+
+`--public-export <id> file.json`, `GET /api/investigations/{id}/public-export` and the workbench's **Public evidence** button all write the same file. It is separate from the private replay package and contains:
+
+- the context, configuration and policy fingerprints, fixed thresholds, bounds and profile constraints with their provenance
+- the finding criterion, budget use, and proposal, rejection and duplicate counts
+- every tested case's parameters, finding status, coverage, clean and faulted metrics, effect counts and the assumptions it relies on
+- discovery families
+- the controller's model, prompt version, reasoning effort, call count, and reserved and reported tokens
+- reduction steps and claims, and remedy comparisons
+- reproduction steps when the profile is synthetic
+
+It leaves out the objective, equipment IDs, per-history support, raw readings, fitted objects, keys and request IDs. A SHA-256 digest of the content shows the file is unchanged; it does not show who made it or that it may be shared. Non-synthetic contexts are marked as not publicly replayable.
+
+`evidence/investigations/synthetic-recorded.json` is a recorded example made with the steps above: the default synthetic package, its automatically selected thresholds, three seed cases and three compound cases. It contains no live inference, and none of the six cases is a measured failure under the default criterion. It shows the export format and an honest null result; it is not a demonstration of discovered failures.

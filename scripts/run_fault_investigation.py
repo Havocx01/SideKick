@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.faults.investigation import ExperimentRunner, InvestigationBudget, InvestigationStore  # noqa: E402
 from app.faults.replay import load_trusted_context  # noqa: E402
 from app.investigator.findings import FindingCriterion, recordFindings, saveCriterion, summarize  # noqa: E402
+from app.investigator.publication import publicExport  # noqa: E402
 from app.investigator.reduction import reduce, regressionCase  # noqa: E402
 from app.investigator.remedies import compareRemedy  # noqa: E402
 from app.investigator.search import seedSuite  # noqa: E402
@@ -71,6 +72,7 @@ def main(argv=None):
     action.add_argument("--reduce", metavar="ATTEMPT_ID", help="Simplify a measured failure through recorded reruns.")
     action.add_argument("--regression", nargs=2, metavar=("REDUCTION_ID", "OUTPUT_JSON"), help="Export a finished reduction as a regression case.")
     action.add_argument("--remedy", nargs=2, metavar=("ID", "KIND"), help="Compare a remedy (threshold or augmented) on recorded cases.")
+    action.add_argument("--public-export", nargs=2, metavar=("ID", "OUTPUT_JSON"), help="Write aggregate evidence without private data.")
     action.add_argument("--cancel", metavar="ID", help="Ask an active or future run to stop.")
     action.add_argument("--resume", metavar="ID", help="Clear a cancellation so the investigation can run again.")
     parser.add_argument("--seed", type=int, default=0, help="Add this many deterministic seed cases with --create.")
@@ -166,6 +168,10 @@ def main(argv=None):
         regressions = [json.loads(path.read_text(encoding="utf-8")) for path in args.regressions]
         output = compareRemedy(store, context(args), args.remedy[0], args.remedy[1], threshold=args.threshold,
             approveTraining=args.approve_training, regressions=regressions)
+    elif args.public_export:
+        evidence = publicExport(store, args.public_export[0])
+        Path(args.public_export[1]).write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        output = {"investigation_id": args.public_export[0], "digest": evidence["digest"], "path": args.public_export[1]}
     elif args.cancel:
         store.request_cancel(args.cancel)
         output = {"investigation_id": args.cancel, "cancel_requested": True}

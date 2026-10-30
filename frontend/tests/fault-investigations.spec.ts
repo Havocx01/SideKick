@@ -54,6 +54,7 @@ async function fixture(page: Page, initial: InvestigationView, contexts: Context
     }
     if (path === "/api/investigations/contexts") return route.fulfill({ json: contexts });
     if (path === "/api/investigations") return route.fulfill({ json: [initial] });
+    if (path.endsWith("/public-export")) return route.fulfill({ json: { version: 1, digest: "e".repeat(64) } });
     if (path.endsWith("/export")) return route.fulfill({ json: state.current });
     state.gets++;
     if (state.current.active && state.gets > 2) state.current = finished();
@@ -159,6 +160,9 @@ test("remedies need approval for retraining and evidence exports as JSON", async
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export evidence" }).click();
   expect((await download).suggestedFilename()).toBe("sidekick-investigation-inv-1.json");
+  const publicDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Public evidence" }).click();
+  expect((await publicDownload).suggestedFilename()).toBe("sidekick-investigation-inv-1-public.json");
 });
 
 for (const width of [390, 1280]) {
