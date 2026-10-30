@@ -25,6 +25,7 @@ from app.investigator.controller import controllerStatus  # noqa: E402
 from app.investigator.findings import FindingCriterion  # noqa: E402
 from app.investigator.publication import publicExport  # noqa: E402
 from app.investigator.reduction import regressionCase  # noqa: E402
+from app.investigator.validation import assess, freeze, freshSynthetic  # noqa: E402
 from app.investigator.schemas import InvestigationCreate, ReduceRequest, RemedyRequest, StartRequest  # noqa: E402
 from app.investigator.service import InvestigationService  # noqa: E402
 from app.models.candidates import LogisticRegressionCandidate  # noqa: E402
@@ -63,6 +64,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", type=Path, default=ROOT / "artifacts" / "investigations", help="Investigation registry and store.")
     parser.add_argument("--output", type=Path, default=ROOT / "output" / "demo-public-evidence.json")
+    parser.add_argument("--fresh-seed", type=int, help="Seed for the fresh synthetic histories used once for validation; defaults to one per investigation.")
     parser.add_argument("--allow-nebius", action="store_true", help="Also let Nemotron propose cases; sends the objective and aggregate results to Nebius.")
     parser.add_argument("--max-provider-calls", type=int, default=4)
     parser.add_argument("--max-completion-tokens", type=int, default=16384)
@@ -119,10 +121,16 @@ def main(argv=None):
             clean = remedy["clean"]
             print(f"Remedy threshold 0.5: improved {remedy['improved']}, degraded {remedy['degraded']}, still failing {remedy['stillFailing']}, "
                 f"meets criteria {remedy['meetsCriteria']}")
-            print(f"  Clean histories: useful warnings {clean['original']['detection']:.0%} -> {clean['remedy']['detection']:.0%}, alarm burden "
+            print(f"  Development clean histories: useful warnings {clean['original']['detection']:.0%} -> {clean['remedy']['detection']:.0%}, alarm burden "
                 f"{clean['original']['alarmBurden']:.3f} -> {clean['remedy']['alarmBurden']:.3f}, median lead {clean['original']['medianLead']} -> "
                 f"{clean['remedy']['medianLead']} cycles; {sum(row['remedy']['exclusions'] for row in remedy['cases'])} exclusions; "
                 f"{remedy['cost']['prepareSeconds'] + remedy['cost']['evaluateSeconds']:.1f}s")
+            frozen = freeze(service.store, investigation, remedyThreshold=.5)
+            engine = service.evaluator(name)
+            report = assess(service.store, frozen["id"], engine, freshSynthetic(engine.config, args.fresh_seed if args.fresh_seed is not None else int(investigation[:6], 16)))
+            print(f"Frozen procedure {frozen['procedureDigest'][:12]}, assessed once on {report['freshHistories']} fresh synthetic histories:")
+            for row in report["cases"]:
+                print(f"  {row['label']}: {row['original']['status']} (remedy: {row['remedy']['status']})")
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(publicExport(service.store, investigation, contextName=name, demonstration=DEMONSTRATION), indent=2) + "\n", encoding="utf-8")
         print(f"Public evidence: {args.output}")

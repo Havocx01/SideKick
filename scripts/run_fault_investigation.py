@@ -70,12 +70,17 @@ def main(argv=None):
     action.add_argument("--findings", metavar="ID", help="Classify recorded results with the saved criterion; no model context or provider call.")
     action.add_argument("--set-criterion", nargs=2, metavar=("ID", "CRITERION_JSON"), help="Save the finding criterion for an existing investigation.")
     action.add_argument("--replay", metavar="ID", help="Rerun every completed experiment and compare it with the saved evidence.")
+    action.add_argument("--freeze", metavar="ID", help="Freeze the discovered cases, reductions, criterion and optional --threshold remedy for validation.")
+    action.add_argument("--validate", metavar="VALIDATION_ID", help="Assess a frozen procedure once on fresh histories (--fresh or --fresh-synthetic).")
     action.add_argument("--reduce", metavar="ATTEMPT_ID", help="Simplify a measured failure through recorded reruns.")
     action.add_argument("--regression", nargs=2, metavar=("REDUCTION_ID", "OUTPUT_JSON"), help="Export a finished reduction as a regression case.")
     action.add_argument("--remedy", nargs=2, metavar=("ID", "KIND"), help="Compare a remedy (threshold or augmented) on recorded cases.")
     action.add_argument("--public-export", nargs=2, metavar=("ID", "OUTPUT_JSON"), help="Write aggregate evidence without private data.")
     action.add_argument("--cancel", metavar="ID", help="Ask an active or future run to stop.")
     action.add_argument("--resume", metavar="ID", help="Clear a cancellation so the investigation can run again.")
+    parser.add_argument("--fresh", type=Path, help="CSV of fresh histories with the development sensors and new equipment identifiers.")
+    parser.add_argument("--fresh-synthetic", type=int, metavar="SEED", help="Generate fresh synthetic histories from this seed.")
+    parser.add_argument("--fresh-count", type=int, default=12)
     parser.add_argument("--seed", type=int, default=0, help="Add this many deterministic seed cases with --create.")
     parser.add_argument("--criterion", type=Path, metavar="CRITERION_JSON", help="Finding criterion to save with --create or --attach.")
     parser.add_argument("--max-experiments", type=int, default=16)
@@ -164,6 +169,20 @@ def main(argv=None):
         store.get(args.replay).check_context(fixed)
         checks = [replayCheck(store, fixed, item.id) for item in store.load(args.replay).attempts if item.status == "completed"]
         output = {"investigation_id": args.replay, "checks": checks, "allMatch": bool(checks) and all(item["matches"] for item in checks), "provider_requests": 0}
+    elif args.freeze:
+        from app.investigator.validation import freeze
+        output = freeze(store, args.freeze, remedyThreshold=args.threshold)
+    elif args.validate:
+        from app.investigator.validation import assess, freshSynthetic
+        if (args.fresh is None) == (args.fresh_synthetic is None):
+            parser.error("--validate needs exactly one of --fresh or --fresh-synthetic")
+        fixed = context(args)
+        if args.fresh:
+            from app.data.loader import load_dataset
+            fresh = load_dataset("csv", path=args.fresh, config=fixed.config)
+        else:
+            fresh = freshSynthetic(fixed.config, args.fresh_synthetic, args.fresh_count)
+        output = assess(store, args.validate, fixed, fresh)
     elif args.reduce:
         output = reduce(store, context(args), args.reduce, maxExperiments=args.max_reduction_experiments)
     elif args.regression:

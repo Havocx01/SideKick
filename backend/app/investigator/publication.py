@@ -7,6 +7,7 @@ from app.investigator.controller import controllerStatus
 from app.investigator.findings import digest, family, loadCriterion, recordFindings
 from app.investigator.reduction import ensureTable as ensureReductions
 from app.investigator.remedies import ensureTable as ensureRemedies, stillFailing
+from app.investigator.validation import ensureTables as ensureValidations
 
 NOTICE = ("Aggregate development evidence. The objective, equipment identifiers, raw readings, fitted models and keys are excluded. "
     "The digest shows this file is unchanged, not who made it or that it may be disclosed.")
@@ -49,7 +50,9 @@ def publicExport(store, investigation, *, contextName=None, demonstration=None) 
     with store.transaction() as db:
         ensureReductions(db)
         ensureRemedies(db)
+        ensureValidations(db)
         reductions = [json.loads(row[0]) for row in db.execute("SELECT payload FROM reductions WHERE investigation=? ORDER BY created", (investigation,))]
+        validations = [json.loads(row[0]) for row in db.execute("SELECT payload FROM validations WHERE investigation=? ORDER BY created", (investigation,))]
         remedies = [json.loads(row[0]) for row in db.execute("SELECT payload FROM remedies WHERE investigation=? ORDER BY created", (investigation,))]
 
     profile = record.policy.profile
@@ -88,6 +91,8 @@ def publicExport(store, investigation, *, contextName=None, demonstration=None) 
             "cases": [{"label": row["label"], "scenarioId": row["scenarioId"], "original": row["original"], "remedy": row["remedy"],
                 "matchedCohort": row["matchedCohort"], "improved": row["improved"], "degraded": row["degraded"]} for row in item["cases"]],
             "note": item["note"]} for item in remedies],
+        "validations": [{key: item.get(key) for key in ("status", "procedureDigest", "freshHistories", "clean", "cases", "note")}
+            | {"remedy": item["procedure"]["remedy"], "frozenCases": len(item["procedure"]["cases"])} for item in validations],
         "reproduction": reproduction(profile, contextName),
     }
     return {**content, "digest": digest(content)}

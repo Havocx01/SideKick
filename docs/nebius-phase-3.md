@@ -171,6 +171,22 @@ The comparison reruns every discovered case, every finished reduction, any regre
 
 Reports are saved in the store. They are development-only and were chosen using these cases, so a promising remedy needs fresh validation. Nothing replaces a deployed model.
 
+## Independent validation
+
+Discovery, reduction and remedy choice all use the same development histories, so their results are exploratory. Validation keeps them apart:
+
+```powershell
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store <store> --freeze <id> --threshold 0.5
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store <store> --context <package> --trust-local-artifact --validate <validation-id> --fresh fresh.csv
+```
+
+- `--freeze` records the procedure before any fresh history is read: every discovered case, every finished reduction, the finding criterion, the optional threshold remedy, and the context, policy, model and prompt identities. The record carries a digest.
+- `--validate` assesses that frozen procedure once. Models are refit on all development histories and score only the fresh ones; the clean comparison and every frozen case are classified with the saved criterion.
+- An exposure ledger in the investigation store holds every history ever read: the development histories, the NASA FD001 identities in `evidence/history-identities.json` and every fresh set. Identity is content, not name, so renaming a history does not make it fresh. Fresh histories enter the ledger before scoring, so an interrupted assessment still uses them up.
+- A procedure is assessed once. Freezing a changed procedure is allowed, but it needs another set of fresh histories.
+
+`--fresh-synthetic SEED` generates fresh synthetic histories for demonstrations. Previously inspected NASA results cannot become a sealed holdout.
+
 ## Search benchmark
 
 `scripts/benchmark_search.py --output report.json` compares search strategies on the synthetic fixture. Every strategy gets:

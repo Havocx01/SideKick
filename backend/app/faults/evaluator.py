@@ -188,7 +188,9 @@ class FixedDevelopmentEvaluator:
             raise ValueError("Select between one and ten known fitted model thresholds")
         if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in thresholds.values()):
             raise ValueError("Every fixed threshold must be finite")
-        if not 2 <= len(training.folds) <= 10 or len(training.folds) != len(training.splits.folds):
+        # One fold with no training histories is a fresh-history context scored by models fitted on other data.
+        external = len(training.folds) == 1 and not training.folds[0].train_engines
+        if not (2 <= len(training.folds) <= 10 or external) or len(training.folds) != len(training.splits.folds):
             raise ValueError("Fitted fold count is outside the evaluation limit")
         if not set(self.policy.allowed_sensors) <= set(training.dataset.sensors):
             raise ValueError("Policy sensors are outside the fitted mapping")
