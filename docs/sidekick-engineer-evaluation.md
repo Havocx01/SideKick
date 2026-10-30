@@ -90,6 +90,8 @@ For each arm, ask without coaching:
 | Clarity of the next action (rating and reason) | Self-reported | | |
 | Would use this to choose a model (yes/no and reason) | Self-reported | | |
 
+For a short first session without any setup, use the recorded runs on the **Investigations** page (hosted or local): `nemotron-live-browser` has a Nemotron-chosen failure that did not survive fresh validation next to a supplied failure that did, which tests whether the engineer reads development findings and validation correctly. Ask the same three questions and record the same observed measures; label the session as recorded synthetic evidence.
+
 Keep observed measures and impressions in separate columns. Record provider calls, reported tokens and experiment counts from the public export of each arm. Success is decided before the sessions, for example more relevant findings with no more incorrect interpretations and no more manual verification. If the fixed suite does as well, report that.
 
 The study is complete when the engineer can explain the result, name its limits and choose a supported next action. MotionLogger can later serve as a sensor-acquisition testbed, but it needs a defined maintenance task, labels, provenance and a baseline before it counts as maintenance evidence. Synthetic evidence alone does not establish equipment or financial impact.
