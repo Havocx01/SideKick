@@ -24,7 +24,7 @@ To prepare a complete local investigation, run this from the extracted project a
 .venv\Scripts\python.exe scripts/demo_investigation.py
 ```
 
-Then open **Investigations** and select the saved concern beginning **Demo: find sensor faults**. The command trains a synthetic fixture, evaluates supplied cases, reproduces and reduces a failure, compares a threshold remedy, assesses a frozen procedure on fresh synthetic histories and exports public evidence. It makes no provider calls. Its 0.95 warning threshold is deliberately fragile so the demonstration contains a failure; it is not a recommended setting.
+Then open **Investigations** and select the saved concern beginning **Demo: find sensor faults**. The command trains a synthetic fixture, evaluates supplied cases, reproduces and reduces a failure, compares a threshold remedy, assesses a frozen procedure on fresh synthetic histories and exports public evidence. It makes no provider calls. Its 0.95 warning threshold is deliberately fragile so the demonstration contains a failure; it is not a recommended setting. With the Nebius key in `.env`, add `--allow-nebius` to let Nemotron propose further cases within 4 calls and 16,384 completion tokens.
 
 ## Investigation workflow
 

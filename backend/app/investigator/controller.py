@@ -303,8 +303,10 @@ class NemotronController:
             component["sensor"] = channels[component["sensor"]]
         if payload.get("hypothesis"):
             refs = resultRefs(self.store.load(record.id))
-            if any(ref not in refs for ref in payload["hypothesis"]["basedOn"]):
-                raise ValueError("Unknown result reference")
+            unknown = [ref for ref in payload["hypothesis"]["basedOn"] if ref not in refs]
+            if unknown:
+                valid = ", ".join(refs) or "none yet; leave basedOn empty"
+                raise ValueError(f"Unknown result reference {unknown[0][:32]}; basedOn may cite only {valid}")
             payload["hypothesis"]["basedOn"] = [refs[ref] for ref in payload["hypothesis"]["basedOn"]]
         accepted = validateProposal(json.dumps(payload), record, self.evaluator)
         preview = self.evaluator.preview(accepted.scenario)

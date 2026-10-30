@@ -37,25 +37,25 @@ The Git history preserves the earlier project and the individual implementation 
 
 ## Recorded results
 
-All results below are synthetic and specific to their saved fitted contexts.
+Every number below comes from a file in `evidence/`, made from the final code on Windows (Python 3.11.9 with the versions pinned in `docker/runtime-constraints.txt`), replayed exactly and exported without private data. All data is synthetic; real equipment performance and maintenance savings are not established. A fresh Linux clone in the pinned runtime reproduces the demonstration's measurements; prediction bytes can still differ in the last bits between platforms, so replay digests are checked per platform.
 
 ### Live experiment selection
 
-The [recorded live investigation](../evidence/investigations/nemotron-live-recorded.json) used three accepted Nemotron proposals, each evaluated on all 22 development histories. Later proposals referenced earlier measured results. The run reported 1,083 completion tokens, and recorded request times were approximately 2.8–4.1 seconds. None of its scenarios met the failure criterion.
+The [default-context run](../evidence/investigations/nemotron-live-default.json) allowed 4 calls and 16,384 completion tokens. Nemotron made 3 calls, all accepted, reporting 1,121 tokens; each later proposal cited earlier results and tried a new fault family, and each was evaluated on 22 of 22 histories. None met the failure criterion. The [recorded comparison](../evidence/benchmarks/nemotron-default-context.json) on that context, with the same criterion and 4-experiment allowance, found no failure for Nemotron or for the fixed suite, random search and hill climber (5 seeds each). Nemotron cost 3 provider calls and about 15 seconds against about 0.1 seconds for each baseline. It does not establish search superiority. On the [synthetic fixture](../evidence/benchmarks/synthetic-fixture.json) at demonstration thresholds, random search found 5 failure families in 6 of 10 runs, the hill climber 2 in 1 of 10 and the fixed suite none; that comparison is not interchangeable with the live one.
 
-The recorded comparison on that context found no qualifying failure for Nemotron or the fixed, random and hill-climbing comparators under the compared allowance. It does not establish search superiority. An earlier, separate benchmark using different demonstration thresholds found failures with constrained random search; that is not interchangeable with the live comparison.
+### A failure Nemotron chose
 
-### Supplied failure, reduction and remedy
+The [browser-run investigation](../evidence/investigations/nemotron-live-browser.json) was started from the workbench with a 2-call, 8,192-token allowance at the deliberately fragile 0.95 demonstration threshold. Nemotron's one call cited the four earlier results and proposed stuck ambient temperature with a negative bearing-temperature drift. Useful warnings fell from 22/22 to 21/22, a measured failure under the saved criterion. It replayed exactly and reduced to both faults from 20 cycles before failure with a −2.0 SD drift, component-minimal and minimal on the tested grid ([regression](../evidence/regressions/nemotron-live-browser.json)). A 0.5 threshold resolved it. Frozen and assessed once on 12 fresh synthetic histories, it did not reproduce: a one-warning development effect was not robust.
 
-The [compound demonstration](../evidence/investigations/compound-demo-recorded.json) deliberately uses a fragile 0.95 threshold. A supplied stuck vibration/oil-particle case reduced useful warnings from 22/22 to 8/22: six became missed and eight became late. It was not discovered by Nemotron.
+### Supplied failure, reduction, remedy and fresh assessment
 
-The case replayed exactly and reduced to later onsets while retaining both components. Claims are limited to tested single-component removals and the specified grid, not a global minimum. A 0.5 threshold remedy resolved the reduced case and degraded none of the previously passing tested cases, but the stronger original case remained a failure.
-
-### Fresh synthetic assessment
-
-The [frozen-procedure assessment](../evidence/investigations/fresh-validation-recorded.json) used 12 fresh synthetic histories. For the reduced case, the remedy changed useful warnings from 8/12 to 12/12. For the stronger original case it changed 0/12 to 5/12, still a failure. This establishes neither field performance nor general remedy effectiveness.
+The [full demonstration](../evidence/investigations/nemotron-live-demo.json) uses the same 0.95 threshold. A supplied stuck vibration and oil-particle case, not chosen by Nemotron, reduced useful warnings from 22/22 to 18/22. It replayed exactly and reduced to oil particles stuck from 30 and vibration stuck from 60 cycles before failure ([regression](../evidence/regressions/nemotron-live-demo.json)); claims are limited to tested removals and the specified grid. A 0.5 threshold resolved both development cases, degraded none and kept clean detection at 100% while median lead rose from 17 to 19 cycles. Assessed once on 12 fresh synthetic histories, both cases still failed with and without the remedy, so the development improvement did not generalize. Nemotron's two accepted proposals in this run, after one rejected citation, were not failures.
 
 The [default-threshold export](../evidence/investigations/synthetic-recorded.json) contains six supplied cases and no measured failure. Historical NASA FD001 evidence remains exposed and is not a fresh holdout.
+
+### Earlier live checks
+
+Sanitized captures from the first live runs are kept privately. With prompt v3 every reply was rejected: explicit onsets combined with seeds, inapplicable parameters and cross-group pairs. With v4 one reply reached the evaluator but its onset was beyond every development history. Prompt v5 added fault-specific schema alternatives, dataset-aware timing and corrective feedback; every live run since produced scorable experiments.
 
 ### Tavily runtime verification
 
@@ -63,13 +63,14 @@ The initial research action made one successful Tavily request, reporting one cr
 
 ## Service feedback
 
-Token Factory's compatible API fitted the existing Python application. Usage metadata supported saved accounting. Initial domain-invalid replies motivated explicit schema alternatives and timing-coverage feedback; strict JSON alone did not enforce the whole experiment contract. Clear examples of nested alternatives and reasoning-token accounting would help similar integrations.
+Token Factory's compatible API fitted the existing Python application. Usage metadata, including reasoning tokens, supported exact saved accounting. Strict JSON-schema output worked with `$defs`, `$ref`, `anyOf`, `enum` and numeric bounds; we expressed each fault variant with `anyOf` and `enum` rather than `const`, `oneOf` or discriminators. Replies were always well-formed JSON; remaining failures were semantic, such as citing a result that did not exist or annotating a citation with prose, and short local feedback let the next call correct them within the same allowance. With low reasoning effort, recorded calls took about 3 to 6 seconds and reported 290 to 710 completion tokens. Initial domain-invalid replies motivated explicit schema alternatives and timing-coverage feedback; strict JSON alone did not enforce the whole experiment contract. Clear examples of nested alternatives and reasoning-token accounting would help similar integrations.
 
-The small recorded latency and token observations above are not service-wide performance claims. Tavily's first response was irrelevant to the supplied query; source screening and the model's abstention prevented unsupported sensor advice from being treated as evidence.
+These latency and token observations come from a handful of calls and are not service-wide performance claims. Tavily's first response was irrelevant to the supplied query; source screening and the model's abstention prevented unsupported sensor advice from being treated as evidence.
 
 ## Submission artifacts
 
 - [Public repository](https://github.com/Havocx01/SideKick), with the root MIT license.
 - [Public demo](https://sidekick-e9lu.onrender.com/); verify its reported deployed revision.
 - [Setup and reproduction](../README.md) and [reviewer guide](../SUBMISSION.md).
+- An engineer review is still needed before usefulness can be claimed; see `docs/sidekick-engineer-evaluation.md`.
 - The owner must supply the public YouTube video link and final Devpost entry. The video should remain under three minutes and identify recorded versus live footage, synthetic data and supplied versus model-selected cases.

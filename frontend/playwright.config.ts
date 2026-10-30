@@ -14,6 +14,6 @@ export default defineConfig({
     url: "http://127.0.0.1:8136/api/health",
     cwd: "..",
     timeout: 30_000,
-    env: { PYTHONPATH: "backend", SIDEKICK_MODE: "full", SIDEKICK_MLFLOW: "0", SIDEKICK_ASSISTANT_LIVE_ENABLED: "0", SIDEKICK_ARTIFACTS_DIR: process.env.SIDEKICK_BROWSER_ARTIFACTS },
+    env: { PYTHONPATH: "backend", SIDEKICK_MODE: "full", SIDEKICK_MLFLOW: "0", SIDEKICK_ASSISTANT_LIVE_ENABLED: process.env.SIDEKICK_BROWSER_LIVE === "1" ? "1" : "0", SIDEKICK_ARTIFACTS_DIR: process.env.SIDEKICK_BROWSER_ARTIFACTS },
   },
 });

@@ -39,6 +39,7 @@ def test_hypotheses_link_to_real_results_and_unknown_refs_are_rejected(fitted, t
             return withHypothesis("channel-2", "result-9")
         if count == 3:
             assert packet["rejected"]["count"] == 0 and packet["recentCalls"][-1]["error"] == "invalid_proposal"
+            assert packet["recentCalls"][-1]["feedback"] == "Unknown result reference result-9; basedOn may cite only result-1"
             return withHypothesis("channel-2", "result-1")
         return stop()
 
