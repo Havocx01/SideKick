@@ -188,3 +188,4 @@ def test_contexts_workers_and_the_app_share_one_pinned_runtime():
     assert base in worker and f"{base} AS replay" in app and base in local
     assert "-c docker/runtime-constraints.txt" in worker and app.count("-c runtime-constraints.txt") == 2 and "-c runtime-constraints.txt" in local
     assert "scripts/evaluate_fault_scenarios.py" in worker and "scripts/run_fault_investigation.py" in worker
+    assert "!docker/runtime-constraints.txt" in (ROOT / ".dockerignore").read_text().splitlines()
