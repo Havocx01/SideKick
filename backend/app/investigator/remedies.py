@@ -82,6 +82,10 @@ def cleanSummary(metrics):
         "histories": metrics.engines}
 
 
+def stillFailing(rows):
+    return sum(row["original"]["status"] == row["remedy"]["status"] == "measured_failure" for row in rows)
+
+
 def compareRemedy(store, evaluator, investigation, kind, *, threshold=None, approveTraining=False, regressions=()) -> dict:
     if kind not in REMEDIES:
         raise RemedyError(f"Unknown remedy: {kind}")
@@ -123,7 +127,7 @@ def compareRemedy(store, evaluator, investigation, kind, *, threshold=None, appr
         "threshold": threshold, "originalContext": evaluator.context_fingerprint, "remedyContext": remedy.context_fingerprint,
         "originalCandidate": criterion.candidate, "remedyCandidate": remedyCandidate, "criterion": criterion.fingerprint,
         "cases": rows, "clean": clean, "improved": sum(row["improved"] for row in rows), "degraded": sum(row["degraded"] for row in rows),
-        "meetsCriteria": meets, "cost": {"prepareSeconds": round(prepareSeconds, 3), "evaluateSeconds": round(evaluateSeconds, 3)},
+        "stillFailing": stillFailing(rows), "meetsCriteria": meets, "cost": {"prepareSeconds": round(prepareSeconds, 3), "evaluateSeconds": round(evaluateSeconds, 3)},
         "note": "Development-only comparison. The remedy was chosen with these cases, so it needs fresh validation; no deployed model was changed."}
     with store.transaction() as db:
         ensureTable(db)

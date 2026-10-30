@@ -12,12 +12,18 @@ def test_one_command_demo_discovers_reduces_remedies_and_exports(tmp_path, capsy
     assert "Measured failure (hand-authored or seeded): oil_particles:stuck+vibration_rms:stuck" in printed and "Replay matches: True" in printed
     assert "warning threshold 0.95 is deliberately fragile" in printed and "chosen by Nemotron" not in printed
     assert "Reduced (complete): oil_particles stuck from" in printed and "Not a proof of a global minimum." in printed
-    assert "Remedy threshold 0.5: improved" in printed and "degraded 0" in printed
+    assert "Remedy threshold 0.5: improved" in printed and "degraded 0" in printed and "still failing" in printed and "Clean histories: useful warnings" in printed
     evidence = json.loads((tmp_path / "public.json").read_text())
     assert evidence["discoveryFamilies"] == ["oil_particles:stuck+vibration_rms:stuck"] and evidence["reductions"] and evidence["remedies"]
     assert "Demo: find sensor faults" not in json.dumps(evidence) and evidence["reproduction"]["public"]
     assert evidence["demonstration"]["threshold"] == .95 and "deliberately fragile" in evidence["demonstration"]["note"]
     assert {row["chosenBy"] for row in evidence["experiments"]} == {"supplied"} and evidence["controller"] is None
+    regression = json.loads((tmp_path / "public-regression.json").read_text())
+    assert regression["scenario"] == evidence["reductions"][0]["final"] and regression["expected"] == "measured_failure"
+    assert regression["claims"] == evidence["reductions"][0]["claims"]
+    remedy = evidence["remedies"][0]
+    assert remedy["stillFailing"] == sum(row["original"]["status"] == row["remedy"]["status"] == "measured_failure" for row in remedy["cases"])
+    assert remedy["cost"]["evaluateSeconds"] >= 0 and remedy["originalContext"] != remedy["remedyContext"]
     assert len(list((tmp_path / "investigations/contexts").glob("demo-fragile-threshold-*/manifest.json"))) == 1
     assert cli.main(["--root", str(tmp_path / "investigations"), "--output", str(tmp_path / "again.json")]) == 0
 

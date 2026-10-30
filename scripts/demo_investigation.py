@@ -24,6 +24,7 @@ from app.faults.scenarios import FaultCase  # noqa: E402
 from app.investigator.controller import controllerStatus  # noqa: E402
 from app.investigator.findings import FindingCriterion  # noqa: E402
 from app.investigator.publication import publicExport  # noqa: E402
+from app.investigator.reduction import regressionCase  # noqa: E402
 from app.investigator.schemas import InvestigationCreate, ReduceRequest, RemedyRequest, StartRequest  # noqa: E402
 from app.investigator.service import InvestigationService  # noqa: E402
 from app.models.candidates import LogisticRegressionCandidate  # noqa: E402
@@ -109,9 +110,19 @@ def main(argv=None):
             print(f"Reduced ({reduction['status']}): {describe(reduction['final'])}")
             for claim in reduction["claims"]:
                 print(f"  {claim}")
+            regression = args.output.with_name(f"{args.output.stem}-regression.json")
+            regression.parent.mkdir(parents=True, exist_ok=True)
+            regression.write_text(json.dumps(regressionCase(service.store, reduction["id"]), indent=2) + "\n", encoding="utf-8")
+            print(f"Regression case: {regression}")
             view = step(service.remedy, RemedyRequest(requestId=f"demo-remedy-{investigation[:8]}", kind="threshold", threshold=.5))
             remedy = view.remedies[-1]
-            print(f"Remedy threshold 0.5: improved {remedy['improved']}, degraded {remedy['degraded']}, meets criteria {remedy['meetsCriteria']}")
+            clean = remedy["clean"]
+            print(f"Remedy threshold 0.5: improved {remedy['improved']}, degraded {remedy['degraded']}, still failing {remedy['stillFailing']}, "
+                f"meets criteria {remedy['meetsCriteria']}")
+            print(f"  Clean histories: useful warnings {clean['original']['detection']:.0%} -> {clean['remedy']['detection']:.0%}, alarm burden "
+                f"{clean['original']['alarmBurden']:.3f} -> {clean['remedy']['alarmBurden']:.3f}, median lead {clean['original']['medianLead']} -> "
+                f"{clean['remedy']['medianLead']} cycles; {sum(row['remedy']['exclusions'] for row in remedy['cases'])} exclusions; "
+                f"{remedy['cost']['prepareSeconds'] + remedy['cost']['evaluateSeconds']:.1f}s")
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(publicExport(service.store, investigation, contextName=name, demonstration=DEMONSTRATION), indent=2) + "\n", encoding="utf-8")
         print(f"Public evidence: {args.output}")

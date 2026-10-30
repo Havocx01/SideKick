@@ -6,7 +6,7 @@ from app.faults.scenarios import FaultCase
 from app.investigator.controller import controllerStatus
 from app.investigator.findings import digest, family, loadCriterion, recordFindings
 from app.investigator.reduction import ensureTable as ensureReductions
-from app.investigator.remedies import ensureTable as ensureRemedies
+from app.investigator.remedies import ensureTable as ensureRemedies, stillFailing
 
 NOTICE = ("Aggregate development evidence. The objective, equipment identifiers, raw readings, fitted models and keys are excluded. "
     "The digest shows this file is unchanged, not who made it or that it may be disclosed.")
@@ -83,7 +83,8 @@ def publicExport(store, investigation, *, contextName=None, demonstration=None) 
             "steps": [{"change": step["change"], "status": step["status"], "accepted": step["accepted"], "evaluated": step.get("evaluated"),
                 "cohortChanged": step.get("cohortChanged")} for step in item["steps"]]} for item in reductions],
         "remedies": [{"kind": item["kind"], "threshold": item["threshold"], "improved": item["improved"], "degraded": item["degraded"],
-            "meetsCriteria": item["meetsCriteria"], "clean": item["clean"], "remedyContext": item["remedyContext"],
+            "stillFailing": stillFailing(item["cases"]), "meetsCriteria": item["meetsCriteria"], "clean": item["clean"], "cost": item.get("cost"),
+            "originalContext": item["originalContext"], "remedyContext": item["remedyContext"],
             "cases": [{"label": row["label"], "scenarioId": row["scenarioId"], "original": row["original"], "remedy": row["remedy"],
                 "matchedCohort": row["matchedCohort"], "improved": row["improved"], "degraded": row["degraded"]} for row in item["cases"]],
             "note": item["note"]} for item in remedies],
