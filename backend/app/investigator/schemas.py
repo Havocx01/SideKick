@@ -27,6 +27,24 @@ class ContextInfo(Strict):
     clean: dict[str, CleanMetrics]
 
 
+class ContextPreparationRequest(Strict):
+    requestId: str = RequestId
+
+
+class ContextPreparation(Strict):
+    id: str
+    status: Literal["queued", "running", "cancelling", "completed", "failed", "cancelled", "interrupted"]
+    stage: Literal["queued", "generating", "training", "calibrating", "checking", "ready"]
+    context: str | None = None
+    error: str | None = None
+    createdAt: float
+
+
+class ContextPreparationState(Strict):
+    job: ContextPreparation | None
+    outdated: int
+
+
 class InvestigationCreate(Strict):
     context: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     objective: str = Field(default="Find sensor faults that cost useful warnings.", min_length=1, max_length=2000)

@@ -36,7 +36,7 @@ const finished = () => view({ experimentsUsed: 1, discoveries: 1, discoveryFamil
   proposals: view().proposals.map(item => item.id === "p1" ? { ...item, status: "completed" } : item) });
 
 async function fixture(page: Page, initial: InvestigationView, contexts: ContextInfo[] = [context]) {
-  const state = { current: initial, posts: [] as { path: string; body: Record<string, unknown> | null }[], gets: 0 };
+  const state = { current: initial, posts: [] as { path: string; body: Record<string, unknown> | null }[], gets: 0, failReads: false };
   await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true"));
   await page.route("**/api/investigations**", async route => {
     const request = route.request();
@@ -53,9 +53,11 @@ async function fixture(page: Page, initial: InvestigationView, contexts: Context
       return route.fulfill({ json: state.current });
     }
     if (path === "/api/investigations/contexts") return route.fulfill({ json: contexts });
+    if (path === "/api/investigations/contexts/preparation") return route.fulfill({ json: { job: null, outdated: 0 } });
     if (path === "/api/investigations") return route.fulfill({ json: [initial] });
     if (path.endsWith("/public-export")) return route.fulfill({ json: { version: 1, digest: "e".repeat(64) } });
     if (path.endsWith("/export")) return route.fulfill({ json: state.current });
+    if (state.failReads) return route.fulfill({ status: 503, json: { detail: "Temporary read failure" } });
     state.gets++;
     if (state.current.active && state.gets > 2) state.current = finished();
     return route.fulfill({ json: state.current });
@@ -80,7 +82,8 @@ test("fault research needs consent and saved advice reopens without another sear
     note: { summary: "Check the signal path.", sourceIds: ["source-1"], tests: [{ action: "Inspect wiring", reason: "Separate signal faults from process changes.", sourceIds: ["source-1"] }] },
     searchRequests: 1, modelRequests: 1, reservedCompletionTokens: 5120, reportedCompletionTokens: 80 }] };
   await page.reload();
-  await expect(card).toContainText("Fault research · completed");
+  await expect(card).toContainText("Fault research");
+  await expect(card).toContainText("completed");
   await expect(card).toContainText("Check the signal path.");
   await expect(card.getByRole("link", { name: "Sensor manual" }).first()).toHaveAttribute("href", "https://example.com/manual");
   await expect(card).toContainText("Sources do not validate the fault policy");
@@ -88,11 +91,13 @@ test("fault research needs consent and saved advice reopens without another sear
   expect(state.posts.filter(item => item.path.endsWith("/research"))).toHaveLength(1);
 });
 
-test("an empty registry explains how to add a fitted context", async ({ page }) => {
+test("an empty registry offers in-app preparation instead of a terminal command", async ({ page }) => {
   await fixture(page, view(), []);
   await page.goto("/investigations");
-  await expect(page.getByRole("heading", { name: "No fitted context yet" })).toBeVisible();
-  await expect(page.locator("pre")).toContainText("evaluate_fault_scenarios.py --profile synthetic-rotating-v1");
+  await expect(page.getByRole("heading", { name: "Prepare models for investigation" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Prepare sample models", exact: true })).toBeVisible();
+  await expect(page.getByText("Preparation runs locally and makes no AI requests.", { exact: false })).toBeVisible();
+  await expect(page.locator("pre")).toHaveCount(0);
 });
 
 test("create shows clean performance and saves the criterion", async ({ page }) => {
@@ -100,8 +105,10 @@ test("create shows clean performance and saves the criterion", async ({ page }) 
   await page.goto("/investigations");
   await expect(page.getByRole("link", { name: "Investigations", exact: true })).toBeVisible();
   const clean = page.getByRole("table", { name: "Clean performance" });
+  await expect(page.getByLabel("Performance before sensor faults")).toContainText("100%");
+  await page.getByRole("button", { name: "Model details and fault assumptions", exact: false }).click();
   await expect(clean).toContainText("100%");
-  await expect(page.getByText("fault profile synthetic-rotating-v1")).toBeVisible();
+  await expect(page.getByText("Fault profile: synthetic-rotating-v1", { exact: false })).toBeVisible();
   await page.getByLabel("Experiment budget").fill("8");
   await page.getByRole("button", { name: "Create investigation" }).click();
   await expect(page).toHaveURL(/\/investigations\/inv-1$/);
@@ -109,12 +116,24 @@ test("create shows clean performance and saves the criterion", async ({ page }) 
     maxExperiments: 8, seed: 3, criterion: { candidate: LR } } });
 });
 
+test("configurations of the same model remain distinguishable and save the selected identifier", async ({ page }) => {
+  const second = "logistic_regression/lr-other";
+  const state = await fixture(page, view(), [{ ...context, thresholds: { ...context.thresholds, [second]: 0.5 }, clean: { ...context.clean, [second]: context.clean[LR] } }]);
+  await page.goto("/investigations");
+  await page.getByRole("combobox", { name: "Model under test", exact: true }).click();
+  await expect(page.getByRole("option", { name: "Logistic regression · lr-probe", exact: true })).toBeVisible();
+  await page.getByRole("option", { name: "Logistic regression · lr-other", exact: true }).click();
+  await page.getByRole("button", { name: "Create investigation", exact: true }).click();
+  await expect.poll(() => state.posts[0]?.body).toMatchObject({ criterion: { candidate: second } });
+});
+
 test("a run is started explicitly, polled to completion and its finding can be inspected", async ({ page }) => {
   const state = await fixture(page, view());
   await page.goto("/investigations/inv-1");
-  await expect(page.getByText("Opening this page never starts work.")).toBeVisible();
+  await expect(page.getByText("Fixed models. Matched machine histories.", { exact: false })).toBeVisible();
   await expect(page.getByText("Not started")).toBeVisible();
   expect(state.posts).toEqual([]);
+  await page.getByRole("button", { name: "Activity and proposed tests", exact: false }).click();
   await expect(page.getByRole("cell", { name: /outside the allowed mapping/ })).toBeVisible();
   await page.getByRole("button", { name: "Run saved proposals" }).click();
   await expect(page.getByRole("heading", { name: "Running" })).toBeVisible();
@@ -123,9 +142,12 @@ test("a run is started explicitly, polled to completion and its finding can be i
   expect(String(start.body!.requestId)).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
   await expect(page.getByText("All proposals run").first()).toBeVisible({ timeout: 10_000 });
   const card = page.getByRole("article", { name: /Measured failure/ });
-  await expect(card).toContainText("100% → 73%");
-  await expect(card).toContainText("22 / 22 histories");
-  await card.getByText("1 histories changed").click();
+  await expect(card).toContainText("100%");
+  await expect(card).toContainText("73%");
+  await expect(card).toContainText("27 percentage points lower");
+  await expect(card).toContainText("22 of 22");
+  await card.getByRole("button", { name: "Timing, affected histories, and assumptions" }).click();
+  await card.getByText("1 histories with recorded changes").click();
   await expect(card.getByRole("cell", { name: "SYN-001" })).toBeVisible();
   await card.getByText("Profile assumptions").click();
   await expect(card).toContainText("(prototype assumption)");
@@ -139,7 +161,8 @@ test("provider search needs explicit consent and states what is sent", async ({ 
   const state = await fixture(page, view());
   await page.goto("/investigations/inv-1");
   const preview = page.getByRole("group", { name: "Nemotron search" });
-  await expect(preview).toContainText("Never sent: sensor names, raw readings, equipment IDs");
+  await preview.getByRole("button", { name: "What is sent to Nebius" }).click();
+  await expect(preview).toContainText("Sensor names, raw readings, equipment IDs, fitted models and keys are excluded.");
   const start = page.getByRole("button", { name: "Start Nemotron search" });
   await expect(start).toBeDisabled();
   await page.getByLabel("Provider calls").fill("2");
@@ -223,11 +246,13 @@ test("each kind of outcome looks different and unscored cases say why", async ({
   const notApplicable = page.getByRole("article", { name: /^Not applicable/ });
   await expect(notApplicable).toContainText("history never reaches 100 cycles before failure");
   await expect(page.getByRole("article", { name: /^Execution error/ })).toContainText("timed_out");
+  await page.getByRole("button", { name: "Activity and proposed tests", exact: false }).click();
   const calls = page.getByRole("table", { name: "Provider calls" });
   await expect(calls).toContainText("rejected: invalid proposal");
   await expect(calls).toContainText("Not run: No development history can apply this case (22 checked)");
   await expect(calls.getByRole("columnheader", { name: "Reserved ceiling" })).toBeVisible();
   await expect(calls).toContainText("5120");
+  await page.getByRole("button", { name: "Run more fault tests", exact: false }).click();
   await expect(page.getByText("Calls used 2; reserved 10240 tokens; reported 700.")).toBeVisible();
   await expect(page.getByText("Reasons and hypotheses are unverified text; only measured results above are evidence.")).toBeVisible();
 });
@@ -249,13 +274,73 @@ test("the hosted site shows recorded runs, labelled, and offers nothing that sta
   });
   await page.goto("/investigations");
   await expect(page.getByRole("heading", { name: "Run investigations locally" })).toBeVisible();
+  await page.getByRole("button", { name: "All recorded tests (2)", exact: false }).click();
   const run = page.getByRole("table", { name: "Recorded experiments: nemotron-live-demo" });
   await expect(run).toContainText("Nemotron");
   await expect(run).toContainText("100% → 36%");
   await expect(page.getByText("Recorded, not live")).toBeVisible();
+  await page.getByRole("button", { name: "Model usage and record details" }).click();
   await expect(page.getByText("3 calls: 1510 reported completion tokens within a reserved ceiling of 15360")).toBeVisible();
   await expect(page.getByText("1 improved, 0 degraded, 1 still failing")).toBeVisible();
   await expect(page.getByText("Validation on 12 fresh histories (assessed):")).toBeVisible();
   await expect(page.getByRole("button", { name: /Create investigation|Run saved proposals|Start Nemotron search/ })).toHaveCount(0);
   expect(calls).toEqual(["/api/investigations/recorded"]);
+});
+
+test("a recorded incomplete result never claims there was no measured failure", async ({ page }) => {
+  await page.route("**/api/health", route => route.fulfill({ json: { status: "ok", mode: "demo", version: "2.0.0", can_train: true } }));
+  await page.route("**/api/investigations/recorded", route => route.fulfill({ json: [{ name: "partial-record", evidence: {
+    generatedAt: "2026-10-30T03:40:00Z", digest: "f".repeat(64), reductions: [], remedies: [],
+    experiments: [{ ref: "partial", family: failure.family, status: "inconclusive", chosenBy: "supplied", evaluatedHistories: 3, expectedHistories: 22,
+      cleanDetection: 1, faultedDetection: null }]
+  } }] }));
+  await page.goto("/investigations");
+  await expect(page.getByRole("heading", { name: "Inconclusive", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No measured failure in this test", exact: true })).toHaveCount(0);
+  await expect(page.getByText("3 of 22 machine histories evaluated.", { exact: false })).toBeVisible();
+});
+
+test("a failed poll keeps saved results visible and refresh only reads the existing investigation", async ({ page }) => {
+  const state = await fixture(page, view({ active: "run" }));
+  state.gets = -100;
+  await page.goto("/investigations/inv-1");
+  await expect(page.getByRole("heading", { name: "Running", exact: true })).toBeVisible();
+  state.failReads = true;
+  await expect(page.getByRole("heading", { name: "Showing the last saved results" })).toBeVisible({ timeout: 10_000 });
+  state.failReads = false; state.current = finished();
+  await page.getByRole("button", { name: "Refresh investigation status" }).click();
+  await expect(page.getByRole("article", { name: /^Measured failure/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Showing the last saved results" })).toHaveCount(0);
+  expect(state.posts).toEqual([]);
+});
+
+test("measured failures lead the results and passing tests keep their details available", async ({ page }) => {
+  const passing = { ...failure, status: "no_measured_failure", attempt_id: "passing", faulted_detection: 1 } as Finding;
+  await fixture(page, view({ ...finished(), findings: [passing, failure] }));
+  await page.goto("/investigations/inv-1");
+  await expect(page.getByRole("article").first()).toHaveAttribute("aria-label", /^Measured failure/);
+  const passed = page.getByRole("article", { name: /^No measured failure/ });
+  await expect(passed.getByRole("button", { name: "Replay", exact: true })).toHaveCount(0);
+  await passed.getByRole("button", { name: "View test details", exact: false }).click();
+  await expect(passed.getByRole("button", { name: "Replay", exact: true })).toBeVisible();
+  await expect(passed).toContainText("No change");
+});
+
+test("invalid provider allowances and thresholds never start work", async ({ page }) => {
+  const state = await fixture(page, view());
+  await page.goto("/investigations/inv-1");
+  await page.getByRole("checkbox", { name: "Allow sending this information to Nebius for this run" }).check();
+  await page.getByLabel("Provider calls").fill("0");
+  await expect(page.getByRole("button", { name: "Start Nemotron search", exact: true })).toBeDisabled();
+  await page.getByLabel("Provider calls").fill("2");
+  await page.getByLabel("Completion token ceiling").fill("");
+  await expect(page.getByRole("button", { name: "Start Nemotron search", exact: true })).toBeDisabled();
+  expect(state.posts).toEqual([]);
+  state.current = finished();
+  await page.reload();
+  for (const value of ["", "-0.1", "2"]) {
+    await page.getByLabel("Threshold", { exact: true }).fill(value);
+    await expect(page.getByRole("button", { name: "Compare remedy", exact: true })).toBeDisabled();
+  }
+  expect(state.posts).toEqual([]);
 });

@@ -233,6 +233,9 @@ export const pilots = {
 
 export const investigations = {
   contexts: () => request<import("./types").ContextInfo[]>("/api/investigations/contexts"),
+  preparation: () => request<import("./types").ContextPreparationState>("/api/investigations/contexts/preparation"),
+  prepareContext: (requestId: string) => post<import("./types").ContextPreparation>("/api/investigations/contexts/preparation", { requestId }),
+  cancelPreparation: (id: string) => post<import("./types").ContextPreparation>(`/api/investigations/contexts/preparation/${id}/cancel`),
   recorded: () => request<import("./types").RecordedInvestigation[]>("/api/investigations/recorded"),
   list: () => request<import("./types").InvestigationSummary[]>("/api/investigations"),
   get: (id: string) => request<import("./types").InvestigationView>(`/api/investigations/${id}`),

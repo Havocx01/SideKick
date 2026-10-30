@@ -10,6 +10,8 @@ from app.experiments.demo import public_origin
 from app.investigator.schemas import (ContextInfo, InvestigationCreate, InvestigationSummary, InvestigationView, RecordedInvestigation, ReduceRequest,
     RemedyRequest, ReplayCheck, ResearchRequest, StartRequest)
 from app.investigator.service import Conflict, InvestigationService
+from app.investigator.preparation import PreparationBusy
+from app.investigator.schemas import ContextPreparation, ContextPreparationRequest, ContextPreparationState
 
 router = APIRouter(prefix="/api/investigations", tags=["investigations"])
 
@@ -33,7 +35,7 @@ def call(action, *args, **kwargs):
         raise HTTPException(404, "This investigation or record is unavailable.") from None
     except PermissionError as error:
         raise HTTPException(403, str(error)) from None
-    except Conflict as error:
+    except (Conflict, PreparationBusy) as error:
         raise HTTPException(409, str(error)) from None
     except (ValueError, ValidationError) as error:
         raise HTTPException(422, str(error).splitlines()[0][:300]) from None
@@ -47,6 +49,26 @@ def consent(request: Request):
 @router.get("/contexts", response_model=list[ContextInfo])
 def contexts(request: Request):
     return service(request).listContexts()
+
+
+@router.get("/contexts/preparation", response_model=ContextPreparationState)
+def preparationState(request: Request):
+    return service(request).preparation.state(library_owner(request))
+
+
+@router.post("/contexts/preparation", response_model=ContextPreparation, status_code=202)
+def prepareContext(payload: ContextPreparationRequest, request: Request):
+    return call(service(request).preparation.start, library_owner(request), payload)
+
+
+@router.get("/contexts/preparation/{id}", response_model=ContextPreparation)
+def preparation(request: Request, id: str):
+    return call(service(request).preparation.get, library_owner(request), id)
+
+
+@router.post("/contexts/preparation/{id}/cancel", response_model=ContextPreparation)
+def cancelPreparation(request: Request, id: str):
+    return call(service(request).preparation.cancel, library_owner(request), id)
 
 
 @router.post("", response_model=InvestigationSummary)

@@ -265,6 +265,24 @@ export interface ContextInfo {
   clean: Record<string, CleanMetrics>;
 }
 
+export interface ContextPreparation {
+  id: string;
+  status: "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled" | "interrupted";
+  stage: "queued" | "generating" | "training" | "calibrating" | "checking" | "ready";
+  context?: string | null;
+  error?: string | null;
+  createdAt: number;
+}
+
+export interface ContextPreparationRequest {
+  requestId: string;
+}
+
+export interface ContextPreparationState {
+  job: ContextPreparation | null;
+  outdated: number;
+}
+
 export interface CopilotAnswer {
   text: string;
   tool_calls?: ToolInvocation[];

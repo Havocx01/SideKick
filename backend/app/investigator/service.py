@@ -12,6 +12,7 @@ from app.faults.replay import load_trusted_context
 from app.investigator.controller import ControllerLimits, NemotronController, controllerStatus
 from app.investigator.findings import loadCriterion, recordFindings, replayCheck, saveCriterion, summarize
 from app.investigator.publication import publicExport
+from app.investigator.preparation import ContextPreparer
 from app.investigator.reduction import ensureTable as ensureReductions, reduce
 from app.investigator.remedies import compareRemedy, ensureTable as ensureRemedies
 from app.investigator.research import ResearchReport, checkSettings, ensureTable as ensureResearch, runResearch, savedResearch
@@ -44,6 +45,7 @@ class InvestigationService:
         self.contexts = self.root / "contexts"
         self.contexts.mkdir(parents=True, exist_ok=True)
         self.store = InvestigationStore(self.root / "store")
+        self.preparation = ContextPreparer(self.root, self.store)
         self.settings = settings
         self.active: dict[str, tuple[str, threading.Thread]] = {}
         self.stopping = threading.Event()
@@ -258,6 +260,7 @@ class InvestigationService:
 
     def close(self):
         self.stopping.set()
+        self.preparation.close()
         with self.lock:
             threads = [thread for _, thread in self.active.values()]
         for thread in threads:

@@ -11,6 +11,7 @@ export interface AsyncState<T> {
 
 export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
   const [nonce, setNonce] = useState(0);
+  const reload = useCallback(() => setNonce(value => value + 1), []);
   const run = useCallback(fetcher, deps);
   const [state, setState] = useState<{ run: typeof run; nonce: number; data: T | null; loading: boolean; error: Error | null } | null>(null);
 
@@ -31,5 +32,5 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []): Asyn
 
   const current = state?.run === run && state.nonce === nonce ? state : null;
   return { data: current?.data ?? null, loading: current?.loading ?? true, error: current?.error ?? null,
-    reload: () => setNonce(value => value + 1) };
+    reload };
 }

@@ -27,7 +27,9 @@ test("a real run starts once despite repeated clicks and a refresh", async ({ pa
   const run = page.getByRole("button", { name: "Run saved proposals" });
   await run.click();
   await page.reload();
-  if (await run.isEnabled()) await run.click();
+  const more = page.getByRole("button", { name: /^Run (more|your first) fault tests/ });
+  if (await more.getAttribute("aria-expanded") === "false") await more.click();
+  if (await run.isVisible() && await run.isEnabled()) await run.click();
   await expect(page.getByText("All proposals run").first()).toBeVisible({ timeout: 60_000 });
   const view = await saved(page, id);
   expect(view.experimentsUsed).toBe(3);

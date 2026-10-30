@@ -18,7 +18,9 @@ Sidekick combines NVIDIA Nemotron experiment proposals with deterministic sensor
 
 Keep the launcher window open; Ctrl+C stops the server. The first launch needs internet. On macOS or Linux, run `python3 scripts/launch.py`. No API key is needed for recorded evidence or local training. Restart the app after changing server settings.
 
-To prepare a complete local investigation, run this from the extracted project after setup:
+Open **Investigations** and choose **Prepare sample models**. Sidekick generates a synthetic rotating-machine sample, fits the models and checks their baseline performance in the background. You can leave the page and return to the saved preparation status. This runs locally without an API key; your existing investigations stay intact.
+
+For a prefilled demonstration with a failure, reduction and remedy comparison, you can optionally run:
 
 ```powershell
 .venv\Scripts\python.exe scripts/demo_investigation.py
@@ -28,7 +30,7 @@ Then open **Investigations** and select the saved concern beginning **Demo: find
 
 ## Investigation workflow
 
-1. Choose a fitted development context and model, review clean performance, and set the criterion, profile and experiment limits.
+1. Prepare sample models in the app, or select an existing model setup. Review performance before sensor faults, enter your concern and set the experiment budget. Model IDs, warning thresholds and profile assumptions remain available under setup details.
 2. Run supplied proposals locally, or explicitly allow **Start Nemotron search**. Nemotron receives the concern, channel aliases, reviewed descriptions, bounds and aggregate results.
 3. Inspect matched clean/faulted useful warnings, lead time, early alarm burden, coverage and exclusions. Code classifies findings; model explanations remain hypotheses.
 4. Replay a result, reduce a measured failure, compare a threshold change or explicitly approved augmented retraining, and export a regression case.

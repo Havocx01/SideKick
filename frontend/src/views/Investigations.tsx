@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Download } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, FlaskConical } from "lucide-react";
 import { Input } from "@/components/arc/input/input";
 import { Textarea } from "@/components/arc/textarea/textarea";
 import { Select } from "@/registry/components/select/select";
@@ -8,7 +8,11 @@ import { api, ApiError, investigations } from "../api/client";
 import type { ContextInfo, Finding, InvestigationView, ProposalDetail, RecordedInvestigation } from "../api/types";
 import { Badge, Button, Callout, Panel, StateBlock, type Tone } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
-import { percent } from "../format";
+import { candidateLabel, percent } from "../format";
+import { ContextSetup } from "../components/investigations/ContextSetup";
+import { Disclosure } from "../components/investigations/Disclosure";
+import { WarningComparison } from "../components/investigations/WarningComparison";
+import { RollingNumber } from "../components/cult/RollingNumber";
 import styles from "./investigations.module.css";
 
 const errorText = (error: unknown) => error instanceof ApiError ? error.detail || error.message : error instanceof Error ? error.message : "Request failed. Try again.";
@@ -38,10 +42,17 @@ export function describeCase(scenario: Record<string, unknown> | null | undefine
   }).join(" + ");
 }
 
+function caseTitle(scenario: Record<string, unknown> | null | undefined) {
+  const names: Record<string, string> = { temp_bearing: "Bearing temperature", vibration_rms: "Vibration", oil_particles: "Oil particles", pressure_out: "Outlet pressure", flow_rate: "Flow rate", current_draw: "Current draw" };
+  const faults: Record<string, string> = { dropout: "missing readings", stuck: "held constant", drift: "drifting" };
+  const components = (scenario?.components ?? []) as Component[];
+  return components.length ? components.map(item => `${names[item.sensor] ?? item.sensor.replace(/_/g, " ")}: ${faults[item.kind] ?? item.kind}`).join(" + ") : "Unreadable fault test";
+}
+
 export function Investigations() {
   const health = useApi(() => api.health(), []);
   return <StateBlock loading={health.loading} error={health.error}>
-    <header className="page-head"><h1>Fault investigations</h1><p>Search for sensor faults that cost useful warnings, then reduce, replay and compare remedies on fixed development models.</p></header>
+    <header className="page-head"><h1>Fault investigations</h1><p>Find the sensor faults that make a model miss useful warnings, then test a fix.</p></header>
     {health.data?.mode === "full" ? <Workspace /> : <>
       <Panel title="Run investigations locally"><p>Live investigations use fitted contexts on a local server, so this site cannot start them or call Nemotron. Below are recorded runs.</p></Panel>
       <Recorded />
@@ -66,22 +77,34 @@ function Recorded() {
 function RecordedRun({ item }: { item: RecordedInvestigation }) {
   const evidence = item.evidence as unknown as RecordedEvidence;
   const controller = evidence.controller;
-  return <Panel title={`Recorded: ${item.name}`} aside={<Badge tone="neutral">Recorded, not live</Badge>}
-    description={`Generated ${evidence.generatedAt}. Digest ${evidence.digest.slice(0, 12)}.`}>
+  const titles: Record<string, string> = { "nemotron-live-recorded": "Nemotron search", "compound-demo-recorded": "A combined sensor failure", "fresh-validation-recorded": "Checking a fix on fresh data", "synthetic-recorded": "Initial sensor checks" };
+  const focus = evidence.experiments.find(row => row.status === "measured_failure") ?? evidence.experiments[0];
+  const failures = evidence.experiments.filter(row => row.status === "measured_failure").length;
+  return <Panel title={titles[item.name] ?? item.name.replace(/[-_]/g, " ")} aside={<Badge tone="neutral">Recorded, not live</Badge>}
+    description="Saved synthetic development evidence. Opening this record does not run an experiment or make an AI request.">
     <div className={styles.stack}>
       {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note}</Callout>}
-      <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} calls: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
-        : "No Nemotron calls; every case was supplied."}</p>
+      <div className={styles.recordSummary}><span><strong>{evidence.experiments.length}</strong> saved tests</span><span><strong>{failures}</strong> measured {failures === 1 ? "failure" : "failures"}</span>
+        <span>{controller ? `${controller.callsUsed} Nemotron calls` : "Cases supplied by the builder"}</span></div>
+      {focus && <div><div className={styles.heading}><h3>{focus.status === "measured_failure" ? "A fault that cost useful warnings" : focus.status === "no_measured_failure" ? "No measured failure in this test" : findingTones[focus.status][0]}</h3>
+        <Badge tone={findingTones[focus.status][1]}>{findingTones[focus.status][0]}</Badge></div>
+        <WarningComparison before={focus.cleanDetection} after={focus.faultedDetection} />
+        <p className={styles.footnote}>{focus.evaluatedHistories} of {focus.expectedHistories} machine histories evaluated. {focus.chosenBy === "nemotron" ? "This case was proposed by Nemotron." : "This case was supplied by the builder."}</p></div>}
+      <Disclosure title={`All recorded tests (${evidence.experiments.length})`} description="Individual outcomes, case families, coverage, and who chose each test.">
       <div className="table-scroll"><table aria-label={`Recorded experiments: ${item.name}`}><thead><tr><th>Result</th><th>Case family</th><th>Chosen by</th><th>Status</th>
         <th className="num">Coverage</th><th className="num">Useful warnings</th></tr></thead>
         <tbody>{evidence.experiments.map(row => <tr key={row.ref}><td>{row.ref}</td><td>{row.family}</td><td>{row.chosenBy === "nemotron" ? "Nemotron" : "Supplied"}</td>
           <td><Badge tone={findingTones[row.status][1]}>{findingTones[row.status][0]}</Badge></td><td className="num">{row.evaluatedHistories} / {row.expectedHistories}</td>
-          <td className="num">{percent(row.cleanDetection)} → {percent(row.faultedDetection)}</td></tr>)}</tbody></table></div>
+          <td className="num">{percent(row.cleanDetection)} → {percent(row.faultedDetection)}</td></tr>)}</tbody></table></div></Disclosure>
       {evidence.reductions.map((reduction, index) => <p key={index}><strong>Reduction ({reduction.status}):</strong> {reduction.family}. {reduction.claims.join(" ")}</p>)}
       {evidence.remedies.map((remedy, index) => <p key={index}><strong>Remedy, threshold {remedy.threshold}:</strong> {remedy.improved} improved, {remedy.degraded} degraded
         {remedy.stillFailing !== undefined ? `, ${remedy.stillFailing} still failing` : ""}. Development-only; it needs fresh validation.</p>)}
       {evidence.validations?.map((validation, index) => <p key={index}><strong>Validation on {validation.freshHistories} fresh histories ({validation.status}):</strong>{" "}
         {validation.cases.map(row => `${row.label} ${row.original.status.replace(/_/g, " ")}`).join("; ")}.</p>)}
+      <Disclosure title="Model usage and record details">
+        <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} calls: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
+          : "No Nemotron calls; every case was supplied."}</p><p className={styles.footnote}>Recorded at {evidence.generatedAt}. Record: {item.name}. Integrity digest: {evidence.digest}.</p>
+      </Disclosure>
     </div>
   </Panel>;
 }
@@ -89,22 +112,28 @@ function RecordedRun({ item }: { item: RecordedInvestigation }) {
 function Workspace() {
   const contexts = useApi(() => investigations.contexts(), []);
   const saved = useApi(() => investigations.list(), []);
-  const first = contexts.data?.[0];
+  const [lastContexts, setLastContexts] = useState<ContextInfo[] | null>(null);
+  useEffect(() => { if (contexts.data) setLastContexts(contexts.data); }, [contexts.data]);
+  const available = contexts.data ?? lastContexts;
+  const first = available?.[0];
   return <>
-    <StateBlock loading={contexts.loading} error={contexts.error}>
-      {contexts.data && (first ? <CreateForm contexts={contexts.data} initial={first} /> : <Panel title="No fitted context yet">
-        <p>Create one from the repository root, then refresh this page:</p>
-        <pre className={styles.command}>python scripts/evaluate_fault_scenarios.py --profile synthetic-rotating-v1 --output artifacts/investigations/contexts/synthetic</pre>
-      </Panel>)}
+    <ol className={styles.workflow} aria-label="Investigation workflow">
+      <li data-current={!first || undefined}><span>{first ? <Check size={14} aria-hidden="true" /> : "1"}</span>Prepare models</li>
+      <li data-current={!!first || undefined}><span>2</span>Choose your concern</li><li><span>3</span>Test sensor faults</li><li><span>4</span>Compare a fix</li>
+    </ol>
+    <ContextSetup ready={Boolean(first)} onReady={contexts.reload} />
+    {available && contexts.error && <Callout tone="warn" title="Could not refresh model setups">Your current form is kept. <Button variant="ghost" onClick={contexts.reload}>Refresh model setups</Button></Callout>}
+    <StateBlock loading={!available && contexts.loading} error={available ? null : contexts.error}>
+      {available && first && <CreateForm contexts={available} initial={first} />}
     </StateBlock>
     <Panel title="Saved investigations" tight>
-      <StateBlock loading={saved.loading} error={saved.error} empty={saved.data?.length === 0}>
-        <div className="table-scroll"><table><thead><tr><th>Objective</th><th>Context</th><th className="num">Experiments</th><th className="num">Measured failures</th><th>Status</th></tr></thead>
-          <tbody>{saved.data?.map(item => <tr key={item.id}>
-            <td><Link to={`/investigations/${item.id}`}>{item.objective}</Link></td><td>{item.context}</td>
-            <td className="num">{item.experimentsUsed} / {item.maxExperiments}</td><td className="num">{item.discoveries}</td>
-            <td>{item.active ? <Badge tone="info">Running {item.active}</Badge> : item.stopReason ? <Badge tone={stops[item.stopReason]?.[1]}>{stops[item.stopReason]?.[0] ?? item.stopReason}</Badge> : <Badge>Not started</Badge>}</td>
-          </tr>)}</tbody></table></div>
+      <StateBlock loading={saved.loading} error={saved.error}>
+        {saved.data?.length === 0 ? <div className={styles.empty}><FlaskConical size={23} aria-hidden="true" /><h3>No investigations yet</h3><p>Prepare your sample models above, then create an investigation. Your results will be saved here.</p></div>
+          : <ul className={styles.savedList}>{saved.data?.map(item => <li key={item.id}>
+            <Link to={`/investigations/${item.id}`} title={item.objective}><strong>{item.objective}</strong><span>{item.experimentsUsed} of {item.maxExperiments} tests used <span aria-hidden="true">·</span> {item.discoveries} measured {item.discoveries === 1 ? "failure" : "failures"}</span></Link>
+            {item.active ? <Badge tone="info">Running {item.active}</Badge> : item.stopReason ? <Badge tone={stops[item.stopReason]?.[1]}>{stops[item.stopReason]?.[0] ?? item.stopReason}</Badge> : <Badge>Not started</Badge>}
+            <ArrowRight size={16} aria-hidden="true" />
+          </li>)}</ul>}
       </StateBlock>
     </Panel>
   </>;
@@ -115,13 +144,14 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
   const [contextName, setContextName] = useState(initial.name);
   const context = contexts.find(item => item.name === contextName) ?? initial;
   const models = Object.keys(context.thresholds);
-  const [candidate, setCandidate] = useState(models[0] ?? "");
+  const firstModel = models.find(name => !name.startsWith("age_baseline/")) ?? models[0] ?? "";
+  const [candidate, setCandidate] = useState(firstModel);
   const [objective, setObjective] = useState("Find sensor faults that cost useful warnings.");
   const [experiments, setExperiments] = useState("16");
   const [seed, setSeed] = useState("3");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const target = models.includes(candidate) ? candidate : models[0] ?? "";
+  const target = models.includes(candidate) ? candidate : firstModel;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -132,20 +162,29 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
     } catch (failure) { setError(errorText(failure)); setBusy(false); }
   }
 
-  return <Panel title="New investigation" description="The fitted models, thresholds, fault profile and data stay fixed for the whole search.">
+  return <Panel title="New investigation" description="Choose what to investigate. Sidekick keeps the same models and data for every fault test.">
     <form className={styles.form} onSubmit={submit}>
       <div className={styles.fields}>
-        <Select label="Fitted context" value={context.name} onValueChange={value => setContextName(String(value))} options={contexts.map(item => ({ value: item.name, label: item.name }))} />
-        <Select label="Model under test" value={target} onValueChange={value => setCandidate(String(value))} options={models.map(name => ({ value: name, label: name }))} />
+        <Select label="Model setup" value={context.name} onValueChange={value => setContextName(String(value))} options={contexts.map(item => ({ value: item.name, label: item.name.startsWith("demo-fragile") ? `Sample with a fragile warning threshold (${item.name.slice(-6)})` : item.name.startsWith("synthetic-") ? `Rotating machine sample (${item.name.slice(-6)})` : item.name }))} />
+        <Select label="Model under test" value={target} onValueChange={value => setCandidate(String(value))} options={models.map(name => {
+          const [family, ...config] = name.split("/");
+          return { value: name, label: candidateLabel(family ?? name, config.join("/") || undefined) };
+        })} />
       </div>
-      <div className="table-scroll"><table aria-label="Clean performance"><thead><tr><th>Model</th><th className="num">Threshold</th><th className="num">Useful warnings</th><th className="num">Early alarm burden</th><th className="num">Histories</th></tr></thead>
+      {target.startsWith("age_baseline/") && <p className={styles.footnote}>The age baseline uses elapsed age, not sensor readings. Select a sensor-based model to investigate the effect of sensor faults.</p>}
+      <div className={styles.baseline} aria-label="Performance before sensor faults"><strong>Before sensor faults</strong><dl className={styles.metrics}>
+        <div><dt>Useful warnings</dt><dd>{percent(context.clean[target]?.detection)}</dd></div><div><dt>Early alarm burden</dt><dd>{percent(context.clean[target]?.alarmBurden, 1)}</dd></div>
+        <div><dt>Machine histories</dt><dd>{context.clean[target]?.histories}</dd></div></dl><p className={styles.footnote}>Development performance. A useful warning arrives early enough to act.</p></div>
+      <Disclosure title="Model details and fault assumptions" description="Thresholds, model identifiers, and baseline performance for every model.">
+        <div className="table-scroll"><table aria-label="Clean performance"><thead><tr><th>Model</th><th className="num">Threshold</th><th className="num">Useful warnings</th><th className="num">Early alarm burden</th><th className="num">Histories</th></tr></thead>
         <tbody>{models.map(name => <tr key={name}><td>{name}</td><td className="num">{context.thresholds[name]}</td><td className="num">{percent(context.clean[name]?.detection)}</td>
           <td className="num">{percent(context.clean[name]?.alarmBurden, 1)}</td><td className="num">{context.clean[name]?.histories}</td></tr>)}</tbody></table></div>
-      <p className={styles.footnote}>Clean development performance{context.profile ? `; fault profile ${context.profile}` : "; no fault profile"}. A measured failure needs adequate clean behavior first.</p>
+        <p className={styles.footnote}>Model setup: {context.name}. Fault profile: {context.profile ?? "None"}. Relationships in the profile are declared assumptions, not proof of physical causes.</p>
+      </Disclosure>
       <Textarea label="Concern" value={objective} maxLength={2000} onChange={event => setObjective(event.target.value)} />
       <div className={styles.fields}>
-        <Input label="Experiment budget" type="number" min={1} max={128} value={experiments} onChange={event => setExperiments(event.target.value)} />
-        <Input label="Seed cases" description="Single-channel checks run before any model choice." type="number" min={0} max={12} value={seed} onChange={event => setSeed(event.target.value)} />
+        <Input label="Experiment budget" description="Maximum fault tests. Each test uses one slot." type="number" required min={1} max={128} value={experiments} onChange={event => setExperiments(event.target.value)} />
+        <Input label="Initial checks" description="Known single-sensor faults to test first. These use your experiment budget." type="number" required min={0} max={Math.min(12, Number(experiments) || 12)} value={seed} onChange={event => setSeed(event.target.value)} />
       </div>
       {error && <p role="alert" className={styles.error}>{error}</p>}
       <div className={styles.actions}><Button type="submit" variant="primary" loading={busy}>Create investigation</Button></div>
@@ -168,6 +207,7 @@ export function InvestigationDetail() {
     return () => clearInterval(timer);
   }, [active, reload]);
   return <StateBlock loading={!data && view.loading} error={data ? null : view.error}>
+    {data && view.error && <Callout tone="warn" title="Showing the last saved results"><p>The latest status could not be loaded. Your saved results are still available.</p><Button variant="secondary" onClick={reload}>Refresh investigation status</Button></Callout>}
     {data && <Detail data={data} reload={reload} />}
   </StateBlock>;
 }
@@ -175,13 +215,16 @@ export function InvestigationDetail() {
 function Detail({ data, reload }: { data: InvestigationView; reload: () => void }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const pending = useRef(false);
   const lastEvent = data.events.at(-1);
   const failed = lastEvent?.kind.startsWith("failed:") ? lastEvent : null;
   const rejected = data.proposals.filter(item => item.status === "rejected").length;
 
   async function act(label: string, action: () => Promise<unknown>) {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(label); setError("");
-    try { await action(); reload(); } catch (failure) { setError(errorText(failure)); } finally { setBusy(""); }
+    try { await action(); reload(); } catch (failure) { setError(errorText(failure)); } finally { setBusy(""); pending.current = false; }
   }
 
   async function exportEvidence(kind: "export" | "public") {
@@ -193,36 +236,38 @@ function Detail({ data, reload }: { data: InvestigationView; reload: () => void 
       link.href = URL.createObjectURL(new Blob([JSON.stringify(await response.json(), null, 2)], { type: "application/json" }));
       link.download = `sidekick-investigation-${data.id.slice(0, 8)}${kind === "public" ? "-public" : ""}.json`;
       document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     });
   }
 
   const status = data.active ? ["Running " + data.active, "info"] as const : data.stopReason ? stops[data.stopReason] ?? [data.stopReason, "neutral"] as const : ["Not started", "neutral"] as const;
   return <>
     <header className={`page-head ${styles.heading}`}>
-      <div><h1>{data.objective}</h1><p>Context {data.context}. Opening this page never starts work.</p></div>
+      <div><Link className={styles.backLink} to="/investigations"><ArrowLeft size={14} aria-hidden="true" />All investigations</Link><h1>{data.objective}</h1><p>Fixed models. Matched machine histories. Results are saved as each test finishes.</p></div>
       <Badge tone={status[1]}>{status[0]}</Badge>
     </header>
     <dl className={styles.summary}>
-      <div><dt>Experiments used</dt><dd>{data.experimentsUsed} / {data.maxExperiments}</dd></div>
-      <div><dt>Measured failures</dt><dd>{data.discoveries}</dd></div>
-      <div><dt>Failure families</dt><dd>{data.discoveryFamilies.length ? data.discoveryFamilies.join(", ") : "None"}</dd></div>
-      <div><dt>Rejected proposals</dt><dd>{rejected}</dd></div>
+      <div><dt>Fault tests used</dt><dd><RollingNumber value={data.experimentsUsed} /><span className={styles.outOf}> / {data.maxExperiments}</span></dd><div className={styles.budgetTrack} aria-hidden="true"><span style={{ width: `${Math.min(100, data.experimentsUsed / data.maxExperiments * 100)}%` }} /></div></div>
+      <div><dt>Measured failures</dt><dd><RollingNumber value={data.discoveries} /></dd><p className={styles.footnote}>Faults that met the saved failure criterion</p></div>
+      <div><dt>Distinct failure patterns</dt><dd><RollingNumber value={data.discoveryFamilies.length} /></dd><p className={styles.footnote}>{rejected} rejected {rejected === 1 ? "proposal" : "proposals"}, not counted as tests</p></div>
     </dl>
     {failed && <Callout tone="fault" title="The last operation failed">{failed.detail}</Callout>}
     {lastEvent?.kind === "interrupted" && <Callout tone="warn" title="Interrupted">{lastEvent.detail} Start again to recover within the saved limits.</Callout>}
     {data.state.cancel_requested && !data.active && <Callout tone="warn" title="Cancellation is saved">Resume before starting more work.</Callout>}
     {error && <p role="alert" className={styles.error}>{error}</p>}
-    <Controls data={data} busy={busy} act={act} />
-    <Findings data={data} busy={busy} act={act} />
-    <Timeline data={data} />
-    <Proposals proposals={data.proposals} />
-    {data.reductions.length > 0 && <Reductions reductions={data.reductions} />}
-    <Remedies data={data} busy={busy} act={act} />
-    <div className={styles.actions}>
+    <nav className={styles.sectionNav} aria-label="Investigation sections"><a href="#results">Results</a><a href="#run-checks">Run tests</a><a href="#compare-fix">Compare a fix</a><a href="#activity">Activity</a></nav>
+    <div id="results"><Findings data={data} busy={busy} act={act} />{data.reductions.length > 0 && <Reductions reductions={data.reductions} />}</div>
+    <div id="run-checks"><Disclosure title={data.experimentsUsed ? "Run more fault tests" : "Run your first fault tests"} initiallyOpen={!data.experimentsUsed || Boolean(data.active)}
+      description="Run the saved checks locally, or explicitly allow Nemotron to propose new faults."><Controls data={data} busy={busy} act={act} /></Disclosure></div>
+    <div id="compare-fix"><Remedies data={data} busy={busy} act={act} /></div>
+    <div id="activity"><Disclosure title="Activity and proposed tests" description="The saved timeline, AI request usage, rejected proposals, and technical setup.">
+      <Timeline data={data} /><Proposals proposals={data.proposals} />
+      <p className={styles.footnote}>Model setup: {data.context}. Failure patterns: {data.discoveryFamilies.join(", ") || "None"}. Criterion: {data.criterion?.candidate ?? "Not set"}.</p>
+    </Disclosure></div>
+    <Panel title="Save and share results" description="Download the measured evidence and the settings needed to interpret it."><div className={styles.actions}>
       <Button variant="secondary" onClick={() => exportEvidence("export")} loading={busy === "export"}><Download size={16} aria-hidden="true" />Export evidence</Button>
       <Button variant="ghost" onClick={() => exportEvidence("public")} loading={busy === "public"}><Download size={16} aria-hidden="true" />Public evidence</Button>
-      <span className={styles.footnote}>Public evidence leaves out the concern, equipment IDs and raw readings.</span>
-    </div>
+    </div><p className={styles.footnote}>Full evidence includes your concern. Public evidence leaves out the concern, equipment IDs and raw readings.</p></Panel>
   </>;
 }
 
@@ -233,27 +278,31 @@ function Controls({ data, busy, act }: { data: InvestigationView; busy: string; 
   const [calls, setCalls] = useState("4");
   const [tokens, setTokens] = useState("32768");
   const controller = data.controller as { callsUsed?: number; reservedCompletionTokens?: number; reportedCompletionTokens?: number } | null;
-  const locked = Boolean(data.active) || data.state.cancel_requested;
+  const locked = Boolean(data.active) || data.state.cancel_requested || Boolean(busy);
+  const validCalls = Number.isInteger(Number(calls)) && Number(calls) >= 1 && Number(calls) <= 64;
+  const validTokens = Number.isInteger(Number(tokens)) && Number(tokens) >= 1 && Number(tokens) <= 1000000;
   if (data.active) return <Panel title="Running" aside={<Button variant="danger" onClick={() => act("cancel", () => investigations.cancel(data.id))} loading={busy === "cancel"}>Cancel</Button>}>
-    <p>Results appear below as each experiment is saved. Cancelling stops at the next safe point.</p>
+    <p>Each finished test is added to Results. Cancelling stops at the next safe point; saved results stay available.</p>
   </Panel>;
   return <Panel title="Run experiments" aside={data.state.cancel_requested ? <Button onClick={() => act("resume", () => investigations.resume(data.id))} loading={busy === "resume"}>Resume</Button> : undefined}>
     <div className={styles.stack}>
       <div className={styles.actions}>
         <Button disabled={locked} loading={busy === "run"} onClick={() => act("run", () => investigations.start(data.id, { requestId: requestId(), mode: "run" }))}>Run saved proposals</Button>
-        <span className={styles.footnote}>Local only. No provider request.</span>
+        <span className={styles.footnote}>Test the faults already saved in this investigation. Runs locally, with no AI request.</span>
       </div>
       <fieldset className={styles.preview}>
         <legend>Nemotron search</legend>
-        <p>Sent to Nebius for each call: your concern, channel aliases with reviewed descriptions, fault bounds, clean performance and aggregate matched results.</p>
-        <p>Never sent: sensor names, raw readings, equipment IDs, fitted models or keys. Workspace AI permission is also required.</p>
+        <p>Let Nemotron choose the next sensor fault, inspect its measured result, and decide what to test next.</p>
+        <Disclosure title="What is sent to Nebius"><p>Your concern, channel aliases with reviewed descriptions, fault bounds, baseline performance and aggregate matched results are sent for each call.</p>
+          <p>Sensor names, raw readings, equipment IDs, fitted models and keys are excluded. Workspace AI permission is also required.</p></Disclosure>
         <div className={styles.fields}>
-          <Input label="Provider calls" type="number" min={1} max={64} value={calls} onChange={event => setCalls(event.target.value)} />
-          <Input label="Completion token ceiling" description="A reserved ceiling, not actual usage or cost." type="number" min={1} value={tokens} onChange={event => setTokens(event.target.value)} />
+          <Input label="Provider calls" description="Maximum requests to Nemotron for this run." type="number" min={1} max={64} value={calls} onChange={event => setCalls(event.target.value)} />
+          <Input label="Completion token ceiling" description="Maximum reserved reasoning and answer tokens, not actual usage or a price." type="number" min={1} max={1000000} value={tokens} onChange={event => setTokens(event.target.value)} />
         </div>
+        {(!validCalls || !validTokens) && <p role="alert" className={styles.error}>Use 1 to 64 provider calls and 1 to 1,000,000 completion tokens, as whole numbers.</p>}
         <label className={styles.check}><input type="checkbox" checked={allow} onChange={event => setAllow(event.target.checked)} />Allow sending this information to Nebius for this run</label>
         <div className={styles.actions}>
-          <Button variant="primary" disabled={!allow || locked} loading={busy === "agent"} onClick={() => act("agent", () => investigations.start(data.id, { requestId: requestId(), mode: "agent", allowProvider: true, maxProviderCalls: Number(calls), maxCompletionTokens: Number(tokens) }))}>Start Nemotron search</Button>
+          <Button variant="primary" disabled={!allow || locked || !validCalls || !validTokens} loading={busy === "agent"} onClick={() => act("agent", () => investigations.start(data.id, { requestId: requestId(), mode: "agent", allowProvider: true, maxProviderCalls: Number(calls), maxCompletionTokens: Number(tokens) }))}>Start Nemotron search</Button>
           {controller && <span className={styles.footnote}>Calls used {controller.callsUsed ?? 0}; reserved {controller.reservedCompletionTokens ?? 0} tokens; reported {controller.reportedCompletionTokens ?? 0}.</span>}
         </div>
       </fieldset>
@@ -262,10 +311,10 @@ function Controls({ data, busy, act }: { data: InvestigationView; busy: string; 
 }
 
 function Findings({ data, busy, act }: { data: InvestigationView; busy: string; act: Act }) {
-  const measured = data.findings.filter(item => item.attempt_id);
+  const measured = data.findings.filter(item => item.attempt_id).sort((a, b) => Number(b.status === "measured_failure") - Number(a.status === "measured_failure"));
   if (!data.criterion) return <Panel title="Findings"><p>This investigation has no finding criterion, so results are not classified.</p></Panel>;
-  return <Panel title="Findings" description={`Classified by code for ${data.criterion.candidate}. Numbers are measured on matched development histories.`}>
-    {measured.length === 0 ? <p>No experiment has finished yet.</p> : <div className={styles.stack}>
+  return <Panel title="Findings" description="Measured failures come first. Every comparison uses the same model and matched development histories.">
+    {measured.length === 0 ? <div className={styles.empty}><FlaskConical size={23} aria-hidden="true" /><h3>No results yet</h3><p>Run the initial checks or start a Nemotron search. Finished fault tests will appear here.</p><a href="#run-checks">Choose how to run tests</a></div> : <div className={styles.resultList}>
       {measured.map(finding => <FindingCard key={finding.attempt_id} finding={finding} data={data} busy={busy} act={act} />)}
     </div>}
   </Panel>;
@@ -281,26 +330,28 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
   const unscored = finding.status === "not_applicable" || finding.status === "inconclusive";
   return <article className={styles.finding} aria-label={`${label}: ${finding.family ?? "case"}`}>
     <header><Badge tone={tone}>{label}</Badge>{partial && finding.status !== "execution_error" && <Badge tone="warn">Partial coverage</Badge>}
-      <Badge tone={chosen ? "info" : "neutral"}>{chosen ? "Chosen by Nemotron" : "Supplied case"}</Badge><strong>{describeCase(proposal?.scenario)}</strong></header>
+      <Badge tone={chosen ? "info" : "neutral"}>{chosen ? "Chosen by Nemotron" : "Supplied case"}</Badge><h3>{caseTitle(proposal?.scenario)}</h3></header>
+    <Disclosure title={finding.status === "no_measured_failure" ? "View test details" : "Measured result and next steps"} initiallyOpen={finding.status !== "no_measured_failure"}
+      description={finding.status === "no_measured_failure" ? `Useful warnings ${percent(finding.clean_detection)} to ${percent(finding.faulted_detection)}. ${finding.evaluated_histories ?? 0} of ${finding.expected_histories ?? 0} histories evaluated.` : undefined}>
     {finding.status === "execution_error" ? <p>{finding.reasons?.[0]}</p> : <>
-      <dl className={styles.metrics}>
-        <div><dt>Coverage</dt><dd>{finding.evaluated_histories ?? 0} / {finding.expected_histories ?? 0} histories</dd></div>
-        <div><dt>Useful warnings</dt><dd>{percent(finding.clean_detection)} → {percent(finding.faulted_detection)}</dd></div>
-        <div><dt>Early alarm burden</dt><dd>{percent(finding.clean_burden, 1)} → {percent(finding.faulted_burden, 1)}</dd></div>
-      </dl>
+      <div className={styles.comparisonGrid}><WarningComparison before={finding.clean_detection} after={finding.faulted_detection} />
+        <WarningComparison label="Early alarm burden" before={finding.clean_burden} after={finding.faulted_burden} lowerIsBetter /></div>
+      <p className={styles.coverage}><strong>{finding.evaluated_histories ?? 0} of {finding.expected_histories ?? 0}</strong> machine histories evaluated{partial ? ". Partial coverage limits this conclusion." : ". Full coverage for this test."}</p>
       {unscored && <p><strong>Why this was not scored as a finding:</strong></p>}
       {finding.reasons?.map(reason => <p key={reason} className={styles.reason}>{reason}</p>)}
       {finding.effects?.map(effect => <p key={effect.kind}>{effect.kind.replace(/_/g, " ")}: {effect.histories.length} histories</p>)}
-      {(finding.support?.length ?? 0) > 0 && <details><summary>{finding.support?.length} histories changed</summary>
+      <Disclosure title="Timing, affected histories, and assumptions"><p className={styles.footnote}>{describeCase(proposal?.scenario)}</p>
+      {(finding.support?.length ?? 0) > 0 && <details><summary>{finding.support?.length} histories with recorded changes</summary>
         <div className="table-scroll"><table><thead><tr><th>History</th><th>Clean</th><th>Faulted</th><th className="num">Lead</th></tr></thead>
           <tbody>{finding.support?.map(row => <tr key={row.equipment_id}><td>{row.equipment_id}</td><td>{row.clean}</td><td>{row.faulted}</td>
             <td className="num">{row.clean_lead ?? "—"} → {row.faulted_lead ?? "—"}</td></tr>)}</tbody></table></div>
       </details>}
       {(finding.assumptions?.length ?? 0) > 0 && <details><summary>Profile assumptions</summary><ul>{finding.assumptions?.map(item => <li key={item}>{item}</li>)}</ul></details>}
+      </Disclosure>
       <div className={styles.actions}>
-        {finding.status === "measured_failure" && <Button disabled={Boolean(data.active)} loading={busy === `reduce-${attempt}`}
+        {finding.status === "measured_failure" && <Button disabled={Boolean(data.active) || Boolean(busy) || data.state.cancel_requested} loading={busy === `reduce-${attempt}`}
           onClick={() => act(`reduce-${attempt}`, () => investigations.reduce(data.id, { requestId: requestId(), attempt, maxExperiments: 16 }))}>Reduce</Button>}
-        <Button variant="ghost" loading={busy === `replay-${attempt}`} onClick={() => act(`replay-${attempt}`, async () => {
+        <Button variant="secondary" disabled={Boolean(busy)} loading={busy === `replay-${attempt}`} onClick={() => act(`replay-${attempt}`, async () => {
           const check = await investigations.replay(data.id, attempt);
           setReplay(check.matches ? "Replay reproduced this result exactly." : "Replay did not reproduce this result.");
         })}>Replay</Button>
@@ -308,6 +359,7 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
       </div>
       <FaultResearch finding={finding} data={data} busy={busy} act={act} />
     </>}
+    </Disclosure>
   </article>;
 }
 
@@ -323,7 +375,7 @@ function FaultResearch({ finding, data, busy, act }: { finding: Finding; data: I
   const sources = (ids: string[]) => (report?.sources ?? []).filter(source => ids.includes(source.id)).map(source =>
     <a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>);
   if (report) return <div className={styles.stack}>
-    <strong>Fault research · {report.status}</strong>
+    <div className={styles.heading}><strong>Fault research</strong><Badge tone={report.status === "completed" ? "info" : "neutral"}>{report.status.replace(/_/g, " ")}</Badge></div>
     <p className={styles.footnote}>External references and AI suggestions; separate from measured findings. Sources do not validate the fault policy or prove a physical cause.</p>
     {report.error && <p role="status">{report.error}</p>}
     {report.note && <>
@@ -336,13 +388,13 @@ function FaultResearch({ finding, data, busy, act }: { finding: Finding; data: I
     <span className={styles.footnote}>Tavily searches {report.searchRequests}; Nemotron requests {report.modelRequests}; reserved completion ceiling {report.reservedCompletionTokens}; reported tokens {report.reportedCompletionTokens ?? "unavailable"}. Saved results are reused.</span>
   </div>;
   return <div className={styles.stack}>
-    <Button variant="ghost" onClick={() => setOpen(!open)} aria-expanded={open}>Research this fault</Button>
+    <Button variant="ghost" className={styles.researchToggle} onClick={() => setOpen(!open)} aria-expanded={open}>Research this fault</Button>
     {open && <fieldset className={styles.preview}><legend>Research this fault</legend>
       <p>Tavily receives this search:</p><p>{query}</p>
       <p>Nemotron receives up to three source excerpts and aliased aggregate experiment results. No raw readings, sensor names, equipment IDs or private concern are sent.</p>
       <p>One search and one Nemotron request, with at most 5,120 completion tokens. References are unverified context and do not change your measured findings. Workspace AI permission is also required.</p>
       <label className={styles.check}><input type="checkbox" checked={allow} onChange={event => setAllow(event.target.checked)} />Allow Tavily search and Nemotron research for this fault</label>
-      <Button disabled={!allow || Boolean(data.active) || data.state.cancel_requested} loading={busy === `research-${attempt}`}
+      <Button disabled={!allow || Boolean(data.active) || Boolean(busy) || data.state.cancel_requested} loading={busy === `research-${attempt}`}
         onClick={() => act(`research-${attempt}`, () => investigations.research(data.id, { requestId: requestId(), attempt, allowResearch: true }))}>Start fault research</Button>
     </fieldset>}
   </div>;
@@ -357,11 +409,12 @@ const controllerCalls = (data: InvestigationView) => ((data.controller as { call
 
 function Timeline({ data }: { data: InvestigationView }) {
   const calls = controllerCalls(data);
+  const operations: Record<string, string> = { run: "saved fault tests", agent: "Nemotron search", reduce: "fault simplification", remedy: "fix comparison", research: "fault research" };
   return <Panel title="Timeline">
     <ol className={styles.timeline}>
       {[...data.events].reverse().map(event => {
         const [kind, operation] = event.kind.split(":");
-        const text = operation ? `${kind === "started" ? "Started" : kind === "finished" ? "Finished" : "Failed"} ${operation}` : eventLabels[event.kind] ?? event.kind;
+        const text = operation ? `${kind === "started" ? "Started" : kind === "finished" ? "Finished" : "Failed"} ${operations[operation] ?? operation}` : eventLabels[event.kind] ?? event.kind;
         return <li key={event.sequence}><time dateTime={new Date(event.at * 1000).toISOString()}>{new Date(event.at * 1000).toLocaleTimeString()}</time>
           <span>{text}{event.detail ? `: ${stops[event.detail]?.[0] ?? event.detail}` : ""}</span></li>;
       })}
@@ -377,11 +430,11 @@ function Timeline({ data }: { data: InvestigationView }) {
 function Proposals({ proposals }: { proposals: ProposalDetail[] }) {
   return <Panel title="Proposals" description="Reasons and hypotheses are unverified text; only measured results above are evidence." tight>
     <StateBlock empty={proposals.length === 0}>
-      <div className="table-scroll"><table><thead><tr><th className="num">#</th><th>Case</th><th>Status</th><th>Hypothesis or reason</th></tr></thead>
+      <div className="table-scroll"><table className={styles.proposalsTable} aria-label="Investigation proposals"><thead><tr><th className="num">#</th><th>Case</th><th>Status</th><th>Hypothesis or reason</th></tr></thead>
         <tbody>{proposals.map(item => {
           const hypothesis = item.hypothesis as { suspected?: string; supportIf?: string; weakenIf?: string } | null;
-          return <tr key={item.id}><td className="num">{item.sequence}</td><td>{describeCase(item.scenario)}</td>
-            <td>{item.status}{item.rejection ? <div className={styles.reason}>{item.rejection}</div> : null}</td>
+          return <tr key={item.id}><td className="num">{item.sequence}</td><td><strong>{caseTitle(item.scenario)}</strong><div className={styles.reason}>{describeCase(item.scenario)}</div></td>
+            <td><Badge tone={item.status === "rejected" ? "warn" : "neutral"}>{item.status.replace(/_/g, " ")}</Badge>{item.rejection ? <div className={styles.reason}>{item.rejection}</div> : null}</td>
             <td>{hypothesis ? <><strong>Hypothesis:</strong> {hypothesis.suspected} <span className={styles.footnote}>Supported if {hypothesis.supportIf}; weakened if {hypothesis.weakenIf}</span></> : item.reason}</td></tr>;
         })}</tbody></table></div>
     </StateBlock>
@@ -389,13 +442,16 @@ function Proposals({ proposals }: { proposals: ProposalDetail[] }) {
 }
 
 function Reductions({ reductions }: { reductions: Record<string, unknown>[] }) {
-  return <Panel title="Reductions">
+  return <Panel title="Simplified failures" description="Remove faults or lower their severity, rerunning each change to check that the failure still occurs.">
     <div className={styles.stack}>{reductions.map(item => {
       const reduction = item as { id: string; status: string; experiments: number; claims: string[]; original: Record<string, unknown>; final: Record<string, unknown> | null; steps: unknown[] };
       return <article key={reduction.id} className={styles.finding}>
-        <header><Badge tone={reduction.status === "complete" ? "ok" : "warn"}>{reduction.status}</Badge><strong>{describeCase(reduction.final ?? reduction.original)}</strong></header>
-        <p>From {describeCase(reduction.original)}. {reduction.steps.length} steps, {reduction.experiments} new experiments.</p>
-        <ul>{reduction.claims.map(claim => <li key={claim}>{claim}</li>)}</ul>
+        <header><Badge tone={reduction.status === "complete" ? "ok" : "warn"}>{reduction.status.replace(/_/g, " ")}</Badge><strong>{reduction.experiments} additional tests</strong></header>
+        <div className={styles.reductionPath}><div><span>Original fault</span><strong>{caseTitle(reduction.original)}</strong><p className={styles.footnote}>{describeCase(reduction.original)}</p></div><ArrowRight size={20} aria-hidden="true" />
+          <div><span>After simplification</span><strong>{caseTitle(reduction.final ?? reduction.original)}</strong><p className={styles.footnote}>{describeCase(reduction.final ?? reduction.original)}</p></div></div>
+        <p className={styles.footnote}>{reduction.steps.length} checked steps. This is a bounded search, not proof of the smallest possible failure.</p>
+        <Disclosure title="Reduction evidence and exact settings"><p>{describeCase(reduction.original)}</p><p>{describeCase(reduction.final ?? reduction.original)}</p>
+          <ul>{reduction.claims.map(claim => <li key={claim}>{claim}</li>)}</ul></Disclosure>
       </article>;
     })}</div>
   </Panel>;
@@ -406,26 +462,32 @@ function Remedies({ data, busy, act }: { data: InvestigationView; busy: string; 
   const [threshold, setThreshold] = useState("0.5");
   const [approve, setApprove] = useState(false);
   const ready = data.discoveries > 0 || data.reductions.length > 0;
-  const reports = useMemo(() => data.remedies as { id: string; kind: string; threshold: number | null; improved: number; degraded: number; meetsCriteria: boolean;
+  const reports = useMemo(() => data.remedies as { id: string; kind: string; threshold: number | null; improved: number; degraded: number; stillFailing?: number; meetsCriteria: boolean;
     clean: { original: { detection: number; alarmBurden: number | null }; remedy: { detection: number; alarmBurden: number | null } }; note: string }[], [data.remedies]);
-  return <Panel title="Remedies" description="Compared on every discovered, reduced and previously passing case. Nothing replaces a deployed model.">
+  const validThreshold = threshold.trim() !== "" && Number.isFinite(Number(threshold)) && Number(threshold) >= 0 && Number(threshold) <= 1;
+  return <Panel title="Compare a fix" description="Test a warning threshold or retrained model against discovered failures and previously passing cases. Deployed models are unchanged.">
     <div className={styles.stack}>
-      {ready ? <div className={styles.fields}>
+      {ready ? <form className={styles.form} onSubmit={event => {
+        event.preventDefault();
+        if (kind === "threshold" && !validThreshold) return;
+        void act("remedy", () => investigations.remedy(data.id, { requestId: requestId(), kind, threshold: kind === "threshold" ? Number(threshold) : null, approveTraining: approve }));
+      }}><div className={styles.fields}>
         <Select label="Remedy" value={kind} onValueChange={value => setKind(value as "threshold" | "augmented")} options={[{ value: "threshold", label: "Explicit warning threshold" }, { value: "augmented", label: "Augmented retraining" }]} />
-        {kind === "threshold" ? <Input label="Threshold" type="number" step="0.01" value={threshold} onChange={event => setThreshold(event.target.value)} />
+        {kind === "threshold" ? <Input label="Threshold" description="A lower threshold can recover warnings but increase early alarms." required type="number" min={0} max={1} step="any" value={threshold} onChange={event => setThreshold(event.target.value)} />
           : <label className={styles.check}><input type="checkbox" checked={approve} onChange={event => setApprove(event.target.checked)} />Approve development-only retraining</label>}
-      </div> : <p>Find or reduce a measured failure first.</p>}
-      {ready && <div className={styles.actions}><Button disabled={Boolean(data.active) || (kind === "augmented" && !approve)} loading={busy === "remedy"}
-        onClick={() => act("remedy", () => investigations.remedy(data.id, { requestId: requestId(), kind, threshold: kind === "threshold" ? Number(threshold) : null, approveTraining: approve }))}>Compare remedy</Button></div>}
+      </div><div className={styles.actions}><Button type="submit" disabled={Boolean(data.active) || Boolean(busy) || data.state.cancel_requested || (kind === "augmented" ? !approve : !validThreshold)} loading={busy === "remedy"}>Compare remedy</Button></div></form>
+        : <p>Once a test reveals a measured failure, compare a fix here and check what it costs elsewhere.</p>}
       {reports.map(report => <article key={report.id} className={styles.finding}>
-        <header><Badge tone={report.meetsCriteria ? "ok" : "bad"}>{report.meetsCriteria ? "Meets criteria" : "Fails criteria"}</Badge>
+        <header><Badge tone={report.meetsCriteria ? "ok" : "bad"}>{report.meetsCriteria ? "Comparison criteria met" : "Comparison criteria not met"}</Badge>
           <strong>{report.kind === "threshold" ? `Threshold ${report.threshold}` : "Augmented retraining"}</strong></header>
         <dl className={styles.metrics}>
           <div><dt>Improved cases</dt><dd>{report.improved}</dd></div><div><dt>Degraded cases</dt><dd>{report.degraded}</dd></div>
-          <div><dt>Clean useful warnings</dt><dd>{percent(report.clean.original.detection)} → {percent(report.clean.remedy.detection)}</dd></div>
-          <div><dt>Clean alarm burden</dt><dd>{percent(report.clean.original.alarmBurden, 1)} → {percent(report.clean.remedy.alarmBurden, 1)}</dd></div>
+          <div><dt>Still failing</dt><dd>{report.stillFailing ?? "Not recorded"}</dd></div>
         </dl>
+        <div className={styles.comparisonGrid}><WarningComparison before={report.clean.original.detection} after={report.clean.remedy.detection} beforeLabel="Original model" afterLabel="With proposed fix" label="Warnings without sensor faults" />
+          <WarningComparison before={report.clean.original.alarmBurden} after={report.clean.remedy.alarmBurden} beforeLabel="Original model" afterLabel="With proposed fix" label="Early alarm burden" lowerIsBetter /></div>
         <p className={styles.footnote}>{report.note}</p>
+        <p className={styles.footnote}>Comparison criteria check baseline warnings, early alarms, and new failures. Existing failures can remain even when the criteria are met.</p>
       </article>)}
     </div>
   </Panel>;
