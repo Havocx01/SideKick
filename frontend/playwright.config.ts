@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+// Workers re-read this file, so the folder is fixed once in the environment they inherit.
+process.env.SIDEKICK_BROWSER_ARTIFACTS ??= `output/browser-tests/${Date.now()}`;
+
 export default defineConfig({
   testDir: "./tests",
   timeout: 180_000,
@@ -11,6 +14,6 @@ export default defineConfig({
     url: "http://127.0.0.1:8136/api/health",
     cwd: "..",
     timeout: 30_000,
-    env: { PYTHONPATH: "backend", SIDEKICK_MODE: "full", SIDEKICK_MLFLOW: "0", SIDEKICK_ASSISTANT_LIVE_ENABLED: "0", SIDEKICK_ARTIFACTS_DIR: `output/browser-tests/${Date.now()}` },
+    env: { PYTHONPATH: "backend", SIDEKICK_MODE: "full", SIDEKICK_MLFLOW: "0", SIDEKICK_ASSISTANT_LIVE_ENABLED: "0", SIDEKICK_ARTIFACTS_DIR: process.env.SIDEKICK_BROWSER_ARTIFACTS },
   },
 });

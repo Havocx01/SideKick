@@ -236,14 +236,19 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
   const [label, tone] = findingTones[finding.status];
   const proposal = data.proposals.find(item => item.id === finding.proposal_id);
   const attempt = finding.attempt_id ?? "";
+  const chosen = controllerCalls(data).some(call => call.proposalId === finding.proposal_id);
+  const partial = (finding.evaluated_histories ?? 0) < (finding.expected_histories ?? 0);
+  const unscored = finding.status === "not_applicable" || finding.status === "inconclusive";
   return <article className={styles.finding} aria-label={`${label}: ${finding.family ?? "case"}`}>
-    <header><Badge tone={tone}>{label}</Badge><strong>{describeCase(proposal?.scenario)}</strong></header>
+    <header><Badge tone={tone}>{label}</Badge>{partial && finding.status !== "execution_error" && <Badge tone="warn">Partial coverage</Badge>}
+      <Badge tone={chosen ? "info" : "neutral"}>{chosen ? "Chosen by Nemotron" : "Supplied case"}</Badge><strong>{describeCase(proposal?.scenario)}</strong></header>
     {finding.status === "execution_error" ? <p>{finding.reasons?.[0]}</p> : <>
       <dl className={styles.metrics}>
         <div><dt>Coverage</dt><dd>{finding.evaluated_histories ?? 0} / {finding.expected_histories ?? 0} histories</dd></div>
         <div><dt>Useful warnings</dt><dd>{percent(finding.clean_detection)} → {percent(finding.faulted_detection)}</dd></div>
         <div><dt>Early alarm burden</dt><dd>{percent(finding.clean_burden, 1)} → {percent(finding.faulted_burden, 1)}</dd></div>
       </dl>
+      {unscored && <p><strong>Why this was not scored as a finding:</strong></p>}
       {finding.reasons?.map(reason => <p key={reason} className={styles.reason}>{reason}</p>)}
       {finding.effects?.map(effect => <p key={effect.kind}>{effect.kind.replace(/_/g, " ")}: {effect.histories.length} histories</p>)}
       {(finding.support?.length ?? 0) > 0 && <details><summary>{finding.support?.length} histories changed</summary>
@@ -267,8 +272,13 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
 
 const eventLabels: Record<string, string> = { created: "Created", cancel_requested: "Cancellation requested", resumed: "Resumed", interrupted: "Interrupted" };
 
+interface ControllerCall { sequence: number; status: string; proposalId?: string | null; error?: string | null; feedback?: string | null;
+  reservedCompletionTokens?: number; usage?: { completion_tokens?: number } | null; elapsedSeconds?: number | null }
+
+const controllerCalls = (data: InvestigationView) => ((data.controller as { calls?: ControllerCall[] } | null)?.calls) ?? [];
+
 function Timeline({ data }: { data: InvestigationView }) {
-  const calls = ((data.controller as { calls?: { sequence: number; status: string; error?: string | null; usage?: { completion_tokens?: number } | null; elapsedSeconds?: number | null }[] } | null)?.calls) ?? [];
+  const calls = controllerCalls(data);
   return <Panel title="Timeline">
     <ol className={styles.timeline}>
       {[...data.events].reverse().map(event => {
@@ -278,9 +288,11 @@ function Timeline({ data }: { data: InvestigationView }) {
           <span>{text}{event.detail ? `: ${stops[event.detail]?.[0] ?? event.detail}` : ""}</span></li>;
       })}
     </ol>
-    {calls.length > 0 && <div className="table-scroll"><table aria-label="Provider calls"><thead><tr><th className="num">Call</th><th>Outcome</th><th className="num">Reported tokens</th><th className="num">Seconds</th></tr></thead>
-      <tbody>{calls.map(call => <tr key={call.sequence}><td className="num">{call.sequence}</td><td>{call.error ?? call.status}</td>
-        <td className="num">{call.usage?.completion_tokens ?? "—"}</td><td className="num">{call.elapsedSeconds ?? "—"}</td></tr>)}</tbody></table></div>}
+    {calls.length > 0 && <div className="table-scroll"><table aria-label="Provider calls"><thead><tr><th className="num">Call</th><th>Outcome</th>
+      <th className="num">Reserved ceiling</th><th className="num">Reported tokens</th><th className="num">Seconds</th></tr></thead>
+      <tbody>{calls.map(call => <tr key={call.sequence}><td className="num">{call.sequence}</td>
+        <td>{call.error ? `${call.status}: ${call.error.replace(/_/g, " ")}` : call.status}{call.feedback ? <div className={styles.reason}>Not run: {call.feedback}</div> : null}</td>
+        <td className="num">{call.reservedCompletionTokens ?? "—"}</td><td className="num">{call.usage?.completion_tokens ?? "—"}</td><td className="num">{call.elapsedSeconds ?? "—"}</td></tr>)}</tbody></table></div>}
   </Panel>;
 }
 

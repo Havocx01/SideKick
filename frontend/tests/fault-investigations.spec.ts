@@ -174,3 +174,35 @@ for (const width of [390, 1280]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
+
+test("each kind of outcome looks different and unscored cases say why", async ({ page }) => {
+  const partial: Finding = { ...failure, status: "inconclusive", proposal_id: "p3", attempt_id: "a3", evaluated_histories: 10, coverage: 10 / 22,
+    effects: [], support: [], reasons: ["Coverage 45% is below the 80% minimum"] };
+  const inapplicable: Finding = { ...failure, status: "not_applicable", proposal_id: "p4", attempt_id: "a4", evaluated_histories: 0, coverage: 0,
+    clean_detection: null, faulted_detection: null, effects: [], support: [], reasons: ["channel-1: history never reaches 100 cycles before failure"] };
+  const broken: Finding = { ...failure, status: "execution_error", proposal_id: "p5", attempt_id: "a5", reasons: ["timed_out"] };
+  const proposals = [...view().proposals, ...["p3", "p4", "p5"].map((id, index) => ({ id, sequence: index + 3, status: "completed", scenario: stuckPair, reason: "Probe.",
+    hypothesis: { suspected: "Stuck pair hides wear.", supportIf: "Warnings are lost.", weakenIf: "Warnings hold.", basedOn: [] }, rejection: null }))];
+  const controller = { callsUsed: 2, reservedCompletionTokens: 10240, reportedCompletionTokens: 700, calls: [
+    { sequence: 1, status: "rejected", proposalId: null, error: "invalid_proposal", feedback: "No development history can apply this case (22 checked)", reservedCompletionTokens: 5120, usage: { completion_tokens: 300 }, elapsedSeconds: 3 },
+    { sequence: 2, status: "accepted", proposalId: "p3", error: null, feedback: null, reservedCompletionTokens: 5120, usage: { completion_tokens: 400 }, elapsedSeconds: 2 }] };
+  await fixture(page, view({ ...finished(), findings: [failure, partial, inapplicable, broken], proposals, controller, stopReason: "budget_exhausted" } as Partial<InvestigationView>));
+  await page.goto("/investigations/inv-1");
+  const measured = page.getByRole("article", { name: /^Measured failure/ });
+  await expect(measured).toContainText("Supplied case");
+  await expect(measured).not.toContainText("Partial coverage");
+  const inconclusive = page.getByRole("article", { name: /^Inconclusive/ });
+  await expect(inconclusive).toContainText("Partial coverage");
+  await expect(inconclusive).toContainText("Chosen by Nemotron");
+  await expect(inconclusive).toContainText("Why this was not scored as a finding:");
+  const notApplicable = page.getByRole("article", { name: /^Not applicable/ });
+  await expect(notApplicable).toContainText("history never reaches 100 cycles before failure");
+  await expect(page.getByRole("article", { name: /^Execution error/ })).toContainText("timed_out");
+  const calls = page.getByRole("table", { name: "Provider calls" });
+  await expect(calls).toContainText("rejected: invalid proposal");
+  await expect(calls).toContainText("Not run: No development history can apply this case (22 checked)");
+  await expect(calls.getByRole("columnheader", { name: "Reserved ceiling" })).toBeVisible();
+  await expect(calls).toContainText("5120");
+  await expect(page.getByText("Calls used 2; reserved 10240 tokens; reported 700.")).toBeVisible();
+  await expect(page.getByText("Reasons and hypotheses are unverified text; only measured results above are evidence.")).toBeVisible();
+});

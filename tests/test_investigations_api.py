@@ -159,6 +159,27 @@ def test_agent_runs_need_permission_and_stop_when_it_is_revoked(api, monkeypatch
     assert view["events"][-1]["detail"] == "cancelled" and view["state"]["proposals"] == [] and view["experimentsUsed"] == 0
 
 
+def test_repeated_or_enlarged_agent_starts_never_exceed_the_paid_allowance(api, monkeypatch):
+    client, service, root = api
+    investigation = create(client, proposals=[], seed=0)
+    path = f"/api/investigations/{investigation}/start"
+    calls = provider(monkeypatch, [proposal(), proposal("channel-2")])
+    body = {"mode": "agent", "allowProvider": True, "maxProviderCalls": 2, "maxCompletionTokens": 4096}
+    client.post(path, json={**body, "requestId": "paid-request-1"}, headers=HEADERS)
+    service.wait(investigation)
+    assert client.post(path, json={**body, "requestId": "paid-request-1"}, headers=HEADERS).status_code == 200
+    service.wait(investigation)
+    client.post(path, json={**body, "requestId": "paid-request-2"}, headers=HEADERS)
+    service.wait(investigation)
+    client.post(path, json={**body, "maxProviderCalls": 4, "requestId": "paid-request-3"}, headers=HEADERS)
+    service.wait(investigation)
+    view = client.get(f"/api/investigations/{investigation}", headers=HEADERS).json()
+    assert len(calls) == 2 and view["controller"]["callsUsed"] == 2 and view["experimentsUsed"] == 2
+    events = [(event["kind"], event["detail"]) for event in view["events"][1:]]
+    assert events[:4] == [("started:agent", None), ("finished:agent", "call_limit"), ("started:agent", None), ("finished:agent", "call_limit")]
+    assert events[4][0] == "started:agent" and events[5][0] == "failed:agent" and "configuration changed" in events[5][1]
+
+
 @pytest.mark.parametrize("otherOwner", ["alice", "bob"])
 def test_reduction_rejects_attempts_from_another_investigation(api, otherOwner):
     client, service, root = api
