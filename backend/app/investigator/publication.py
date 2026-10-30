@@ -2,8 +2,9 @@
 import json
 import time
 
+from app.faults.scenarios import FaultCase
 from app.investigator.controller import controllerStatus
-from app.investigator.findings import digest, loadCriterion, recordFindings
+from app.investigator.findings import digest, family, loadCriterion, recordFindings
 from app.investigator.reduction import ensureTable as ensureReductions
 from app.investigator.remedies import ensureTable as ensureRemedies
 
@@ -18,6 +19,24 @@ def experimentRow(finding, number):
         "cleanBurden": finding.clean_burden, "faultedBurden": finding.faulted_burden, "reasons": list(finding.reasons),
         "effects": [{"kind": effect.kind, "histories": len(effect.histories)} for effect in finding.effects],
         "changedHistories": len(finding.support), "assumptions": list(finding.assumptions)}
+
+
+def adaptation(store, investigation, state, refs, chosen):
+    # A model proposal adapts when it cites results that existed before it was made; repeating a family is reported, not hidden.
+    attemptSeq = {item.id: next(proposal.seq for proposal in state.proposals if proposal.id == item.proposal_id) for item in state.attempts}
+    with store.connection() as db:
+        payloads = db.execute("SELECT id, seq, payload FROM proposals WHERE investigation=? ORDER BY seq", (investigation,)).fetchall()
+    rows, seen = [], set()
+    for proposalId, seq, payload in payloads:
+        data = json.loads(payload)
+        scenario = data.get("scenario", data)
+        caseFamily = family(FaultCase.model_validate(scenario))
+        if proposalId in chosen:
+            basedOn = list((data.get("hypothesis") or {}).get("basedOn", []))
+            rows.append({"proposal": seq, "family": caseFamily, "basedOn": [refs.get(item, "unrecorded") for item in basedOn],
+                "basisRecorded": all(attemptSeq.get(item, seq) < seq and item in refs for item in basedOn), "newFamily": caseFamily not in seen})
+        seen.add(caseFamily)
+    return rows
 
 
 def publicExport(store, investigation, *, contextName=None) -> dict:
@@ -35,6 +54,9 @@ def publicExport(store, investigation, *, contextName=None) -> dict:
 
     profile = record.policy.profile
     controller = controllerStatus(store, investigation)
+    chosen = {call["proposalId"] for call in controller["calls"] if call.get("proposalId")} if controller else set()
+    attemptOf = {finding.attempt_id: number for number, finding in enumerate(measured, 1)}
+    proposalOf = {item.id: item.proposal_id for item in state.attempts}
     content = {
         "version": 1, "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "notice": NOTICE,
         "context": {"fingerprint": record.context_fingerprint, "configFingerprint": record.config_fingerprint, "partition": record.partition,
@@ -48,13 +70,14 @@ def publicExport(store, investigation, *, contextName=None) -> dict:
         "budget": {"maxExperiments": state.budget.max_experiments, "experimentsUsed": state.slots_used, "failures": state.failures, "stopReason": state.stop_reason},
         "proposals": {"total": len(state.proposals), "rejected": sum(item.status == "rejected" for item in state.proposals),
             "duplicates": sum(item.status == "duplicate" for item in state.proposals)},
-        "experiments": [{**experimentRow(finding, number), "scenario": scenarios[finding.attempt_id].model_dump(mode="json")}
-            for number, finding in enumerate(measured, 1)],
+        "experiments": [{**experimentRow(finding, number), "scenario": scenarios[finding.attempt_id].model_dump(mode="json"),
+            "chosenBy": "nemotron" if proposalOf[finding.attempt_id] in chosen else "supplied"} for number, finding in enumerate(measured, 1)],
         "executionErrors": [{"status": finding.status, "scenarioId": finding.scenario_id} for finding in findings if finding.status == "execution_error"],
         "discoveryFamilies": sorted({finding.family for finding in measured if finding.is_discovery}),
         "controller": {key: controller[key] for key in ("stopReason", "modelStopReason", "callsUsed", "reservedCompletionTokens", "reportedCompletionTokens")}
             | {"model": controller["configuration"]["model"], "prompt": controller["configuration"]["prompt"],
-                "reasoningEffort": controller["configuration"]["reasoningEffort"]} if controller else None,
+                "reasoningEffort": controller["configuration"]["reasoningEffort"],
+                "adaptation": adaptation(store, investigation, state, {attempt: f"result-{number}" for attempt, number in attemptOf.items()}, chosen)} if controller else None,
         "reductions": [{"status": item["status"], "original": item["original"], "final": item["final"], "family": item.get("family"),
             "claims": item["claims"], "experiments": item["experiments"],
             "steps": [{"change": step["change"], "status": step["status"], "accepted": step["accepted"], "evaluated": step.get("evaluated"),

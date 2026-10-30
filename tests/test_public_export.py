@@ -130,3 +130,27 @@ def test_cli_replay_reruns_every_completed_experiment_on_a_fresh_evaluator(fitte
     cli.context = lambda args: FixedDevelopmentEvaluator(fitted, {LR: .9}, loadPolicy("synthetic-rotating-v1", max_evaluations=128))
     with pytest.raises(ValueError):
         cli.main(["--store", str(tmp_path / "store"), "--replay", investigation])
+
+
+def test_export_marks_who_chose_each_case_and_whether_later_proposals_built_on_results(fitted, tmp_path, monkeypatch):
+    from test_nemotron_controller import setup
+
+    def cited(sensor, onset, *basis):
+        reply = proposal(sensor, onset_before_failure=onset)
+        reply["proposal"]["hypothesis"] = {"suspected": "Loss costs warnings.", "supportIf": "Detection falls.", "weakenIf": "Detection holds.", "basedOn": list(basis)}
+        return reply
+    fixed, store, investigation, config = setup(fitted, tmp_path, experiments=5)
+    saveCriterion(store, investigation, FindingCriterion(candidate=LR))
+    store.add_proposals(investigation, [{"components": [component("temp_bearing", kind="stuck", onset_before_failure=60)]}])
+    ExperimentRunner(store, fixed).run(investigation)
+    sent = provider(monkeypatch, [cited("channel-1", 40, "result-1"), cited("channel-2", 40, "result-1", "result-2"), cited("channel-1", 50), stop()])
+    run(store, fixed, config, investigation)
+    assert [[item.get("ref") for item in packet["experiments"]] for packet in sent] == [["result-1"], ["result-1", "result-2"], ["result-1", "result-2", "result-3"],
+        ["result-1", "result-2", "result-3", "result-4"]]
+    evidence = publicExport(store, investigation)
+    assert [row["chosenBy"] for row in evidence["experiments"]] == ["supplied", "nemotron", "nemotron", "nemotron"]
+    rows = evidence["controller"]["adaptation"]
+    assert [row["proposal"] for row in rows] == [2, 3, 4]
+    assert [row["basedOn"] for row in rows] == [["result-1"], ["result-1", "result-2"], []]
+    assert [row["basisRecorded"] for row in rows] == [True, True, True]
+    assert [row["newFamily"] for row in rows] == [True, True, False]
