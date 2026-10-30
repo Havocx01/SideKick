@@ -111,16 +111,18 @@ def recordedRun(store, investigation, criterion):
     counts = {"proposals": len(state.proposals) + rejectedCalls, "infeasible": rejectedCalls + sum(item.status == "rejected" for item in state.proposals),
         "duplicates": sum(item.status == "duplicate" for item in state.proposals),
         "errors": sum(item.status in FAILURE_STATUSES for item in state.attempts)}
-    history = [entry(number, result.scenario, classify(result, criterion)) for number, result in
-        enumerate((store.result(item.id) for item in state.attempts if item.status == "completed"), 1)]
-    elapsed = sum(call["elapsedSeconds"] or 0 for call in controller["calls"]) + sum(
-        item.finished_at - item.started_at for item in state.attempts if item.started_at and item.finished_at)
+    completed = [store.result(item.id) for item in state.attempts if item.status == "completed"]
+    history = [entry(number, result.scenario, classify(result, criterion)) for number, result in enumerate(completed, 1)]
+    callSeconds = sum(call["elapsedSeconds"] or 0 for call in controller["calls"])
+    runSeconds = sum(item.finished_at - item.started_at for item in state.attempts if item.started_at and item.finished_at)
     with store.transaction() as db:
         ensureReductions(db)
         rows = db.execute("SELECT payload FROM reductions WHERE investigation=?", (investigation,)).fetchall()
-    return outcome(history, counts, elapsed, controller["callsUsed"], reductionExperiments=sum(json.loads(row[0])["experiments"] for row in rows),
-        invalidReplies=rejectedCalls, reservedCompletionTokens=controller["reservedCompletionTokens"],
-        reportedCompletionTokens=controller["reportedCompletionTokens"], model=controller["configuration"]["model"], prompt=controller["configuration"]["prompt"])
+    reductionWork = sum(json.loads(row[0])["experiments"] for row in rows)
+    configuration = controller["configuration"]
+    return outcome(history, counts, callSeconds + runSeconds, controller["callsUsed"], reductionExperiments=reductionWork, invalidReplies=rejectedCalls,
+        reservedCompletionTokens=controller["reservedCompletionTokens"], reportedCompletionTokens=controller["reportedCompletionTokens"],
+        model=configuration["model"], prompt=configuration["prompt"])
 
 
 def benchmark(contexts, criterion, strategies, *, budget=16, seeds=(0, 1, 2), seedCases=(), recorded=None) -> dict:

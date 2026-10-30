@@ -58,6 +58,12 @@ class ControllerStopped(RuntimeError):
     pass
 
 
+def citedRef(text):
+    # Nemotron sometimes annotates a citation ("result-1 (no effect at onset 20)"); the leading reference is what counts.
+    found = re.match(r"\s*(result-\d+)", text)
+    return found.group(1) if found else text
+
+
 def feedback(error) -> str:
     """Short correction text from local validation; provider input values are never echoed back."""
     if isinstance(error, ValidationError):
@@ -304,8 +310,7 @@ class NemotronController:
             component["sensor"] = channels[component["sensor"]]
         if payload.get("hypothesis"):
             refs = resultRefs(self.store.load(record.id))
-            # Nemotron sometimes annotates a citation ("result-1 (no effect at onset 20)"); the leading reference is what counts.
-            payload["hypothesis"]["basedOn"] = [found.group(1) if (found := re.match(r"\s*(result-\d+)", ref)) else ref for ref in payload["hypothesis"]["basedOn"]]
+            payload["hypothesis"]["basedOn"] = [citedRef(ref) for ref in payload["hypothesis"]["basedOn"]]
             unknown = [ref for ref in payload["hypothesis"]["basedOn"] if ref not in refs]
             if unknown:
                 valid = ", ".join(refs) or "none yet; leave basedOn empty"

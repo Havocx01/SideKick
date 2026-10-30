@@ -24,7 +24,8 @@ def experimentRow(finding, number):
 
 def adaptation(store, investigation, state, refs, chosen):
     # A model proposal adapts when it cites results that existed before it was made; repeating a family is reported, not hidden.
-    attemptSeq = {item.id: next(proposal.seq for proposal in state.proposals if proposal.id == item.proposal_id) for item in state.attempts}
+    proposalSeq = {item.id: item.seq for item in state.proposals}
+    attemptSeq = {item.id: proposalSeq[item.proposal_id] for item in state.attempts}
     with store.connection() as db:
         payloads = db.execute("SELECT id, seq, payload FROM proposals WHERE investigation=? ORDER BY seq", (investigation,)).fetchall()
     rows, seen = [], set()
@@ -34,8 +35,9 @@ def adaptation(store, investigation, state, refs, chosen):
         caseFamily = family(FaultCase.model_validate(scenario))
         if proposalId in chosen:
             basedOn = list((data.get("hypothesis") or {}).get("basedOn", []))
-            rows.append({"proposal": seq, "family": caseFamily, "basedOn": [refs.get(item, "unrecorded") for item in basedOn],
-                "basisRecorded": all(attemptSeq.get(item, seq) < seq and item in refs for item in basedOn), "newFamily": caseFamily not in seen})
+            recorded = all(item in refs and attemptSeq.get(item, seq) < seq for item in basedOn)
+            cited = [refs.get(item, "unrecorded") for item in basedOn]
+            rows.append({"proposal": seq, "family": caseFamily, "basedOn": cited, "basisRecorded": recorded, "newFamily": caseFamily not in seen})
         seen.add(caseFamily)
     return rows
 
