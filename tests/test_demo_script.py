@@ -40,7 +40,7 @@ def test_demo_with_nemotron_marks_its_cases_and_reduces_one_it_chose(tmp_path, c
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     cli.get_settings = lambda: Settings(mode="full", assistant_provider="nebius", assistant_model="nvidia/nemotron-3-super-120b-a12b",
-        nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True)
+        nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True)
     alias = {sensor: f"channel-{index}" for index, sensor in enumerate(loadPolicy("synthetic-rotating-v1").allowed_sensors, 1)}
     stuck = [{"kind": "stuck", "sensor": alias[sensor], "onset": {"mode": "explicit", "onset_before_failure": 50}, "duration": {"mode": "persistent"}}
         for sensor in ("vibration_rms", "oil_particles")]

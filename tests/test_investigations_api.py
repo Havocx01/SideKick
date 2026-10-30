@@ -36,7 +36,7 @@ def api(fitted, local_settings, monkeypatch):
     root = local_settings / "investigations"
     export_evaluation(engine, engine.evaluate(FaultCase.model_validate(STUCK_PAIR)), root / "contexts" / "synthetic")
     settings = Settings(mode="full", assistant_provider="nebius", assistant_model="nvidia/nemotron-3-super-120b-a12b",
-        nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True)
+        nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True)
     app = FastAPI()
     app.state.investigations = InvestigationService(root, settings)
     app.state.assistant = Consent()

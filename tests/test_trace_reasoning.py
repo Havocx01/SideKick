@@ -153,11 +153,11 @@ def test_intermittent_crossings_allow_some_scores_to_remain_below_threshold():
 
 
 def test_provider_schema_requires_nullable_basis_without_changing_public_report():
-    from openai.lib._parsing._responses import type_to_text_format_param
+    from app.assistant.transport import strict_schema
     from app.assistant.schemas import DeepHypothesis
     packet, observations, _, _ = captured()
-    schema = type_to_text_format_param(provider_synthesis_schema([row.id for row in observations], packet=packet))
-    definition = schema['schema']['$defs']['ScopedDeepHypothesis']
+    schema = strict_schema(provider_synthesis_schema([row.id for row in observations], packet=packet))
+    definition = schema['$defs']['ScopedDeepHypothesis']
     assert 'trace_basis' in definition['required']
     assert 'trace_basis' not in DeepHypothesis.model_json_schema()['properties']
 
@@ -172,7 +172,7 @@ def test_trace_basis_and_title_survive_mocked_reuse_brief_and_export(deep_app, m
     attach_replays(bundle, Path(__file__).resolve().parents[1] / 'evidence/bundle.json')
     before = bundle.model_dump_json()
     monkeypatch.setattr(routes_assistant, 'bundle', lambda *_: bundle)
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     def answer(output):
         _, _, _, capture = captured()
         output.clear()
@@ -195,7 +195,7 @@ def test_trace_basis_and_title_survive_mocked_reuse_brief_and_export(deep_app, m
         assert client.post(path + '/brief', json={'text': brief['result']['brief_draft']}, headers=HEADERS).status_code == 200
         assert client.get(path + '/export').status_code == 200
     assert len(calls) == 1 and bundle.model_dump_json() == before
-    packet = json.loads(calls[0]['input'][-1]['content'])
+    packet = json.loads(calls[0]['messages'][-1]['content'])
     assert packet['diagnostic_contract']['trace_bases']['history-summary-1'] == 'short_crossings'
 
 

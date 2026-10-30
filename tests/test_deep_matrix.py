@@ -4,6 +4,7 @@ import itertools
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from provider_helpers import chatCompletion
 
 from app.assistant import deep
 from app.assistant.investigation import EvidenceTools
@@ -30,14 +31,14 @@ def test_all_recorded_models_and_pairs_missing_evidence_and_uploaded_context(mon
     class Client:
         def __init__(self, **kwargs):
             assert kwargs['max_retries'] == 0
-            self.responses = self
+            self.chat = SimpleNamespace(completions=self)
         async def __aenter__(self):
             return self
         async def __aexit__(self, *_):
             return None
-        async def parse(self, **kwargs):
+        async def create(self, **kwargs):
             requests.append(kwargs)
-            packet = json.loads(kwargs['input'][-1]['content'])
+            packet = json.loads(kwargs['messages'][-1]['content'])
             anchor = packet['diagnostic_contract']['explanation_anchor']
             focus = max(packet['observations'], key=lambda row: row['failed_cases'])
             ids = anchor['observation_ids'] if anchor else [focus['id']]
@@ -45,11 +46,11 @@ def test_all_recorded_models_and_pairs_missing_evidence_and_uploaded_context(mon
                 'next_tests': [{'title': 'Inspect recorded response', 'model': anchor['model'] if anchor else focus['model'],
                     'check_type': 'score_persistence', 'signal': anchor['recommended_signal'] if anchor else 'crossings_without_warning',
                     'focus': 'Inspect matched score-crossing timing and recorded warning onset.', 'observation_ids': ids}]}
-            return SimpleNamespace(output_parsed=kwargs['text_format'].model_validate(result))
+            return chatCompletion(result)
 
     monkeypatch.setattr(deep, 'AsyncOpenAI', Client)
     settings = get_settings()
-    monkeypatch.setattr(settings, 'openai_api_key', 'offline-mock-only')
+    monkeypatch.setattr(settings, 'nebius_api_key', 'offline-mock-only')
     async def run():
         for context in contexts:
             scoped = bundle.model_copy(deep=True) if context.experiment_id else bundle

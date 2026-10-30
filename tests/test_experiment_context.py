@@ -74,7 +74,7 @@ def test_focus_validation_and_empty_identity_compatibility(deep_app):
 
 def test_deep_uses_saved_context_snapshot_and_edits_do_not_launch_ai(deep_app, tmp_path, monkeypatch):
     client, app, _, _ = context_client(deep_app, tmp_path)
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch)
     body = {"task": "deep", "candidates": ["logistic_regression/lr2"], "investigation_focus": "Review delayed warnings"}
     with client:

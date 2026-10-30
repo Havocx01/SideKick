@@ -9,6 +9,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from provider_helpers import chatCompletion
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -22,7 +23,7 @@ from app.evidence.bundle import load_bundle
 @pytest.fixture
 def deep_app(local_settings, monkeypatch):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=True, openai_api_key="mock-only", assistant_model="fixture",
+        assistant_live_enabled=True, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock-only", assistant_model="fixture",
         assistant_presenter_code="presenter", assistant_timeout_seconds=2,
         assistant_tasks=("investigate", "compare", "warning", "brief", "data", "deep"))
     loaded = load_bundle(get_settings().bundle_path)
@@ -75,7 +76,7 @@ def checked_fixture(output, packet):
 @pytest.mark.parametrize("candidate", ["logistic_regression/lr1", "xgboost_augmented/aug3"])
 def test_structured_outcomes_accept_useful_wording_without_magic_words(deep_app, monkeypatch, candidate):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch)
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json={**BODY, "candidates": [candidate]}, headers=HEADERS).json()
@@ -122,12 +123,12 @@ def test_provider_contract_requires_both_outcomes_and_bounds_stored_text():
 
 @pytest.mark.parametrize("ids", [["pattern-1"], ["pattern-1", "pattern-10", "pattern-24"]])
 def test_request_schema_constrains_every_citation_to_inspected_patterns(ids):
-    from openai.lib._parsing._responses import type_to_text_format_param
+    from app.assistant.transport import strict_schema
     from pydantic import ValidationError
 
     from app.assistant.deep import provider_synthesis_schema
     model = provider_synthesis_schema(ids)
-    schema = type_to_text_format_param(model)["schema"]
+    schema = strict_schema(model)
     for field in ("hypotheses", "next_tests"):
         ref = schema["properties"][field]["items"]["$ref"].split("/")[-1]
         item = schema["$defs"][ref]
@@ -161,7 +162,7 @@ def test_citation_schema_is_request_scoped_without_leaking_previous_choices():
 ])
 def test_mechanisms_are_framed_as_hypotheses_without_word_gates(deep_app, monkeypatch, wording):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch, lambda output: output["hypotheses"][0].update(explanation=wording))
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
@@ -174,7 +175,7 @@ def test_mechanisms_are_framed_as_hypotheses_without_word_gates(deep_app, monkey
 
 def test_deployment_uncertainty_is_not_confused_with_approval(deep_app, monkeypatch):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch, lambda output: output.update(gaps=[
         "Performance under different deployment conditions remains unknown."]))
     with TestClient(app) as client:
@@ -192,7 +193,7 @@ def test_captured_real_responses_render_and_convert_without_another_paid_call(de
     # Old free-form paid responses are not admitted as fresh typed diagnostics.
     # Historical stored output remains readable (covered separately).
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     captured = json.loads((Path(__file__).parent / "fixtures" / filename).read_text(encoding="utf-8"))
     def replay(output):
         output.clear()
@@ -216,7 +217,7 @@ def test_captured_real_responses_render_and_convert_without_another_paid_call(de
 ])
 def test_simulated_dropout_is_distinguished_from_physical_diagnosis(deep_app, monkeypatch, text, valid):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch, lambda output: output["next_tests"][0].update(procedure=text))
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
@@ -228,7 +229,7 @@ def test_simulated_dropout_is_distinguished_from_physical_diagnosis(deep_app, mo
 @pytest.mark.parametrize("field", ["hypotheses", "next_tests"])
 def test_repeated_valid_citations_are_deduplicated_without_losing_order(deep_app, monkeypatch, field):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     def repeat(output):
         first, second = output[field][0]["observation_ids"]
         output[field][0]["observation_ids"] = [first, second, first, second]
@@ -246,28 +247,28 @@ def test_real_sdk_serializes_scoped_schema_and_parses_augmented_report_offline(d
 
     from app.assistant import deep
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     app.state.assistant.settings.assistant_timeout_seconds = 10  # Include cold SDK setup in this offline transport test.
     requests = []
     def respond(request):
         payload = json.loads(request.content)
         requests.append(payload)
-        packet = json.loads(payload["input"][-1]["content"])
+        packet = json.loads(payload["messages"][-1]["content"])
         ids = [row["id"] for row in packet["observations"]]
         support_ids = [row["observation_id"] for section in packet["supporting_evidence"].values() for row in section.get("items", [])]
-        schema = payload["text"]["format"]["schema"]
+        schema = payload["response_format"]["json_schema"]["schema"]
         for field in ("hypotheses", "next_tests"):
             ref = schema["properties"][field]["items"]["$ref"].split("/")[-1]
             assert schema["$defs"][ref]["properties"]["observation_ids"]["items"]["enum"] == ids + support_ids
         output = checked_fixture(provider_synthesis(ids), packet)
         output["next_tests"][0]["observation_ids"] = [ids[0], ids[0]]
-        return httpx.Response(200, json={"id": "resp_fixture", "object": "response", "created_at": 0,
-            "model": "fixture", "status": "completed", "error": None, "incomplete_details": None,
-            "output": [{"id": "msg_fixture", "type": "message", "status": "completed", "role": "assistant",
-                "content": [{"type": "output_text", "text": json.dumps(output), "annotations": []}]}]})
+        return httpx.Response(200, json={"id": "chatcmpl-fixture", "object": "chat.completion", "created": 0,
+            "model": "fixture", "choices": [{"index": 0, "finish_reason": "stop",
+                "message": {"role": "assistant", "content": json.dumps(output)}}]})
     def offline_client(**kwargs):
         assert kwargs["api_key"] == "mock-only" and kwargs["max_retries"] == 0
-        return SDKClient(**kwargs, base_url="http://sdk-fixture.invalid/v1",
+        assert kwargs["base_url"] == "https://api.tokenfactory.nebius.com/v1/"
+        return SDKClient(**kwargs,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)))
     monkeypatch.setattr(deep, "AsyncOpenAI", offline_client)
     with TestClient(app) as client:
@@ -275,7 +276,7 @@ def test_real_sdk_serializes_scoped_schema_and_parses_augmented_report_offline(d
         record = completed(client, start["id"])
         assert record["result"]["mode"] == "ai", record["result"]["fallback_reason"]
         assert record["result"]["deep_report"]["next_tests"][0]["observation_ids"] == ["pattern-1"]
-    assert len(requests) == 1 and requests[0]["store"] is False
+    assert len(requests) == 1 and requests[0]["response_format"]["type"] == "json_schema"
 
 
 def fake_provider(monkeypatch, mutate=None):
@@ -284,21 +285,21 @@ def fake_provider(monkeypatch, mutate=None):
     class Client:
         def __init__(self, **kwargs):
             assert kwargs["max_retries"] == 0
-            self.responses = self
+            self.chat = SimpleNamespace(completions=self)
         async def __aenter__(self):
             return self
         async def __aexit__(self, *_):
             return None
-        async def parse(self, **kwargs):
+        async def create(self, **kwargs):
             calls.append(kwargs)
-            packet = json.loads(kwargs["input"][-1]["content"])
+            packet = json.loads(kwargs["messages"][-1]["content"])
             output = provider_synthesis([row["id"] for row in packet["observations"]])
             output["_mock_contract"] = True
             if mutate:
                 mutate(output)
             if output.pop("_mock_contract", False):
                 checked_fixture(output, packet)
-            return SimpleNamespace(output_parsed=kwargs["text_format"].model_validate(output))
+            return chatCompletion(output)
     monkeypatch.setattr(deep, "AsyncOpenAI", Client)
     return calls
 
@@ -322,7 +323,7 @@ def test_deep_requires_permission_and_never_runs_in_replay(deep_app, monkeypatch
     calls = fake_provider(monkeypatch)
     with TestClient(app) as client:
         assert client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).status_code == 403
-        app.state.assistant.store.set_workspace_consent(True)
+        app.state.assistant.allow_workspace()
         app.state.assistant.settings.mode = "replay"
         assert client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).status_code == 403
     assert calls == []
@@ -332,7 +333,7 @@ def test_one_request_cited_report_reuse_brief_and_revocation(deep_app, monkeypat
     app, loaded = deep_app
     calls = fake_provider(monkeypatch)
     original = loaded.model_dump_json()
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses?reuse=true", json=BODY, headers=HEADERS)
         assert start.status_code == 200
@@ -365,7 +366,7 @@ def test_one_request_cited_report_reuse_brief_and_revocation(deep_app, monkeypat
         assert revoked["result"]["deep_report"] is None
         assert "Edited deep report" not in json.dumps(revoked)
         assert client.get(path + "/export").status_code == 403
-    assert len(calls) == 1 and calls[0]["store"] is False
+    assert len(calls) == 1 and calls[0]["response_format"]["type"] == "json_schema"
     assert loaded.model_dump_json() == original
 
 
@@ -392,7 +393,7 @@ def test_evidence_packet_explains_protocol_using_only_recorded_boundaries(deep_a
     "Deploy this model.", "The model is approved for field use.", "Deployment is safe."])
 def test_unsupported_explanation_is_removed_without_retry(deep_app, monkeypatch, bad):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch, lambda output: output["hypotheses"][0].update(explanation=bad))
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
@@ -406,7 +407,7 @@ def test_unsupported_explanation_is_removed_without_retry(deep_app, monkeypatch,
 
 def test_malformed_report_has_safe_reason_without_provider_text(deep_app, monkeypatch):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch, lambda output: output["hypotheses"][0].update(explanation="private-provider-text " * 40))
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
@@ -427,14 +428,14 @@ def test_saved_report_survives_restart_key_removal_and_regular_brief_reuses_it(d
     app, _ = deep_app
     calls = fake_provider(monkeypatch)
     settings = app.state.assistant.settings
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses?reuse=true", json=BODY, headers=HEADERS).json()
         record = completed(client, start["id"])
         assert record["output_currency"] == "current"
         assert record["result"]["mode"] == "ai"
         app.state.assistant = AssistantService(settings)
-        settings.openai_api_key = ""
+        settings.nebius_api_key = ""
         reopened = client.post("/api/assistant/analyses?reuse=true", json=BODY, headers=HEADERS).json()
         assert reopened["id"] == record["id"] and reopened["result"]["deep_report"]
         brief = client.post("/api/assistant/analyses?reuse=true", json={**BODY, "task": "brief"}, headers=HEADERS).json()
@@ -469,7 +470,7 @@ def test_pattern_scope_aliases_and_missing_measurements(deep_app):
 @pytest.mark.parametrize("field", ["hypotheses", "next_tests"])
 def test_bad_citations_fall_back(deep_app, monkeypatch, field):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch, lambda output: output[field][0].update(observation_ids=["invented-pattern"]))
     with TestClient(app) as client:
         record = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
@@ -507,7 +508,7 @@ def test_alias_repair_still_rejects_unknown_aliases_numbers_and_diagnoses(text):
 
 def test_provider_aliases_resolve_after_whole_token_validation(deep_app, monkeypatch):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     def mutate(output):
         output["hypotheses"][0]["explanation"] = "Channel-10 may respond differently from channel-1."
         output["next_tests"][0]["title"] = "Run a diagnostic check"
@@ -525,22 +526,22 @@ def test_active_deep_and_brief_admissions_share_one_job(deep_app, monkeypatch):
     from app.assistant import deep
     app, _ = deep_app
     app.state.assistant.settings.assistant_timeout_seconds = 30
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     entered, release = asyncio.Event(), asyncio.Event()
     calls = []
     class Client:
         def __init__(self, **_):
-            self.responses = self
+            self.chat = SimpleNamespace(completions=self)
         async def __aenter__(self):
             return self
         async def __aexit__(self, *_):
             return None
-        async def parse(self, **kwargs):
+        async def create(self, **kwargs):
             calls.append(kwargs)
             entered.set()
             await release.wait()
-            packet = json.loads(kwargs["input"][-1]["content"])
-            return SimpleNamespace(output_parsed=kwargs["text_format"].model_validate(checked_fixture(provider_synthesis([row["id"] for row in packet["observations"]]), packet)))
+            packet = json.loads(kwargs["messages"][-1]["content"])
+            return chatCompletion(checked_fixture(provider_synthesis([row["id"] for row in packet["observations"]]), packet))
     monkeypatch.setattr(deep, "AsyncOpenAI", Client)
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses?reuse=true", json=BODY, headers=HEADERS).json()
@@ -563,7 +564,7 @@ def test_active_deep_and_brief_admissions_share_one_job(deep_app, monkeypatch):
 ])
 def test_nonuseful_or_overconfident_reports_fail_safely(deep_app, monkeypatch, mutation):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch, mutation)
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
@@ -609,7 +610,7 @@ def test_captured_comparison_retains_safe_check_and_omits_unsupported_sections(d
         output.clear()
         output.update(captured["parsed"])
     calls = fake_provider(monkeypatch, replace_output)
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     body = {**BODY, "candidates": ["xgboost_augmented/aug3", "logistic_regression/lr2"]}
     with TestClient(app) as client:
         record = completed(client, client.post("/api/assistant/analyses", json=body, headers=HEADERS).json()["id"])
@@ -630,7 +631,7 @@ def test_pattern_prose_cannot_smuggle_unknown_references_or_measurements(referen
 
 def test_comparison_runs_one_request_and_reuses_exact_order(deep_app, monkeypatch):
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch)
     body = {**BODY, "candidates": ["logistic_regression/lr1", "xgboost_augmented/aug1"]}
     with TestClient(app) as client:
@@ -638,7 +639,7 @@ def test_comparison_runs_one_request_and_reuses_exact_order(deep_app, monkeypatc
         assert start.status_code == 200, start.text
         record = completed(client, start.json()["id"])
         assert record["result"]["mode"] == "ai"
-        packet = json.loads(calls[0]["input"][-1]["content"])
+        packet = json.loads(calls[0]["messages"][-1]["content"])
         assert {row["model"] for row in packet["observations"]} == {"model-1", "model-2"}
         assert len(calls) == 1
 
@@ -708,7 +709,7 @@ def test_captured_comparison_current_verification_and_reuse_without_extra_calls(
     from app.assistant.deep import collect_patterns
     from app.assistant.investigation import EvidenceTools
     app, bundle = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     context = {**BODY, "candidates": candidates}
     captured = json.loads((Path(__file__).parent / "fixtures" /
         f"deep_live_comparison_{label}_20261011.json").read_text(encoding="utf-8"))

@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { AnalysisRecord } from "../src/api/types";
 
 async function fixture(page: Page) {
-  await page.route("https://api.openai.com/**", route => route.abort());
+  await page.route("https://api.tokenfactory*.nebius.com/**", route => route.abort());
   const response = await page.request.post("/api/assistant/analyses", { headers: { "X-Sidekick-Request": "1" }, data: { task: "investigate", candidates: ["logistic_regression/lr2"] } });
   expect(response.ok()).toBeTruthy();
   const record = await response.json() as AnalysisRecord;

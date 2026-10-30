@@ -145,8 +145,7 @@ class Settings:
     )
 
     llm_max_tool_calls: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_MAX_TOOL_CALLS", "8")))
-    openai_api_key: str = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY", ""), repr=False)
-    assistant_provider: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PROVIDER", "openai"))
+    assistant_provider: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PROVIDER", "nebius"))
     nebius_api_key: str = field(default_factory=lambda: os.environ.get("NEBIUS_API_KEY", ""), repr=False)
     tavily_api_key: str = field(default_factory=lambda: os.environ.get("TAVILY_API_KEY", ""), repr=False)
     nebius_base_url: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"))
@@ -175,8 +174,8 @@ class Settings:
 
     def __post_init__(self):
         self.assistant_provider = self.assistant_provider.strip().lower()
-        if self.assistant_provider not in {"openai", "nebius"}:
-            raise ValueError("SIDEKICK_ASSISTANT_PROVIDER must be openai or nebius")
+        if self.assistant_provider != "nebius":
+            raise ValueError("SIDEKICK_ASSISTANT_PROVIDER must be nebius")
         self.nebius_base_url = validate_nebius_url(self.nebius_base_url)
         self.nebius_reasoning_effort = self.nebius_reasoning_effort.strip().lower()
         if self.nebius_reasoning_effort not in NEBIUS_REASONING_EFFORTS:
@@ -184,8 +183,7 @@ class Settings:
         if type(self.nebius_reasoning_tokens) is not int or not 0 <= self.nebius_reasoning_tokens <= 32768:
             raise ValueError("SIDEKICK_NEBIUS_REASONING_TOKENS must be between 0 and 32768")
         if not self.assistant_model:
-            self.assistant_model = ("nvidia/nemotron-3-super-120b-a12b" if self.assistant_provider == "nebius"
-                else "gpt-4.1-mini-2025-04-14")
+            self.assistant_model = "nvidia/nemotron-3-super-120b-a12b"
         if self.mode not in ("full", "replay", "demo"):
             raise ValueError("SIDEKICK_MODE must be full, replay or demo")
         if self.assistant_timeout_seconds <= 0:

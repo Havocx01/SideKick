@@ -120,7 +120,7 @@ def test_excerpt_citation_survives_reuse_brief_and_export_without_another_reques
     app, original = deep_app
     loaded = enriched(original)
     monkeypatch.setattr(routes_assistant, 'bundle', lambda *_: loaded)
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     def cite(output):
         output['hypotheses'][0]['observation_ids'] = ['pattern-1', 'history-summary-1']
         output['next_tests'][0]['observation_ids'] = ['pattern-1', 'history-summary-1']

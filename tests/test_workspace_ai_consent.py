@@ -16,7 +16,7 @@ from app.evidence.bundle import load_bundle
 
 def test_workspace_approval_covers_contexts_and_browsers_and_survives_restart(local_settings, monkeypatch):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=True, openai_api_key="mock-only", assistant_model="fixture",
+        assistant_live_enabled=True, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock-only", assistant_model="fixture",
         assistant_presenter_code="", assistant_tasks=("investigate", "data"), assistant_timeout_seconds=1)
     service = AssistantService(settings)
     app = FastAPI()
@@ -50,7 +50,7 @@ def test_workspace_approval_covers_contexts_and_browsers_and_survives_restart(lo
 
 def test_workspace_revocation_clears_all_origins_before_cancellation(local_settings, monkeypatch):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=False, openai_api_key="", assistant_model="fixture", assistant_tasks=("investigate",))
+        assistant_live_enabled=False, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="", assistant_model="fixture", assistant_tasks=("investigate",))
     service = AssistantService(settings)
     loaded = load_bundle(get_settings().bundle_path)
     context = AnalysisRequest(task="investigate", candidates=["logistic_regression/lr1"])
@@ -88,7 +88,7 @@ def test_workspace_revocation_clears_all_origins_before_cancellation(local_setti
 
 def test_restart_repairs_legacy_consent_notice_only_for_proven_local_records(local_settings):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=False, openai_api_key="", assistant_model="fixture", assistant_tasks=("investigate",))
+        assistant_live_enabled=False, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="", assistant_model="fixture", assistant_tasks=("investigate",))
     service = AssistantService(settings)
     record = asyncio.run(service.create(load_bundle(get_settings().bundle_path),
         AnalysisRequest(task="investigate", candidates=["logistic_regression/lr1"]), "owner", False))
@@ -112,7 +112,7 @@ def test_restart_repairs_legacy_consent_notice_only_for_proven_local_records(loc
 def test_internal_legacy_provider_requires_permission_and_reuses_ai(local_settings, monkeypatch):
     from app.assistant import provider
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=True, openai_api_key="mock-only", assistant_model="fixture",
+        assistant_live_enabled=True, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock-only", assistant_model="fixture",
         assistant_tasks=("investigate", "brief"), assistant_timeout_seconds=1)
     service = AssistantService(settings)
     loaded = load_bundle(get_settings().bundle_path)
@@ -127,7 +127,7 @@ def test_internal_legacy_provider_requires_permission_and_reuses_ai(local_settin
     async def check():
         local = await service._create_legacy_live(loaded, context, "owner", False, reuse=True)
         assert local.result.mode == "evidence" and not calls
-        service.store.set_workspace_consent(True)
+        service.allow_workspace()
         active = await service._create_legacy_live(loaded, context, "owner", False, reuse=True)
         assert active.id != local.id and active.status == "running"
         await service.tasks[active.id]
@@ -139,10 +139,10 @@ def test_internal_legacy_provider_requires_permission_and_reuses_ai(local_settin
 def test_workspace_revocation_cancels_real_pending_job_without_late_output(local_settings, monkeypatch):
     from app.assistant import provider
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=True, openai_api_key="mock-only", assistant_model="fixture",
+        assistant_live_enabled=True, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock-only", assistant_model="fixture",
         assistant_tasks=("investigate",), assistant_timeout_seconds=2)
     service = AssistantService(settings)
-    service.store.set_workspace_consent(True)
+    service.allow_workspace()
     entered = asyncio.Event()
 
     async def enhance(result, *_args, **_kwargs):
@@ -164,7 +164,7 @@ def test_workspace_revocation_cancels_real_pending_job_without_late_output(local
 
 def test_workspace_revocation_scrubs_unknown_future_contract_without_losing_identity(local_settings):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=False, openai_api_key="", assistant_model="fixture", assistant_tasks=("investigate",))
+        assistant_live_enabled=False, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="", assistant_model="fixture", assistant_tasks=("investigate",))
     service = AssistantService(settings)
     record = asyncio.run(service.create(load_bundle(get_settings().bundle_path),
         AnalysisRequest(task="investigate", candidates=["logistic_regression/lr1"]), "owner", False))
@@ -187,7 +187,7 @@ def test_workspace_revocation_scrubs_unknown_future_contract_without_losing_iden
 
 def test_workspace_revoke_denies_cloud_reads_conversion_export_and_reuse_for_all_owners(local_settings, monkeypatch):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=False, openai_api_key="", assistant_model="fixture", assistant_presenter_code="",
+        assistant_live_enabled=False, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="", assistant_model="fixture", assistant_presenter_code="",
         assistant_tasks=("investigate", "brief"))
     service = AssistantService(settings)
     app = FastAPI()

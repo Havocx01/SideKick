@@ -7,29 +7,28 @@ from app.config import validate_nebius_url
 
 
 def provider_name(settings) -> str:
-    value = getattr(settings, "assistant_provider", "openai")
-    if value not in {"openai", "nebius"}:
+    value = getattr(settings, "assistant_provider", "nebius")
+    if value != "nebius":
         raise ValueError("Unsupported assistant provider")
     return value
 
 
 def provider_label(settings) -> str:
-    return "Nebius Token Factory" if provider_name(settings) == "nebius" else "OpenAI"
+    return "Nebius Token Factory"
 
 
 def key_variable(settings) -> str:
-    return "NEBIUS_API_KEY" if provider_name(settings) == "nebius" else "OPENAI_API_KEY"
+    return "NEBIUS_API_KEY"
 
 
 def api_key(settings) -> str:
-    field = "nebius_api_key" if provider_name(settings) == "nebius" else "openai_api_key"
-    return getattr(settings, field, "")
+    provider_name(settings)
+    return getattr(settings, "nebius_api_key", "")
 
 
 def provider_identity(settings) -> str:
-    if provider_name(settings) == "nebius":
-        return "nebius:" + validate_nebius_url(settings.nebius_base_url)
-    return "openai"
+    provider_name(settings)
+    return "nebius:" + validate_nebius_url(settings.nebius_base_url)
 
 
 def client_options(settings) -> dict:
@@ -37,8 +36,7 @@ def client_options(settings) -> dict:
         raise ValueError(f"Configure {key_variable(settings)} on the server")
     options = {"api_key": api_key(settings), "max_retries": 0,
         "timeout": min(40, getattr(settings, "assistant_timeout_seconds", 45))}
-    if provider_name(settings) == "nebius":
-        options["base_url"] = validate_nebius_url(settings.nebius_base_url)
+    options["base_url"] = validate_nebius_url(settings.nebius_base_url)
     return options
 
 
@@ -127,12 +125,7 @@ def responseMeta(response) -> dict:
 
 
 async def request_structured(client, settings, *, history, response_model, max_output_tokens, meta=None):
-    if provider_name(settings) == "openai":
-        response = await client.responses.parse(model=settings.assistant_model, store=False,
-            max_output_tokens=max_output_tokens, input=history, text_format=response_model)
-        if meta is not None:
-            meta.update(responseMeta(response))
-        return response.output_parsed
+    provider_name(settings)
     response = await client.chat.completions.create(model=settings.assistant_model, messages=chat_messages(history),
         **nebius_options(settings, max_output_tokens), response_format={"type": "json_schema", "json_schema": {
             "name": response_model.__name__, "strict": True, "schema": strict_schema(response_model)}})
@@ -148,11 +141,7 @@ async def request_structured(client, settings, *, history, response_model, max_o
 
 
 async def request_tool_calls(client, settings, *, history, tools, forced, max_output_tokens):
-    if provider_name(settings) == "openai":
-        response = await client.responses.create(model=settings.assistant_model, store=False,
-            max_output_tokens=max_output_tokens, input=history, tools=tools,
-            tool_choice={"type": "function", "name": forced} if forced else "auto", parallel_tool_calls=False)
-        return [item for item in response.output if item.type == "function_call"]
+    provider_name(settings)
     response = await client.chat.completions.create(model=settings.assistant_model, messages=chat_messages(history),
         **nebius_options(settings, max_output_tokens), tools=[{"type": "function", "function": {
             key: value for key, value in spec.items() if key != "type"}} for spec in tools],

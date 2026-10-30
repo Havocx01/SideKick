@@ -20,7 +20,7 @@ Restart the API after changing configuration. Open **AI settings** and read the 
 
 Reasoning can consume the completion allowance before the model answers. Sidekick sends `reasoning_effort` (default `low`) and adds `SIDEKICK_NEBIUS_REASONING_TOKENS` (default 4,096) to the base output allowance. The resulting `max_tokens` is a shared ceiling for reasoning and visible text, not a separate limit on either portion. Extra headroom reduces truncation risk but cannot guarantee an answer; truncated output is still rejected without retries. Set `SIDEKICK_NEBIUS_REASONING_EFFORT=none` to request reasoning off with no extra allowance. Supported controls depend on the selected model; confirm compatibility for your endpoint. See the [Token Factory request example](https://dev.nebius.com/cookbook/beam-reflection-token-factory) for effort controls and shared output accounting.
 
-Existing OpenAI settings continue to work when the provider is `openai`, the compatibility default. An explicitly configured model overrides the provider's default: remove an old GPT model override when switching to Nebius. Shell variables take precedence over `.env`. The local `.env` is never edited by the configuration check.
+Nebius is the default and only live provider. `SIDEKICK_ASSISTANT_PROVIDER` can be omitted or set to `nebius`; other values are rejected. No OpenAI account or key is needed. The OpenAI SDK supplies compatible Chat Completions transport to the validated Nebius endpoint. Remove any old GPT model override; the default is `nvidia/nemotron-3-super-120b-a12b`. An explicitly configured model overrides that default. Shell variables take precedence over `.env`. The local `.env` is never edited by the configuration check.
 
 ## Check connectivity
 
@@ -42,13 +42,15 @@ Use `--model nvidia/<available-model-id>` to test a different NVIDIA model. The 
 
 Passing this probe verifies basic connectivity and transport contracts for that endpoint/model. It does not establish deep-investigation quality, performance benefits or hackathon readiness.
 
+The optional `scripts/evaluate_deep.py --live` evaluation also uses Nebius. Supply `--input-usd-per-million` and `--output-usd-per-million` with your model's current prices. The durable campaign records these rates and the model; changing them requires a new campaign. The cost reservation includes the shared reasoning/output allowance. Offline evaluation and replay of historical captures need no key or prices.
+
 ## What changed
 
-- Provider-specific configuration, isolated credentials, validated endpoint and Nemotron default.
+- Nebius-only live configuration, validated endpoint and Nemotron default.
 - Nebius Chat Completions transport for strict JSON and tool calling, retaining local evidence/citation validation.
 - Provider-aware availability, sanitized error messages, consent disclosures and saved-output identities.
 - Durable Nebius endpoint approval; workspace revocation clears all provider approvals. Old OpenAI approval does not authorize Nebius.
-- Both provider credentials are removed from local training-worker environments.
+- Provider credentials, including any leftover OpenAI key in the parent environment, are removed from local training-worker environments.
 - Synthetic connectivity checker and offline real-SDK transport/lifecycle regression coverage.
 
 ## Remaining submission work

@@ -11,7 +11,7 @@ from openai import APIConnectionError, APIStatusError, AuthenticationError, Perm
 from app.assistant.deep import DeepVerificationError
 from app.assistant.schemas import AnalysisRecord, AnalysisStage
 from app.assistant.store import AssistantStore, RESULT_GROWTH_BYTES, AnalysisRevokedError
-from app.assistant.transport import api_key, key_variable, provider_identity, provider_label, provider_name
+from app.assistant.transport import api_key, key_variable, provider_identity, provider_label
 
 
 def normalized_context(context):
@@ -49,15 +49,10 @@ class AssistantService:
         self.contexts = {}
 
     def workspace_consent(self):
-        if provider_name(self.settings) == "nebius":
-            return self.store.provider_consent(provider_identity(self.settings))
-        return self.store.workspace_consent()
+        return self.store.provider_consent(provider_identity(self.settings))
 
     def allow_workspace(self):
-        if provider_name(self.settings) == "nebius":
-            self.store.allow_provider(provider_identity(self.settings))
-        else:
-            self.store.set_workspace_consent(True)
+        self.store.allow_provider(provider_identity(self.settings))
 
     def live_reason(self, owner, experiment, consent_required):
         settings = self.settings

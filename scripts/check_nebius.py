@@ -47,8 +47,7 @@ def main(argv=None):
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env", override=False)
     try:
-        selected_model = args.model or (os.environ.get("SIDEKICK_ASSISTANT_MODEL", "")
-            if os.environ.get("SIDEKICK_ASSISTANT_PROVIDER", "openai").strip().lower() == "nebius" else "")
+        selected_model = args.model or os.environ.get("SIDEKICK_ASSISTANT_MODEL", "")
         settings = Settings(assistant_provider="nebius", assistant_model=selected_model,
             assistant_timeout_seconds=20)
         if not settings.assistant_model.lower().startswith("nvidia/"):

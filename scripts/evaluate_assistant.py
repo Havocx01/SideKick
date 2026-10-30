@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -127,17 +128,13 @@ class RequestMeter:
         meter = self
         client = self.original(**kwargs)
 
-        class Responses:
+        class Completions:
             async def create(self, **params):
                 meter.count += 1
-                return await client.responses.create(**params)
-
-            async def parse(self, **params):
-                meter.count += 1
-                return await client.responses.parse(**params)
+                return await client.chat.completions.create(**params)
 
         class Client:
-            responses = Responses()
+            chat = SimpleNamespace(completions=Completions())
 
             async def __aenter__(self):
                 await client.__aenter__()
@@ -222,8 +219,8 @@ def main():
     if live:
         from dotenv import load_dotenv
         load_dotenv(REPO_ROOT / ".env")
-        if not get_settings().openai_api_key:
-            print("Configure OPENAI_API_KEY in the server environment or .env to run live evaluation.")
+        if not get_settings().nebius_api_key:
+            print("Configure NEBIUS_API_KEY in the server environment or .env to run live evaluation.")
             return 2
     result = asyncio.run(evaluate(live, args.case))
     if args.output:

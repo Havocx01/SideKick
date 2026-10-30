@@ -2,6 +2,7 @@
 
 --live --case failing --case comparison admits at most two requests in a durable
 ledger, no retries, with the current model and a conservative $0.10 ceiling.
+Live evaluation requires explicit current input/output prices per million tokens.
 An explicitly named campaign may reserve up to four total requests; failed calls
 count and its limits cannot be increased. Each invocation selects at most two cases.
 Generation latency is measured; engineer decision time is deliberately left blank.
@@ -16,6 +17,7 @@ import hashlib
 import html
 import io
 import json
+import math
 import sys
 import tempfile
 import time
@@ -29,13 +31,14 @@ from app.assistant import deep
 from app.assistant.diagnostic_checks import compose_checks
 from app.assistant.investigation import EvidenceTools
 from app.assistant.schemas import AnalysisRequest
+from app.assistant.transport import visible_content
 from app.config import get_settings
 from app.evidence.bundle import load_bundle
 from app.evidence.supplement import attach_replays
 
 MAX_REQUESTS = 2
 MAX_USD = .10
-MODEL = 'gpt-4.1-mini-2025-04-14'
+MODEL = 'nvidia/nemotron-3-super-120b-a12b'
 CASES = {'failing': ['logistic_regression/lr2'], 'passing': ['xgboost_augmented/aug3'],
     'comparison': ['xgboost_augmented/aug3', 'logistic_regression/lr2'],
     'missing-evidence': ['logistic_regression/lr2']}
@@ -51,16 +54,17 @@ def write(path, value):
 
 def admit(ledger, label, params):
     """Reserve before network dispatch. Failed calls consume a slot and reservation."""
-    from openai.lib._parsing._responses import type_to_text_format_param
-    schema = type_to_text_format_param(params['text_format'])
-    byte_bound = len(json.dumps(params['input']).encode()) + len(json.dumps(schema).encode()) + 2000
-    cost = (byte_bound * .4 + params['max_output_tokens'] * 1.6) / 1_000_000
+    rates = [ledger.get('input_usd_per_million'), ledger.get('output_usd_per_million')]
+    if any(type(rate) not in (int, float) or not math.isfinite(rate) or rate <= 0 for rate in rates):
+        raise RuntimeError('Supply positive input and output token prices for this campaign.')
+    byte_bound = len(json.dumps(params).encode()) + 2000
+    cost = (byte_bound * rates[0] + params['max_tokens'] * rates[1]) / 1_000_000
     calls = ledger.setdefault('calls', [])
     request_limit = ledger.get('max_requests', MAX_REQUESTS)
     cost_limit = ledger.get('max_usd', MAX_USD)
     if type(request_limit) is not int or not 1 <= request_limit <= 4 or not 0 < cost_limit <= MAX_USD:
         raise RuntimeError('Invalid paid evaluation limits.')
-    if params['model'] != MODEL or len(calls) >= request_limit or any(c['case'] == label for c in calls) or sum(c.get('cost_usd', c['reserved_usd']) for c in calls) + cost > cost_limit:
+    if params['model'] != ledger.get('model', MODEL) or len(calls) >= request_limit or any(c['case'] == label for c in calls) or sum(c.get('cost_usd', c['reserved_usd']) for c in calls) + cost > cost_limit:
         raise RuntimeError('Paid request, model, duplicate-case or cost limit reached.')
     row = {'case': label, 'model': params['model'], 'prompt': deep.PROMPT_VERSION, 'reserved_usd': cost, 'status': 'admitted'}
     calls.append(row)
@@ -180,11 +184,17 @@ async def run(args):
     if args.live:
         load_dotenv(ROOT/'.env', override=False)
     settings = get_settings()
-    if args.live and (not settings.openai_api_key or settings.assistant_model != MODEL):
-        raise ValueError('Current configured model and server key required; no request admitted.')
+    if args.live and (not settings.nebius_api_key or not settings.assistant_model.startswith('nvidia/')):
+        raise ValueError('Configure a Nebius key and NVIDIA model; no request admitted.')
     ledger_path = campaign_folder(args)/'paid-ledger.json'
     requested_limit = getattr(args, 'max_requests', MAX_REQUESTS)
     ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {'max_requests': requested_limit, 'max_usd': MAX_USD, 'calls': []}
+    if args.live:
+        pricing = {'model': settings.assistant_model, 'input_usd_per_million': args.input_usd_per_million,
+            'output_usd_per_million': args.output_usd_per_million}
+        if ledger_path.exists() and any(ledger.get(key) != value for key, value in pricing.items()):
+            raise ValueError('Campaign model and token prices cannot change; use a new campaign.')
+        ledger.update(pricing)
     if args.live and ledger.get('max_requests', MAX_REQUESTS) != requested_limit:
         raise ValueError('Existing campaign limits cannot be changed; retain the original budget.')
     attempt = getattr(args, 'attempt', 'initial')
@@ -206,25 +216,27 @@ async def run(args):
                 if kwargs.get('max_retries') != 0:
                     raise RuntimeError('Provider retries are prohibited.')
                 sdk = original(**kwargs)
-                class Responses:
-                    async def parse(self, **params):
+                class Completions:
+                    async def create(self, **params):
                         admission = admit(ledger, name + ':' + attempt, params)
                         calls.append(admission)
                         write(ledger_path, ledger)
                         try:
-                            response = await sdk.responses.parse(**params)
+                            response = await sdk.chat.completions.create(**params)
                             usage = response.usage
-                            admission.update(status='returned', cost_usd=(usage.input_tokens*.4+usage.output_tokens*1.6)/1_000_000,
-                                input_tokens=usage.input_tokens, output_tokens=usage.output_tokens)
+                            admission.update(status='returned', cost_usd=(usage.prompt_tokens*ledger['input_usd_per_million']
+                                + usage.completion_tokens*ledger['output_usd_per_million'])/1_000_000,
+                                input_tokens=usage.prompt_tokens, output_tokens=usage.completion_tokens)
                             capture = {'context': context.model_dump(mode='json'), 'prompt': deep.PROMPT_VERSION,
-                                'packet': json.loads(params['input'][-1]['content']), 'parsed': response.output_parsed.model_dump() if response.output_parsed else None,
+                                'packet': json.loads(params['messages'][-1]['content']),
+                                'parsed': json.loads(visible_content(response.choices[0].message.content)) if response.choices[0].message.content else None,
                                 'usage': usage.model_dump()}
                             write(args.output/f'{name}-capture.json', capture)
                             return response
                         finally:
                             write(ledger_path, ledger)
                 class Client:
-                    responses = Responses()
+                    chat = SimpleNamespace(completions=Completions())
                     async def __aenter__(self):
                         await sdk.__aenter__()
                         return self
@@ -302,6 +314,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--campaign', help='Separate durable paid ledger for this explicitly authorized evaluation.')
     parser.add_argument('--max-requests', type=int, choices=range(1, 5), default=MAX_REQUESTS)
+    parser.add_argument('--input-usd-per-million', type=float, help='Current Nebius input token price; required for live evaluation.')
+    parser.add_argument('--output-usd-per-million', type=float, help='Current Nebius output token price; required for live evaluation.')
     parser.add_argument('--attempt', choices=('initial', 'after-fix'), default='initial')
     args = parser.parse_args()
     if not args.live:

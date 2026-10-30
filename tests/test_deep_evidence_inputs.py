@@ -114,7 +114,7 @@ def test_support_citations_and_context_survive_api_and_brief(deep_app, monkeypat
     from app.api import routes_assistant
     app, original = deep_app
     monkeypatch.setattr(routes_assistant, "bundle", lambda *_: enriched(original))
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     def cite_support(output):
         output["hypotheses"][0]["observation_ids"] = ["pattern-1", "history-summary-1"]
         output["next_tests"][0]["observation_ids"] = ["pattern-1", "history-summary-1"]
@@ -199,7 +199,7 @@ def test_legacy_deep_report_reuses_historically_without_paid_regeneration(deep_a
     from fastapi.testclient import TestClient
     from app.assistant.evidence import build_analysis
     app, original = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch)
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
@@ -234,7 +234,7 @@ def test_changed_trace_contract_marks_saved_output_historical_without_regenerati
     from pathlib import Path
     from fastapi.testclient import TestClient
     app, _ = deep_app
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     calls = fake_provider(monkeypatch)
     original_read = Path.read_bytes
     with TestClient(app) as client:

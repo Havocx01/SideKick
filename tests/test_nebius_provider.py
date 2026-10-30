@@ -35,7 +35,11 @@ def completion(content=None, *, calls=None, finish="stop", refusal=None):
 def test_nebius_configuration_uses_its_own_key_and_provider_model(monkeypatch):
     from app.assistant.transport import api_key, client_options
     monkeypatch.delenv("SIDEKICK_ASSISTANT_MODEL", raising=False)
-    settings = configured(openai_api_key="different-openai-secret")
+    monkeypatch.delenv("SIDEKICK_ASSISTANT_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "different-openai-secret")
+    monkeypatch.setenv("NEBIUS_API_KEY", "nebius-test-secret")
+    settings = Settings()
+    assert settings.assistant_provider == "nebius" and not hasattr(settings, "openai_api_key")
     assert settings.assistant_model == "nvidia/nemotron-3-super-120b-a12b"
     options = client_options(settings)
     assert options["api_key"] == "nebius-test-secret" and options["max_retries"] == 0
@@ -53,15 +57,16 @@ def test_nebius_rejects_unsafe_or_unrelated_endpoints(endpoint):
         configured(nebius_base_url=endpoint)
 
 
-def test_unknown_provider_is_rejected():
+@pytest.mark.parametrize("provider", ["unknown", "openai"])
+def test_unsupported_provider_is_rejected(provider):
     with pytest.raises(ValueError, match="SIDEKICK_ASSISTANT_PROVIDER"):
-        Settings(assistant_provider="unknown")
+        Settings(assistant_provider=provider)
 
 
 def test_default_probe_is_offline_and_missing_key_never_falls_back_to_openai():
     root = Path(__file__).resolve().parents[1]
     env = {**os.environ, "NEBIUS_API_KEY": "", "OPENAI_API_KEY": "mock-openai-do-not-use",
-        "SIDEKICK_ASSISTANT_PROVIDER": "openai", "SIDEKICK_ASSISTANT_MODEL": "gpt-4.1-mini-2025-04-14",
+        "SIDEKICK_ASSISTANT_PROVIDER": "nebius", "SIDEKICK_ASSISTANT_MODEL": "",
         "SIDEKICK_NEBIUS_BASE_URL": "https://api.tokenfactory.nebius.com/v1/",
         "SIDEKICK_NEBIUS_REASONING_EFFORT": "low", "SIDEKICK_NEBIUS_REASONING_TOKENS": "4096"}
     command = [sys.executable, str(root / "scripts/check_nebius.py")]
@@ -195,7 +200,6 @@ def test_nebius_deep_workflow_uses_existing_verification_and_provider_consent(de
     settings.nebius_api_key = "mock-nebius-only"
     settings.nebius_base_url = "https://api.tokenfactory.nebius.com/v1/"
     settings.assistant_timeout_seconds = 10
-    settings.openai_api_key = ""  # Availability must use the selected provider.
     app.state.assistant.store.set_workspace_consent(True)  # Old OpenAI approval is insufficient.
     requests = []
     def respond(request):
@@ -254,18 +258,18 @@ def test_nebius_consent_survives_restart_and_revocation_clears_all_provider_appr
     assert restarted.workspace_consent() is True
     asyncio.run(restarted.revoke_workspace())
     assert AssistantService(settings).workspace_consent() is False
-    settings.assistant_provider = "openai"
+    settings.nebius_base_url = "https://api.tokenfactory.us-central1.nebius.com/v1/"
     assert AssistantService(settings).workspace_consent() is False
 
 
-def test_nebius_approval_does_not_authorize_an_openai_request(deep_app):
+def test_nebius_approval_does_not_authorize_another_endpoint(deep_app):
     app, _ = deep_app
     assistant = app.state.assistant
     assistant.settings.assistant_provider = "nebius"
     assistant.settings.nebius_base_url = "https://api.tokenfactory.nebius.com/v1/"
     assistant.allow_workspace()
     assert assistant.workspace_consent() is True
-    assistant.settings.assistant_provider = "openai"
+    assistant.settings.nebius_base_url = "https://api.tokenfactory.us-central1.nebius.com/v1/"
     assert not assistant.workspace_consent()
     assert assistant.live_reason("owner", None, False) == "Enable AI analysis for this workspace."
 
@@ -274,7 +278,8 @@ def test_existing_report_stays_readable_when_new_provider_or_endpoint_is_not_app
     app, _ = deep_app
     calls = fake_provider(monkeypatch)
     assistant = app.state.assistant
-    assistant.store.set_workspace_consent(True)
+    assistant.settings.nebius_base_url = "https://api.tokenfactory.eu-north1.nebius.com/v1/"
+    assistant.allow_workspace()
     with TestClient(app) as client:
         start = client.post("/api/assistant/analyses", json=BODY, headers=HEADERS).json()
         record = completed(client, start["id"])
@@ -302,7 +307,7 @@ def test_nebius_failures_are_actionable_and_sanitized():
     assert "private-provider-text" not in message and "nebius-test-secret" not in message
 
 
-def test_provider_and_endpoint_change_live_identity_without_changing_evidence_identity(deep_app):
+def test_endpoint_changes_live_identity_without_changing_evidence_identity(deep_app):
     from app.assistant.schemas import AnalysisRequest
     app, loaded = deep_app
     assistant = app.state.assistant
@@ -310,7 +315,7 @@ def test_provider_and_endpoint_change_live_identity_without_changing_evidence_id
     live_before = assistant.identities(loaded, context, True)[0]
     local_before = assistant.identities(loaded, context, False)[0]
     assistant.settings.assistant_provider = "nebius"
-    assistant.settings.nebius_base_url = "https://api.tokenfactory.nebius.com/v1/"
+    assistant.settings.nebius_base_url = "https://api.tokenfactory.eu-north1.nebius.com/v1/"
     live_after = assistant.identities(loaded, context, True)[0]
     assert live_after != live_before
     assert assistant.identities(loaded, context, False)[0] == local_before

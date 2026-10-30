@@ -17,12 +17,12 @@ from app.evidence.bundle import load_bundle
 @pytest.fixture
 def routine_app(local_settings, monkeypatch):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=True, openai_api_key="mock-only", assistant_model="fixture",
+        assistant_live_enabled=True, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock-only", assistant_model="fixture",
         assistant_presenter_code="presenter", assistant_timeout_seconds=1,
         assistant_tasks=("investigate", "compare", "warning", "brief", "data"))
     app = FastAPI()
     app.state.assistant = AssistantService(settings)
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     app.include_router(routes_assistant.router)
     loaded = load_bundle(get_settings().bundle_path)
     monkeypatch.setattr(routes_assistant, "bundle", lambda *_: loaded)

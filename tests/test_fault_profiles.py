@@ -100,7 +100,7 @@ def test_controller_sends_reviewed_channel_context_through_aliases(fitted, tmp_p
     fixed = engine(fitted)
     store = InvestigationStore(tmp_path / "store")
     investigation = store.create(fixed, InvestigationBudget())
-    settings = Settings(mode="full", assistant_provider="nebius", nebius_api_key="mock", assistant_live_enabled=True)
+    settings = Settings(mode="full", assistant_provider="nebius", nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock", assistant_live_enabled=True)
     packet = NemotronController(store, fixed, settings).packet(store.get(investigation), ControllerLimits())
     aliases = {sensor: f"channel-{index}" for index, sensor in enumerate(fixed.policy.allowed_sensors, 1)}
     channel = packet["channels"][aliases["oil_particles"]]

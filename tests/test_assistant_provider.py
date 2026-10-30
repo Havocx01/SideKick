@@ -4,14 +4,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from openai.types.responses import ResponseFunctionToolCall
+from provider_helpers import chatCompletion
 
 from app.assistant.agent import InvestigationChoices, investigate
 from app.assistant.investigation import EvidenceTools
 from app.assistant.schemas import AnalysisRequest
 from app.evidence.bundle import load_bundle
 
-SETTINGS = SimpleNamespace(openai_api_key="test", assistant_model="test", llm_max_tool_calls=8)
+SETTINGS = SimpleNamespace(nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="test", assistant_model="test", llm_max_tool_calls=8)
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def fakeClient(monkeypatch, tools, requests=None, choices=None):
     class Client:
         def __init__(self, **kwargs):
             assert kwargs["max_retries"] == 0
-            self.responses = self
+            self.chat = SimpleNamespace(completions=self)
             self.index = 0
 
         async def __aenter__(self):
@@ -41,24 +41,23 @@ def fakeClient(monkeypatch, tools, requests=None, choices=None):
             pass
 
         async def create(self, **kwargs):
+            if "response_format" in kwargs:
+                packets.append(json.dumps(kwargs["messages"]))
+                selected = choices or InvestigationChoices(finding_ids=[f"inspected-model-1-{next(iter(tools.listedCases))[1]}"],
+                    claim_ids=[id for id in tools.claims if id.startswith(("detection-", "loss-"))], action_id=None)
+                return chatCompletion(selected.model_dump(mode="json"))
             packets.append(json.dumps(kwargs))
-            assert kwargs["store"] is False and kwargs["parallel_tool_calls"] is False
-            assert kwargs["max_output_tokens"] == 700
+            assert kwargs["parallel_tool_calls"] is False
+            assert kwargs["max_tokens"] == 700 + 4096
             if self.index >= len(requests):
-                return SimpleNamespace(output=[SimpleNamespace(type="message", text="Deploy this model. sensor_11 caused a bearing failure.")])
+                return chatCompletion("Deploy this model. sensor_11 caused a bearing failure.")
             name, args = requests[self.index]
             if args == "first-case":
                 model, case = next(iter(tools.listedCases))
                 args = {"model": model, "case": case}
             self.index += 1
-            return SimpleNamespace(output=[ResponseFunctionToolCall(type="function_call", call_id=f"call-{self.index}", name=name, arguments=json.dumps(args))])
-
-        async def parse(self, **kwargs):
-            packets.append(json.dumps(kwargs["input"]))
-            assert kwargs["store"] is False
-            selected = choices or InvestigationChoices(finding_ids=[f"inspected-model-1-{next(iter(tools.listedCases))[1]}"],
-                claim_ids=[id for id in tools.claims if id.startswith(("detection-", "loss-"))], action_id=None)
-            return SimpleNamespace(output_parsed=selected)
+            call = SimpleNamespace(type="function", id=f"call-{self.index}", function=SimpleNamespace(name=name, arguments=json.dumps(args)))
+            return chatCompletion(calls=[call])
 
     monkeypatch.setattr("app.assistant.agent.AsyncOpenAI", Client)
     return packets
@@ -75,7 +74,7 @@ def test_live_agent_inspects_evidence_and_never_displays_arbitrary_text(monkeypa
     text = " ".join(packets)
     assert "sensor_" not in text and "logistic_regression" not in text and "/comparison" not in text
     assert "Deploy this model" not in result.model_dump_json()
-    assert '"tool_choice": {"type": "function", "name": "get_model_metrics"}' in packets[0]
+    assert json.loads(packets[0])["tool_choice"] == {"type": "function", "function": {"name": "get_model_metrics"}}
 
 
 @pytest.mark.parametrize("task", ["compare", "warning"])
@@ -144,3 +143,27 @@ def test_local_fallback_does_not_authorize_unseen_live_cases(tools):
     fresh = tools.fresh()
     assert not fresh.listedCases and not fresh.claims and not fresh.calls
     assert not fresh.result.assessment and not fresh.result.investigation
+
+
+def test_evaluation_meter_counts_failed_chat_requests(monkeypatch):
+    import importlib.util
+    path = Path(__file__).resolve().parents[1] / "scripts/evaluate_assistant.py"
+    spec = importlib.util.spec_from_file_location("assistant_evaluator", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    async def fail(**_kwargs):
+        raise TimeoutError("synthetic failure")
+    class Client:
+        chat = SimpleNamespace(completions=SimpleNamespace(create=fail))
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            pass
+    monkeypatch.setattr(module.agent, "AsyncOpenAI", lambda **_kwargs: Client())
+    meter = module.RequestMeter()
+    async def run():
+        async with meter.client() as client:
+            await client.chat.completions.create(model="fixture", messages=[])
+    with pytest.raises(TimeoutError):
+        asyncio.run(run())
+    assert meter.count == 1

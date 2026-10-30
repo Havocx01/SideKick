@@ -36,7 +36,7 @@ def setup(fitted, tmp_path, *, experiments=4, runSeconds=600, **settings):
     store = InvestigationStore(tmp_path / "store")
     investigation = store.create(fixed, InvestigationBudget(max_experiments=experiments, max_failures=min(2, experiments), max_run_seconds=runSeconds))
     config = Settings(mode="full", assistant_provider="nebius", assistant_model="nvidia/nemotron-3-super-120b-a12b",
-        nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True, **settings)
+        nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True, **settings)
     return fixed, store, investigation, config
 
 

@@ -22,7 +22,7 @@ from app.config import get_settings
 @pytest.fixture
 def assistant_app(local_settings):
     settings = SimpleNamespace(artifacts_dir=local_settings, mode="full", assistant_enabled=True,
-        assistant_live_enabled=False, openai_api_key="", assistant_model="test", assistant_presenter_code="",
+        assistant_live_enabled=False, nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="", assistant_model="test", assistant_presenter_code="",
         assistant_timeout_seconds=0.02,
         assistant_tasks=("investigate", "compare", "warning", "brief"))
     app = FastAPI()
@@ -112,8 +112,8 @@ def test_reuse_shares_live_ai_in_both_directions_without_another_provider_call(a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
-    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    service.settings.openai_api_key = "not-a-real-key"
+    service.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    service.settings.nebius_api_key = "not-a-real-key"
     calls = []
 
     async def enhance(result, context, settings, **kwargs):
@@ -260,8 +260,8 @@ def test_rejected_ai_output_falls_back_to_recorded_evidence(assistant_app, monke
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
-    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    assistant.settings.openai_api_key = "test-not-a-real-key"
+    assistant.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    assistant.settings.nebius_api_key = "test-not-a-real-key"
     async def invalid(result, context, settings, **kwargs):
         raise ValueError("Cloud interpretation contained an unsupported numeric claim.")
     monkeypatch.setattr(provider, "enhance_analysis", invalid)
@@ -277,7 +277,7 @@ def test_rejected_ai_output_falls_back_to_recorded_evidence(assistant_app, monke
 
 
 @pytest.mark.parametrize("status,code,expected", [
-    (401, "invalid_api_key", "Replace OPENAI_API_KEY"),
+    (401, "invalid_api_key", "Replace NEBIUS_API_KEY"),
     (403, "permission_denied", "model permissions"),
     (429, "insufficient_quota", "API billing"),
     (429, "rate_limit_exceeded", "Wait a moment"),
@@ -290,9 +290,9 @@ def test_provider_errors_are_actionable_without_leaking_responses(assistant_app,
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
-    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    assistant.settings.openai_api_key = "not-a-real-key"
-    response = httpx.Response(status, request=httpx.Request("POST", "https://api.openai.com/v1/responses"))
+    assistant.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    assistant.settings.nebius_api_key = "not-a-real-key"
+    response = httpx.Response(status, request=httpx.Request("POST", "https://api.tokenfactory.nebius.com/v1/chat/completions"))
     kind = {401: AuthenticationError, 403: PermissionDeniedError, 429: RateLimitError}.get(status, APIStatusError)
     async def fail(*args, **kwargs):
         raise kind("Sensitive provider response with sk-secret", response=response, body={"code": code})
@@ -314,8 +314,8 @@ def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
-    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    assistant.settings.openai_api_key = "test-not-a-real-key"
+    assistant.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    assistant.settings.nebius_api_key = "test-not-a-real-key"
     calls = []
     async def slow(result, context, settings, **kwargs):
         calls.append(context)
@@ -335,12 +335,12 @@ def test_timeout_cancel_consent_and_restart(assistant_app, monkeypatch):
         await asyncio.sleep(0)
         cancelled = await assistant.cancel(record.id, "owner")
         assert cancelled.status == "cancelled"
-        assistant.store.set_workspace_consent(False)
+        await assistant.revoke_workspace()
         record = await assistant._create_legacy_live(loaded, context, "owner", True)
         assert record.status == "completed"
         assert "Enable AI analysis" in record.result.fallback_reason
         assistant.store.set_consent("owner", "uploaded", True)
-        assistant.store.set_workspace_consent(True)
+        assistant.allow_workspace()
         upload_context = context.model_copy(update={"experiment_id": "uploaded"})
         record = await assistant._create_legacy_live(loaded.model_copy(update={"experiment_id": "uploaded"}), upload_context, "owner", True)
         await asyncio.sleep(0)
@@ -364,7 +364,7 @@ def test_demo_unlock_is_browser_bound_and_replay_never_live(assistant_app):
     settings = assistant_app.state.assistant.settings
     settings.mode = "demo"
     settings.assistant_live_enabled = True
-    settings.openai_api_key = "not-real"
+    settings.nebius_api_key = "not-real"
     settings.assistant_presenter_code = "presenter"
     @assistant_app.middleware("http")
     async def demo_session(request, call_next):
@@ -390,7 +390,7 @@ def test_revoked_consent_hides_completed_ai_and_saved_brief(assistant_app, monke
     from app.api import routes_assistant
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
-    assistant.settings.openai_api_key = "not-real"
+    assistant.settings.nebius_api_key = "not-real"
     loaded = load_bundle(get_settings().bundle_path).model_copy(update={"experiment_id": "uploaded"})
     monkeypatch.setattr(routes_assistant, "bundle", lambda *args: loaded)
     monkeypatch.setattr(routes_assistant, "upload_context", lambda *args: True)
@@ -503,8 +503,8 @@ def test_live_analysis_ignores_legacy_usage_and_has_no_session_or_daily_cap(assi
     from app.assistant import provider
     assistant = assistant_app.state.assistant
     assistant.settings.assistant_live_enabled = True
-    assistant.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    assistant.settings.openai_api_key = "not-a-real-key"
+    assistant.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    assistant.settings.nebius_api_key = "not-a-real-key"
     with assistant.store.connect() as db:
         db.execute("CREATE TABLE IF NOT EXISTS usage(owner TEXT NOT NULL, created REAL NOT NULL)")
         db.executemany("INSERT INTO usage VALUES(?,?)", [("owner", time.time())] * 30)
@@ -530,8 +530,8 @@ def test_model_upgrade_requires_new_output_but_preserves_human_draft(assistant_a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
-    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    service.settings.openai_api_key = 'mock-only'
+    service.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    service.settings.nebius_api_key = 'mock-only'
     calls = []
     async def enhance(result, context, settings, **kwargs):
         calls.append(settings.assistant_model)
@@ -593,7 +593,7 @@ def test_demo_capacity_rejects_before_provider_work(assistant_app, monkeypatch):
     service = assistant_app.state.assistant
     service.settings.mode = 'demo'
     service.settings.assistant_live_enabled = True
-    service.settings.openai_api_key = 'mock-only'
+    service.settings.nebius_api_key = 'mock-only'
     service.store.max_public_records = 1
     service.store.unlock('owner')
     monkeypatch.setattr(routes_assistant, 'visitor', lambda *args: 'owner')
@@ -655,7 +655,7 @@ def test_demo_result_growth_is_bounded_and_full_draft_reservation_survives(assis
     service = assistant_app.state.assistant
     service.settings.mode = 'demo'
     service.settings.assistant_live_enabled = True
-    service.settings.openai_api_key = 'mock-only'
+    service.settings.nebius_api_key = 'mock-only'
     service.store.unlock('owner')
     service.store.max_public_records = 1
     async def oversized(result, *args, **kwargs):
@@ -759,8 +759,8 @@ def test_active_reuse_coalesces_brief_equivalent_and_preserves_owner(assistant_a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
-    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    service.settings.openai_api_key = "mock-only"
+    service.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    service.settings.nebius_api_key = "mock-only"
     service.settings.assistant_timeout_seconds = 2
     calls = []
     async def check():
@@ -790,8 +790,8 @@ def test_get_currency_is_response_only_and_never_regenerates_historical_output(a
     from app.assistant import provider
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
-    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    service.settings.openai_api_key = "mock-only"
+    service.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    service.settings.nebius_api_key = "mock-only"
     monkeypatch.setattr(routes_assistant, "visitor", lambda *args: "owner")
     calls = []
     async def enhance(result, *args, **kwargs):
@@ -810,7 +810,7 @@ def test_get_currency_is_response_only_and_never_regenerates_historical_output(a
         historical = client.get(path).json()
         assert historical["output_currency"] == "historical" and historical["result"]["model"] == "test"
         service.settings.assistant_live_enabled = False
-        service.settings.openai_api_key = ""
+        service.settings.nebius_api_key = ""
         assert client.get(path).json()["result"]["mode"] == "ai"  # Configuration availability is not consent revocation.
         reused = client.post("/api/assistant/analyses?reuse=true", headers={"X-Sidekick-Request": "1"}, json=payload()).json()
         assert reused["id"] == id and reused["result"]["model"] == "test"
@@ -858,8 +858,8 @@ def test_fresh_provider_fallback_is_current_and_retry_does_not_reuse_active_work
     from app.assistant import provider, investigation
     service = assistant_app.state.assistant
     service.settings.assistant_live_enabled = True
-    service.store.set_workspace_consent(True)  # Explicit workspace approval for mocked provider tests.
-    service.settings.openai_api_key = "mock-only"
+    service.allow_workspace()  # Explicit workspace approval for mocked provider tests.
+    service.settings.nebius_api_key = "mock-only"
     monkeypatch.setattr(routes_assistant, "visitor", lambda *args: "owner")
     calls = []
     async def unavailable(*args, **kwargs):

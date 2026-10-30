@@ -52,7 +52,7 @@ def test_final_paid_answer_survives_api_refresh_reuse_brief_save_and_export(deep
     app, bundle = deep_app
     attach_replays(bundle, Path(__file__).resolve().parents[1] / 'evidence/bundle.json')
     monkeypatch.setattr(routes_assistant, 'bundle', lambda *_: bundle)
-    app.state.assistant.store.set_workspace_consent(True)
+    app.state.assistant.allow_workspace()
     capture = json.loads((Path(__file__).parent / 'fixtures/deep_paid_passing_final_20261012.json').read_text())
     def answer(output):
         output.clear()

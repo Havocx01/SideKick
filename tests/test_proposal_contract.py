@@ -41,7 +41,7 @@ def profiled(fitted, tmp_path):
     investigation = store.create(engine, InvestigationBudget(max_experiments=6, max_failures=3))
     saveCriterion(store, investigation, FindingCriterion(candidate=LR))
     config = Settings(mode="full", assistant_provider="nebius", assistant_model="nvidia/nemotron-3-super-120b-a12b",
-        nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True)
+        nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="mock", nebius_reasoning_tokens=0, assistant_live_enabled=True)
     return engine, store, investigation, config
 
 

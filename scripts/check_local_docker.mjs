@@ -20,4 +20,7 @@ for (const [name, port] of [["api", 8000], ["web", 5173]]) {
   assert.ok(JSON.stringify(service.command).includes("0.0.0.0"), `${name} must remain reachable inside its container`);
 }
 assert.equal(config.services.web.environment.SIDEKICK_API_URL, "http://api:8000");
+assert.equal(config.services.api.environment.SIDEKICK_ASSISTANT_PROVIDER, "nebius");
+assert.ok("NEBIUS_API_KEY" in config.services.api.environment);
+assert.ok(!("OPENAI_API_KEY" in config.services.api.environment));
 console.log("Compose checked: API 127.0.0.1:8000, web 127.0.0.1:5173; container networking retained.");

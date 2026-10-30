@@ -11,25 +11,22 @@ from app.api.routes_experiments import check_access
 from app.assistant.exports import export_brief
 from app.assistant.schemas import AnalysisRequest, AnalysisRecord, AnalysisDetail, AssistantAccess, AssistantCapabilities, BriefUpdate, ConsentState, ConsentUpdate
 from app.assistant.store import AnalysisCapacityError, AnalysisRevokedError
-from app.assistant.transport import api_key, provider_name
+from app.assistant.transport import api_key
 from app.experiments.demo import owner as demo_owner, public_origin
 from app.schemas import ExperimentEngineerContext
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 COOKIE = "sidekick_assistant"
-DISCLOSURE = ("Sent to OpenAI for deep investigation: pseudonymous model and channel aliases, model families, evaluation partition, simulated fault types, "
+DISCLOSURE = ("Sent to Nebius Token Factory for deep investigation: pseudonymous model and channel aliases, model families, evaluation partition, simulated fault types, "
               "duration, onset and severity settings, recorded limits, healthy metrics, fault-pattern detection ranges, early alarm time, case counts and coverage flags. "
               "Also sent when recorded: paired clean/faulted score and warning summaries and short aligned excerpts in cycles before failure using history/fold aliases, thresholds and persistence rules, preprocessing methods, "
               "sensor quality statistics, fold outcome summaries and clean-prediction contribution summaries without feature reading values. "
               "Saved equipment type, sensor meaning, decision context and the investigation focus you explicitly enter are sent as unverified context. Other pilot text and contact details are not included. "
               "Routine analysis and data checks run locally. Excluded from automatic evidence: CSV files, raw sensor readings, equipment IDs, model names, channel names, filenames and pilot contact details. "
-              "Requests use store=false, but OpenAI may retain API abuse-monitoring logs for up to 30 days, and exceptions may apply.")
+              "Nebius processes these requests under its service data policies. Sidekick does not configure or promise zero retention.")
 
 
 def disclosure(settings):
-    if provider_name(settings) == "nebius":
-        common = DISCLOSURE.split("Requests use store=false,")[0].replace("Sent to OpenAI", "Sent to Nebius Token Factory", 1)
-        return common + "Nebius processes these requests under its service data policies. Sidekick does not configure or promise zero retention."
     return DISCLOSURE
 
 

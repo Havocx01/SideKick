@@ -56,7 +56,7 @@ Fill in your own server-side keys; Tavily is optional. Keep `.env` out of Git. E
 
 Each fault-research action permits one Tavily search and one Nemotron request, with a total completion ceiling of 5,120 tokens. Saved research, including a failed or interrupted attempt, is reused without automatic paid retries. Source excerpts are untrusted context; citations do not prove a physical cause or validate a fault policy. The initial live search returned unrelated pages and the model declined sensor-specific advice. The final filter rejects those captured sources offline; useful live retrieval remains unverified.
 
-Token Factory is the Nebius service used. Containerized experiment workers are implemented, but deployment on Nebius Serverless Jobs or Endpoints is not claimed. Existing OpenAI deep-investigation setups remain supported; see the [provider setup guide](docs/nebius-phase-1.md).
+Token Factory is the default and only live model provider. No OpenAI account or key is needed; the OpenAI SDK is used only for compatible transport to Nebius. See the [provider setup guide](docs/nebius-phase-1.md). Containerized experiment workers are implemented, but deployment on Nebius Serverless Jobs or Endpoints is not claimed.
 
 ## Recorded results and limits
 

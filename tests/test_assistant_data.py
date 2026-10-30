@@ -106,7 +106,7 @@ def test_data_review_inspects_locally_then_uses_one_selection_request(dataset, m
     class Client:
         def __init__(self, **kwargs):
             assert kwargs["max_retries"] == 0
-            self.responses = self
+            self.chat = SimpleNamespace(completions=self)
 
         async def __aenter__(self):
             return self
@@ -115,19 +115,18 @@ def test_data_review_inspects_locally_then_uses_one_selection_request(dataset, m
             pass
 
         async def create(self, **kwargs):
-            raise AssertionError("Data review must not pay for predetermined tool planning")
-
-        async def parse(self, **kwargs):
+            assert "response_format" in kwargs, "Data review must not pay for predetermined tool planning"
             requests.append(kwargs)
-            return SimpleNamespace(output_parsed=InvestigationChoices(
-                finding_ids=["data-validation", "data-mapping"], claim_ids=["mapping-review"], action_id=None))
+            from provider_helpers import chatCompletion
+            return chatCompletion(InvestigationChoices(
+                finding_ids=["data-validation", "data-mapping"], claim_ids=["mapping-review"], action_id=None).model_dump(mode="json"))
 
     monkeypatch.setattr("app.assistant.agent.AsyncOpenAI", Client)
-    settings = SimpleNamespace(openai_api_key="fixture", assistant_model="fixture", llm_max_tool_calls=8)
+    settings = SimpleNamespace(nebius_base_url="https://api.tokenfactory.nebius.com/v1/", nebius_api_key="fixture", assistant_model="fixture", llm_max_tool_calls=8)
     result = asyncio.run(investigate(tools, settings))
     assert len(requests) == 1
     assert [call.name for call in result.investigation] == ["get_dataset_checks", "suggest_column_mapping"]
     assert all(call.label.startswith("Server inspection · ") for call in result.investigation)
-    packet = json.dumps(requests[0]["input"])
+    packet = json.dumps(requests[0]["messages"])
     assert "private-factory" not in packet and record.dataset_id not in packet and "sensor_" not in packet
     assert result.mode == "ai" and len(result.assessment) <= 3
