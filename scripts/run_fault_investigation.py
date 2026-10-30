@@ -4,7 +4,9 @@ import asyncio
 import json
 from pathlib import Path
 import signal
+import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
@@ -29,6 +31,18 @@ def readCriterion(path: Path) -> FindingCriterion:
     if path.stat().st_size > 16384:
         raise SystemExit("Criterion file exceeds its size limit")
     return FindingCriterion.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def commit():
+    found = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
+    return found.stdout.strip() or None
+
+
+def writeCapture(path: Path, store, investigation, report, elapsed):
+    from app.investigator.controller import controllerStatus
+    capture = {"capturedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "commit": commit(), "investigationId": investigation,
+        "elapsedSeconds": round(elapsed, 3), "controller": controllerStatus(store, investigation), "report": report}
+    path.write_text(json.dumps(capture, indent=2) + "\n", encoding="utf-8")
 
 
 def context(args):
@@ -64,6 +78,7 @@ def main(argv=None):
     parser.add_argument("--max-output-tokens", type=int, default=1024)
     parser.add_argument("--max-completion-tokens", type=int, default=32768)
     parser.add_argument("--max-input-bytes", type=int, default=32768)
+    parser.add_argument("--capture", type=Path, help="With --agent, write a sanitized run capture (no key, objective or raw data) to this file.")
     args = parser.parse_args(argv)
     if args.agent and not args.allow_nebius:
         parser.error("--agent requires --allow-nebius to send the objective and aggregate evidence to Nebius")
@@ -98,7 +113,10 @@ def main(argv=None):
                 limits = ControllerLimits(maxCalls=args.max_provider_calls, maxOutputTokens=args.max_output_tokens,
                     maxCompletionTokens=args.max_completion_tokens, maxInputBytes=args.max_input_bytes)
                 controller = NemotronController(store, fixed, get_settings(), limits)
+                started = time.monotonic()
                 output = asyncio.run(controller.run(args.agent, allowProvider=True, cancelled=lambda: interrupted["flag"]))
+                if args.capture:
+                    writeCapture(args.capture, store, args.agent, output, time.monotonic() - started)
             else:
                 output = ExperimentRunner(store, fixed).run(args.run, cancelled=lambda: interrupted["flag"]).model_dump(mode="json")
                 output["provider_requests"] = 0

@@ -56,11 +56,16 @@ def controllerStatus(store, investigation):
         row = db.execute("SELECT config,stop_reason,model_stop_reason FROM controller_state WHERE investigation=?", (investigation,)).fetchone()
         if row is None:
             return None
-        calls = db.execute("SELECT seq,status,reserved_tokens,proposal_id,error FROM controller_calls WHERE investigation=? ORDER BY seq", (investigation,)).fetchall()
+        columns = {item[1] for item in db.execute("PRAGMA table_info(controller_calls)")}
+        extra = ",request_id,usage,elapsed" if "elapsed" in columns else ",NULL,NULL,NULL"
+        calls = db.execute(f"SELECT seq,status,reserved_tokens,proposal_id,error{extra} FROM controller_calls WHERE investigation=? ORDER BY seq",
+            (investigation,)).fetchall()
     return {"configuration": json.loads(row[0]), "stopReason": row[1], "modelStopReason": row[2],
         "callsUsed": len(calls), "reservedCompletionTokens": sum(item[2] for item in calls),
-        "calls": [{"sequence": seq, "status": status, "reservedCompletionTokens": tokens, "proposalId": proposal, "error": error}
-            for seq, status, tokens, proposal, error in calls]}
+        "reportedCompletionTokens": sum(json.loads(item[6]).get("completion_tokens", 0) for item in calls if item[6]),
+        "calls": [{"sequence": seq, "status": status, "reservedCompletionTokens": tokens, "proposalId": proposal, "error": error,
+            "requestId": requestId, "usage": json.loads(usage) if usage else None, "elapsedSeconds": elapsed}
+            for seq, status, tokens, proposal, error, requestId, usage, elapsed in calls]}
 
 
 class NemotronController:
@@ -77,6 +82,10 @@ class NemotronController:
                 " seq INTEGER NOT NULL, lease_token TEXT NOT NULL, status TEXT NOT NULL, reserved_tokens INTEGER NOT NULL,"
                 " request_digest TEXT NOT NULL, proposal_id TEXT REFERENCES proposals(id), error TEXT, created REAL NOT NULL, finished REAL,"
                 " UNIQUE(investigation,seq))")
+            columns = {row[1] for row in db.execute("PRAGMA table_info(controller_calls)")}
+            for name, kind in (("request_id", "TEXT"), ("usage", "TEXT"), ("elapsed", "REAL")):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE controller_calls ADD COLUMN {name} {kind}")
 
     async def run(self, investigation, *, allowProvider=False, cancelled=None):
         if not allowProvider:
@@ -126,35 +135,36 @@ class NemotronController:
                 call, reason = self.reserveCall(record, limits, tokens, token, text)
                 if call is None:
                     break
+                meta = {}
                 try:
                     try:
-                        decision = await self.waitDecision(investigation, token, deadline, cancelled, text, limits)
+                        decision = await self.waitDecision(investigation, token, deadline, cancelled, text, limits, meta)
                     except ControllerStopped as error:
                         reason = str(error)
-                        self.finishCall(investigation, token, call, reason)
+                        self.finishCall(investigation, token, call, reason, meta=meta)
                         break
                     except (OpenAIError, TimeoutError):
                         reason = "provider_error"
-                        self.finishCall(investigation, token, call, "failed", error=reason)
+                        self.finishCall(investigation, token, call, "failed", error=reason, meta=meta)
                         break
                     except ValueError:
                         reason = "invalid_response"
-                        self.finishCall(investigation, token, call, "failed", error=reason)
+                        self.finishCall(investigation, token, call, "failed", error=reason, meta=meta)
                         break
                     reason = self.controlStop(investigation, token, deadline, cancelled)
                     if reason:
-                        self.finishCall(investigation, token, call, reason)
+                        self.finishCall(investigation, token, call, reason, meta=meta)
                         break
                     if decision.stopReason is not None:
-                        status = self.finishCall(investigation, token, call, "stopped", modelReason=decision.stopReason)
+                        status = self.finishCall(investigation, token, call, "stopped", modelReason=decision.stopReason, meta=meta)
                         reason = "cancelled" if status == "cancelled" else "model_stopped"
                         break
                     try:
                         proposal = self.decodeProposal(decision.proposal, record)
                     except ValueError:
-                        self.finishCall(investigation, token, call, "rejected", error="invalid_proposal")
+                        self.finishCall(investigation, token, call, "rejected", error="invalid_proposal", meta=meta)
                         continue
-                    self.finishCall(investigation, token, call, "accepted", proposal=proposal)
+                    self.finishCall(investigation, token, call, "accepted", proposal=proposal, meta=meta)
                 finally:
                     with self.store.transaction() as db:
                         db.execute("UPDATE controller_calls SET status='interrupted',finished=? WHERE id=? AND status='pending' AND EXISTS ("
@@ -186,9 +196,10 @@ class NemotronController:
             return "time_limit"
         return None
 
-    async def waitDecision(self, investigation, token, deadline, cancelled, text, limits):
-        task = asyncio.create_task(self.requestDecision(text, limits))
-        requestDeadline = min(deadline, time.monotonic() + min(40, self.settings.assistant_timeout_seconds))
+    async def waitDecision(self, investigation, token, deadline, cancelled, text, limits, meta):
+        started = time.monotonic()
+        task = asyncio.create_task(self.requestDecision(text, limits, meta))
+        requestDeadline = min(deadline, started + min(40, self.settings.assistant_timeout_seconds))
         try:
             while not task.done():
                 reason = self.controlStop(investigation, token, deadline, cancelled)
@@ -202,10 +213,11 @@ class NemotronController:
             if not task.done():
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+            meta["elapsed"] = round(time.monotonic() - started, 3)
 
-    async def requestDecision(self, text, limits):
+    async def requestDecision(self, text, limits, meta):
         async with AsyncOpenAI(**client_options(self.settings)) as client:
-            return await request_structured(client, self.settings, max_output_tokens=limits.maxOutputTokens,
+            return await request_structured(client, self.settings, max_output_tokens=limits.maxOutputTokens, meta=meta,
                 history=[{"role": "system", "content": INSTRUCTION}, {"role": "user", "content": text}], response_model=InvestigationDecision)
 
     def reserveCall(self, record, limits, tokens, token, text):
@@ -225,7 +237,7 @@ class NemotronController:
                 (call, record.id, count + 1, token, tokens, hashlib.sha256(text.encode()).hexdigest(), time.time()))
         return call, None
 
-    def finishCall(self, investigation, token, call, status, *, error=None, proposal=None, modelReason=None):
+    def finishCall(self, investigation, token, call, status, *, error=None, proposal=None, modelReason=None, meta=None):
         with self.store.transaction() as db:
             cancelled = self.runner.checkLease(db, investigation, token)
             row = db.execute("SELECT status,lease_token FROM controller_calls WHERE id=? AND investigation=?", (call, investigation)).fetchone()
@@ -240,8 +252,11 @@ class NemotronController:
                     proposalId = self.store.insertProposals(db, investigation, [proposal.model_dump_json()], record.budget.max_proposals)[0]
                 except ValueError:
                     status, error = "rejected", "proposal_limit"
-            db.execute("UPDATE controller_calls SET status=?,error=?,proposal_id=?,finished=? WHERE id=? AND lease_token=? AND status='pending'",
-                (status, error, proposalId, time.time(), call, token))
+            meta = meta or {}
+            usage = json.dumps(meta["usage"], sort_keys=True) if meta.get("usage") is not None else None
+            db.execute("UPDATE controller_calls SET status=?,error=?,proposal_id=?,finished=?,request_id=?,usage=?,elapsed=?"
+                " WHERE id=? AND lease_token=? AND status='pending'",
+                (status, error, proposalId, time.time(), meta.get("requestId"), usage, meta.get("elapsed"), call, token))
             if modelReason is not None:
                 db.execute("UPDATE controller_state SET model_stop_reason=? WHERE investigation=?", (modelReason, investigation))
         return status

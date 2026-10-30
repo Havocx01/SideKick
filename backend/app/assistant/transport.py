@@ -117,14 +117,24 @@ def complete_message(response, *, tools=False):
     return choice.message
 
 
-async def request_structured(client, settings, *, history, response_model, max_output_tokens):
+def responseMeta(response) -> dict:
+    usage = getattr(response, "usage", None)
+    return {"requestId": getattr(response, "_request_id", None) or getattr(response, "id", None),
+        "usage": usage.model_dump(exclude_none=True) if usage is not None else None}
+
+
+async def request_structured(client, settings, *, history, response_model, max_output_tokens, meta=None):
     if provider_name(settings) == "openai":
         response = await client.responses.parse(model=settings.assistant_model, store=False,
             max_output_tokens=max_output_tokens, input=history, text_format=response_model)
+        if meta is not None:
+            meta.update(responseMeta(response))
         return response.output_parsed
     response = await client.chat.completions.create(model=settings.assistant_model, messages=chat_messages(history),
         **nebius_options(settings, max_output_tokens), response_format={"type": "json_schema", "json_schema": {
             "name": response_model.__name__, "strict": True, "schema": strict_schema(response_model)}})
+    if meta is not None:
+        meta.update(responseMeta(response))
     message = complete_message(response)
     if message.tool_calls or not message.content or len(message.content.encode()) > 100_000:
         raise ValueError("Provider returned an unsupported structured response")

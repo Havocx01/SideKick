@@ -1,10 +1,4 @@
-"""Deterministic, server-owned classification of saved experiment results.
-
-A finding is computed only from a recorded ``FaultEvaluation`` and a saved,
-versioned criterion. No provider call or model narration can change it. Missing
-coverage, an inadequate clean model, rejected proposals and execution errors are
-separate outcomes and never count as discoveries.
-"""
+"""Deterministic classification of recorded experiment results."""
 import hashlib
 import json
 import time
@@ -23,7 +17,6 @@ WarningState = Literal["detected", "late", "missed"]
 
 
 class FindingCriterion(Frozen):
-    """What counts as a consequential, newly induced failure for one fixed model."""
     version: Literal[1] = 1
     candidate: str = Field(min_length=1, max_length=256)
     min_coverage: float = Field(default=0.8, gt=0, le=1, description="Evaluated / expected development histories.")
@@ -151,8 +144,6 @@ def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, propos
     return Finding(status=status, reasons=tuple(reasons), effects=tuple(effects), support=tuple(support), **base)
 
 
-# ---- persistence ------------------------------------------------------------------
-
 def ensureTables(db):
     db.execute("CREATE TABLE IF NOT EXISTS finding_criteria(investigation TEXT PRIMARY KEY REFERENCES investigation_runs(id),"
         " version INTEGER NOT NULL, fingerprint TEXT NOT NULL, payload TEXT NOT NULL, created REAL NOT NULL)")
@@ -161,7 +152,7 @@ def ensureTables(db):
 
 
 def saveCriterion(store, investigation: str, criterion: FindingCriterion) -> FindingCriterion:
-    """Save once. A different criterion needs a new investigation so earlier findings stay comparable."""
+    # A different criterion needs a new investigation so earlier findings stay comparable.
     criterion = checkCriterion(criterion, {item.candidate for item in store.get(investigation).thresholds})
     with store.transaction() as db:
         ensureTables(db)
@@ -189,7 +180,7 @@ def loadCriterion(store, investigation: str) -> FindingCriterion | None:
 
 
 def classifyInvestigation(store, investigation: str) -> list[Finding]:
-    """Classify every rejected proposal and finished attempt. Pending, duplicate and stopped work is not a finding."""
+    # Pending, duplicate and stopped work is not a finding.
     criterion = loadCriterion(store, investigation)
     if criterion is None:
         raise ValueError("Save a finding criterion for this investigation first")
@@ -212,7 +203,6 @@ def classifyInvestigation(store, investigation: str) -> list[Finding]:
 
 
 def recordFindings(store, investigation: str) -> list[Finding]:
-    """Persist classifications. A saved finding that no longer matches its evidence is an integrity error."""
     findings = classifyInvestigation(store, investigation)
     with store.transaction() as db:
         ensureTables(db)

@@ -1,6 +1,6 @@
 # Compound-fault evaluator: Phase 2
 
-Phase 2 adds a developer-facing engine for reproducible sensor-measurement corruption. It reuses fitted development-fold models and training-only preprocessing, with fixed thresholds. Existing browser protocols and the recorded benchmark remain single-sensor. Adaptive experiment selection, reduction and remedy testing are future work.
+Phase 2 adds a developer-facing engine for reproducible sensor-measurement corruption. It reuses fitted development-fold models and training-only preprocessing, with fixed thresholds. Existing browser protocols and the recorded benchmark remain single-sensor. Adaptive experiment selection and finding criteria are covered in [the investigation guide](nebius-phase-3.md).
 
 ## Run the isolated synthetic example
 

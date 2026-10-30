@@ -81,6 +81,23 @@ Nemotron returns one typed proposal or a stop reason. Channel aliases are mapped
 
 Provider call and completion-token reservations persist across restarts. Errors and interrupted calls retain their reservations, and the SDK makes no retries. Per-call completion limits include the configured reasoning headroom; the cumulative completion limit counts those full ceilings, not actual usage. Input content and schema have a separate byte limit. These controls bound execution allowances; actual provider usage, input-token charges and pricing are separate.
 
+Each call also records the provider's request ID, reported token usage and elapsed time; `--status` shows them with `reportedCompletionTokens` next to the reserved ceiling. Add `--capture output/live-capture.json` to an `--agent` run to save the commit, controller configuration (endpoint, model, prompt version, reasoning effort, limits), per-call records and the final report. The capture contains no key, objective or raw data.
+
+### Live smoke run
+
+From the repository root on Windows, with `NEBIUS_API_KEY` and `SIDEKICK_ASSISTANT_PROVIDER=nebius` in `.env`:
+
+```powershell
+.venv\Scripts\python.exe scripts/check_nebius.py --live
+.venv\Scripts\python.exe scripts/evaluate_fault_scenarios.py --output output/live-context
+'[]' | Out-File -Encoding ascii output/empty.json
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --create output/empty.json --objective "Find sensor faults that cost useful warnings."
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --agent <id> --allow-nebius --max-provider-calls 2 --max-completion-tokens 10240 --capture output/live-capture.json
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --status <id>
+```
+
+The run uses synthetic data only and makes at most two billable calls. It is complete when a Nemotron proposal is validated, evaluated and saved, and the status read shows it. A failed call is still captured; it is evidence, not a completed end-to-end test.
+
 The controller holds the runner lease while the model thinks. Cancellation and the saved run-time deadline also apply while awaiting a provider response. Another runner cannot execute the same investigation concurrently, and a lost lease cannot publish a reply. Local validation failures can lead to a new proposal within the remaining limits; malformed responses and provider errors stop the invocation. Changing the saved model, endpoint, prompt or limits requires a new investigation. Rotating a key does not reset counters.
 
 `--status <id>` shows controller configuration, reservations and call outcomes without a key or model context. The final controller report includes cumulative calls/experiments used and result references. A model stop is not evidence that all failure modes were tested. Scenario reduction, remedy testing, search baselines and a browser interface remain separate work.

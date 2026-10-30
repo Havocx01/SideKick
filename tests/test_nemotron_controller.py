@@ -41,8 +41,9 @@ def provider(monkeypatch, replies):
         if isinstance(reply, Exception):
             raise reply
         content = reply if isinstance(reply, str) else controller.InvestigationDecision.model_validate_json(json.dumps(reply)).model_dump_json()
-        return httpx.Response(200, json={"id": "controller-test", "object": "chat.completion", "created": 0, "model": "fixture",
-            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}]})
+        return httpx.Response(200, headers={"x-request-id": f"req-{len(calls)}"}, json={"id": "controller-test", "object": "chat.completion",
+            "created": 0, "model": "fixture", "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 900, "completion_tokens": 40, "total_tokens": 940, "completion_tokens_details": {"reasoning_tokens": 25}}})
 
     def client(**options):
         assert options["max_retries"] == 0
@@ -189,7 +190,7 @@ def test_cancel_during_provider_request_keeps_its_reservation(fitted, tmp_path, 
     from app.investigator.controller import NemotronController
     fixed, store, investigation, config = setup(fitted, tmp_path)
 
-    async def waitForCancellation(self, text, limits):
+    async def waitForCancellation(self, text, limits, meta):
         store.request_cancel(investigation)
         await asyncio.Event().wait()
 
@@ -206,7 +207,7 @@ def test_async_interruption_records_the_call_and_releases_the_lease(fitted, tmp_
     fixed, store, investigation, config = setup(fitted, tmp_path)
     entered = asyncio.Event()
 
-    async def wait(self, text, limits):
+    async def wait(self, text, limits, meta):
         entered.set()
         await asyncio.Event().wait()
 
@@ -230,7 +231,7 @@ def test_request_timeout_is_bounded_and_does_not_retry(fitted, tmp_path, monkeyp
     from app.investigator.controller import NemotronController
     fixed, store, investigation, config = setup(fitted, tmp_path, assistant_timeout_seconds=.02)
 
-    async def wait(self, text, limits):
+    async def wait(self, text, limits, meta):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(NemotronController, "requestDecision", wait)
@@ -244,7 +245,7 @@ def test_a_lost_lease_cannot_publish_the_model_reply(fitted, tmp_path, monkeypat
     from app.investigator.controller import InvestigationDecision, NemotronController
     fixed, store, investigation, config = setup(fitted, tmp_path)
 
-    async def replaceOwner(self, text, limits):
+    async def replaceOwner(self, text, limits, meta):
         with store.transaction() as db:
             db.execute("UPDATE investigation_runs SET lease_token='successor',lease_expires=9e12 WHERE id=?", (investigation,))
         return InvestigationDecision.model_validate_json(json.dumps(proposal()))
@@ -343,7 +344,7 @@ def test_controller_deadline_stops_a_waiting_request(fitted, tmp_path, monkeypat
     from app.investigator.controller import NemotronController
     fixed, store, investigation, config = setup(fitted, tmp_path, runSeconds=.02)
 
-    async def wait(self, text, limits):
+    async def wait(self, text, limits, meta):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(NemotronController, "requestDecision", wait)
@@ -412,3 +413,36 @@ def test_agent_cli_runs_the_controller_with_the_existing_transport(fitted, tmp_p
     report = json.loads(capsys.readouterr().out)
     assert report["callsUsed"] == len(calls) == 2 and report["experimentsUsed"] == 1
     assert report["stopReason"] == "model_stopped"
+
+
+def test_each_call_records_request_id_usage_and_elapsed_time(fitted, tmp_path, monkeypatch):
+    from app.investigator.controller import controllerStatus
+    fixed, store, investigation, config = setup(fitted, tmp_path)
+    provider(monkeypatch, [proposal(), stop()])
+    run(store, fixed, config, investigation)
+    status = controllerStatus(store, investigation)
+    assert [call["requestId"] for call in status["calls"]] == ["req-1", "req-2"]
+    assert status["calls"][0]["usage"]["completion_tokens_details"]["reasoning_tokens"] == 25
+    assert status["reportedCompletionTokens"] == 80 and status["reservedCompletionTokens"] > 80
+    assert all(call["elapsedSeconds"] >= 0 for call in status["calls"])
+
+
+def test_agent_capture_is_sanitized(fitted, tmp_path, monkeypatch, capsys):
+    import importlib.util
+    from pathlib import Path
+    import dotenv
+    fixed, store, investigation, config = setup(fitted, tmp_path)
+    provider(monkeypatch, [proposal(), stop()])
+    spec = importlib.util.spec_from_file_location("capture_cli", Path(__file__).resolve().parents[1] / "scripts/run_fault_investigation.py")
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    monkeypatch.setattr(cli, "context", lambda _args: fixed)
+    monkeypatch.setattr("app.config.get_settings", lambda: config)
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *_args, **_kwargs: None)
+    capture = tmp_path / "capture.json"
+    assert cli.main(["--store", str(tmp_path / "store"), "--agent", investigation, "--allow-nebius", "--capture", str(capture)]) == 0
+    saved = json.loads(capture.read_text())
+    assert saved["controller"]["configuration"]["model"] == "nvidia/nemotron-3-super-120b-a12b"
+    assert saved["controller"]["configuration"]["prompt"] and saved["report"]["callsUsed"] == 2
+    assert saved["elapsedSeconds"] >= 0 and "commit" in saved
+    assert '"mock"' not in capture.read_text() and "api_key" not in capture.read_text()

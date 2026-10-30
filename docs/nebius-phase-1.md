@@ -1,6 +1,6 @@
 # Nebius Investigator: Phase 1
 
-Phase 1 adds NVIDIA/Nebius inference support to Sidekick's existing read-only deep investigation. It does not yet discover or execute new fault experiments. Training, metrics, validation, routine analysis and the recorded benchmark remain local and deterministic.
+Phase 1 adds NVIDIA/Nebius inference support to Sidekick's existing read-only deep investigation. Fault experiments are discovered and executed by the Nemotron controller in [the investigation guide](nebius-phase-3.md). Training, metrics, validation, routine analysis and the recorded benchmark remain local and deterministic.
 
 ## Configure
 
