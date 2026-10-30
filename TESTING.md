@@ -33,6 +33,8 @@ Build before starting browser tests and leave the built files unchanged until th
 - Provider transport, permission checks, cancellation, saved reports and review-brief recovery.
 - Browser navigation, library actions, CSV failures, themes, mobile layout and exports.
 
+Finding-count and acceptance-boundary tests use explicit warning traces; learned-model integration tests check findings against their recorded matched outcomes. Remedy fixtures test both a successful threshold change and a change that increases alarm burden. Exact learned-model counts are specific to the fitted context and are not portable reference values.
+
 Routine checks mock cloud calls. Keep `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` and `SIDEKICK_ASSISTANT_LIVE_EVAL=0` in CI. Explicit live switches in evaluation scripts incur provider charges and do not belong in normal tests. Recorded captures are historical evidence; fixture success does not establish current model quality or engineer benefit.
 
 The recorded `evidence/bundle.json` must retain its exact bytes. `.gitattributes` disables line-ending conversion because replay compatibility checks its SHA-256. `tests/test_evidence_checkout.py` covers checkout/archive compatibility and checksum rejection.
@@ -65,7 +67,7 @@ docker build -f docker/worker.Dockerfile --build-arg PYTHON=<printed version> -t
 .venv\Scripts\python.exe scripts/check_worker_image.py
 ```
 
-A worker only loads context packages made with the same Python version and scoring dependencies, so build its image from `worker_constraints.py`; `check_worker_image.py` confirms the container returns exactly the local result.
+A worker needs the coordinator's numerical runtime as well as matching source and dependency versions. Native Windows and Linux predictions can have different byte digests even when their warning metrics agree. `check_worker_image.py` prepares evidence in one container and checks a separate worker container using the same image; both run without network access. Its `--command` option checks local execution instead. Build worker images from `worker_constraints.py`; create deployment context packages in the coordinator's Linux image when using Linux workers.
 
 The GitHub workflow runs backend, generated-contract, frontend, browser, worker-image and hosted-memory checks, all offline; paid provider checks only run through `check_nebius.py --live` or an explicit `--agent --allow-nebius` command. It does not deploy. Failed browser traces and reports are retained for seven days in the `browser-failure-diagnostics` artifact; inspect traces with `npx playwright show-trace <trace.zip>`.
 

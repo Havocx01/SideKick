@@ -63,7 +63,10 @@ def test_rejected_duplicate_and_provider_work_is_counted_not_hidden(fitted):
     assert (run["proposals"], run["experiments"], run["duplicates"], run["infeasible"]) == (4, 2, 1, 1)
     assert run["feasibleRate"] == .75 and run["providerCalls"] == 4
     assert run["firstDiscovery"] == 2 and run["discoveryFamilies"] == ["oil_particles:stuck+vibration_rms:stuck"]
-    assert run["mostLostWarnings"] == 6 and run["strongestDrop"] > 0
+    result = engine.evaluate(FaultCase.model_validate(STUCK_PAIR)).models[0]
+    lost = sum(pair.clean.detected and not pair.faulted.detected for pair in result.pairs)
+    assert run["mostLostWarnings"] == lost and lost > 0
+    assert run["strongestDrop"] == lost / len(result.pairs)
 
 
 def test_generators_stay_inside_the_profile(fitted):

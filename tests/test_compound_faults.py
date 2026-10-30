@@ -1,6 +1,7 @@
 """Compound measurement faults and fixed grouped-development evaluation."""
 from dataclasses import replace
 import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -310,6 +311,15 @@ def test_actual_frame_membership_overrides_stale_dataset_caches(fitted, change):
         source.dataset.frame.loc[source.dataset.frame.equipment_id == source.splits.development[0], "equipment_id"] = reserved
     with pytest.raises(ValueError, match="reserved|development-only"):
         evaluator(source)
+
+
+def test_context_fingerprint_ignores_platform_newlines(fitted, monkeypatch):
+    monkeypatch.setattr(os, "linesep", "\n")
+    linux = evaluator(fitted)
+    monkeypatch.setattr(os, "linesep", "\r\n")
+    windows = evaluator(fitted)
+    assert linux.context_fingerprint == windows.context_fingerprint
+    assert linux.evaluate(scenario()) == windows.evaluate(scenario())
 
 
 def test_snapshot_rebuilds_row_caches_and_discards_unused_training_blocks(fitted):

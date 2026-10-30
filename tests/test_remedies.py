@@ -12,7 +12,7 @@ from test_compound_faults import component, fitted as fitted  # noqa: F401
 
 LR = "logistic_regression/lr-probe"
 STUCK_PAIR = [component("vibration_rms", kind="stuck", onset_before_failure=60), component("oil_particles", kind="stuck", onset_before_failure=60)]
-NOISY_DRIFT = [component("vibration_rms", kind="drift", severity_sd=3.0, sign=1, ramp_cycles=5, onset_before_failure=80)]
+NOISY_DRIFT = [component("vibration_rms", kind="drift", severity_sd=1.5, sign=1, ramp_cycles=5, onset_before_failure=80)]
 
 
 def investigate(fitted, tmp_path, cases, **criterion):
@@ -32,7 +32,7 @@ def test_threshold_remedy_reports_the_fix_and_its_clean_cost(fitted, tmp_path):
     engine, store, investigation = investigate(fitted, tmp_path, [STUCK_PAIR, [component("temp_bearing")]])
     finding = next(item for item in recordFindings(store, investigation) if item.is_discovery)
     reduce(store, engine, finding.attempt_id, maxExperiments=20)
-    report = compareRemedy(store, engine, investigation, "threshold", threshold=.5)
+    report = compareRemedy(store, engine, investigation, "threshold", threshold=.05)
     labels = [row["label"].split(":")[0] for row in report["cases"]]
     assert labels[:2] == ["discovered", "tested"] and "reduced" in labels
     discovered = rows(report)["discovered"]
@@ -105,6 +105,6 @@ def test_cli_compares_a_remedy(fitted, tmp_path, capsys):
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     cli.context = lambda _args: engine
-    assert cli.main(["--store", str(tmp_path / "store"), "--remedy", investigation, "threshold", "--threshold", "0.5"]) == 0
+    assert cli.main(["--store", str(tmp_path / "store"), "--remedy", investigation, "threshold", "--threshold", "0.05"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["kind"] == "threshold" and report["improved"] == 1

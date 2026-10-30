@@ -52,6 +52,22 @@ def test_public_export_keeps_evidence_and_drops_private_data(fitted, tmp_path):
     assert evidence["reproduction"]["public"] and "--profile synthetic-rotating-v1" in evidence["reproduction"]["steps"][0]
 
 
+def test_public_export_separates_failed_attempts_from_measurements(fitted, tmp_path):
+    engine, store, investigation = investigate(fitted, tmp_path, cases=())
+    store.add_proposals(investigation, CASES[:2])
+    def execute(case, *, cancelled=None):
+        if len(case.components) > 1:
+            raise RuntimeError(SECRET)
+        return engine.evaluate(case, cancelled=cancelled)
+    ExperimentRunner(store, engine, execute=execute).run(investigation)
+    evidence = publicExport(store, investigation)
+    assert len(evidence["experiments"]) == 1 and len(evidence["executionErrors"]) == 2
+    assert evidence["experiments"][0]["status"] == "no_measured_failure"
+    assert all(item["status"] == "execution_error" for item in evidence["executionErrors"])
+    assert SECRET not in json.dumps(evidence)
+    assert evidence["digest"] == digest({key: value for key, value in evidence.items() if key != "digest"})
+
+
 def test_following_the_reproduction_steps_gives_the_same_findings(fitted, tmp_path):
     engine, store, investigation = investigate(fitted, tmp_path)
     evidence = publicExport(store, investigation)

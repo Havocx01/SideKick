@@ -74,7 +74,11 @@ def reduce(store, evaluator, attempt, *, maxExperiments=16, cancelled=None) -> d
     if not original.is_discovery:
         raise ReductionError("Only a measured failure can be reduced")
 
-    with ExperimentRunner(store, evaluator).lease(investigation):
+    runner = ExperimentRunner(store, evaluator)
+    with runner.lease(investigation) as token:
+        def shouldStop():
+            return runner.renewLease(investigation, token) or bool(cancelled and cancelled())
+
         with store.transaction() as db:
             ensureTable(db)
             db.execute("UPDATE reductions SET status='interrupted' WHERE investigation=? AND status='running'", (investigation,))
@@ -84,7 +88,7 @@ def reduce(store, evaluator, attempt, *, maxExperiments=16, cancelled=None) -> d
             now = time.time()
             db.execute("INSERT INTO reductions VALUES(?,?,?,?,?,?,?)", (reduction["id"], investigation, attempt, "running", json.dumps(reduction), now, now))
         try:
-            return runReduction(store, evaluator, criterion, source, reduction, cancelled)
+            return runReduction(store, evaluator, criterion, source, reduction, shouldStop)
         except BaseException:
             if reduction["status"] == "running":
                 reduction["status"] = "interrupted"
@@ -116,6 +120,8 @@ def runReduction(store, evaluator, criterion: FindingCriterion, source, reductio
                 raise Exhausted()
             reduction["experiments"] += 1
         result = evaluator.evaluate(case, cancelled=cancelled)
+        if cancelled is not None and cancelled():
+            raise EvaluationStopped("Reduction cancelled")
         finding = classify(result, criterion)
         accepted = finding.is_discovery
         reduction["steps"].append({"change": change, "scenario": case.model_dump(mode="json"), "scenarioId": case.scenario_id,

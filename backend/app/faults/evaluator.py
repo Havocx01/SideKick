@@ -100,10 +100,11 @@ class FixedDevelopmentEvaluator:
         self._source_digest = source_digest()
         fits = [(fold.fold_index, name, fold.candidates[name], fold.builder)
             for fold in self._training.folds for name in self._thresholds]
+        developmentCsv = self._training.dataset.frame.to_csv(index=False, float_format="%.17g", lineterminator="\n")
         self._context_fingerprint = fingerprint({"version": 1, "source": self._source_digest,
             "fits": joblib.hash(fits, hash_name="sha1"), "thresholds": self._thresholds,
             "data_hash": self._training.dataset.data_hash, "mapping": self._training.dataset.mapping.model_dump(mode="json"),
-            "development_content": hashlib.sha256(self._training.dataset.frame.to_csv(index=False, float_format="%.17g").encode()).hexdigest(),
+            "development_content": hashlib.sha256(developmentCsv.encode()).hexdigest(),
             "config": self._config.as_dict(), "splits": self._training.splits.model_dump(mode="json")})
         self._prepared = []
         self._clean = {name: {} for name in self._thresholds}

@@ -28,7 +28,11 @@ Sidekick V2 (ABB Accelerator 2026) already trained and compared models on single
 
 ## Measured results
 
-No live Nemotron inference has been verified yet. Everything below comes from local, deterministic evaluation on synthetic data, with no provider calls. Real equipment, ABB field performance and maintenance savings are not established.
+The initial Windows live check on 30 October 2026 authenticated successfully and made two Nemotron calls. Both responses were rejected by local scenario validation before execution; 864 completion tokens were reported and no experiment ran. The observed reply combined explicit onsets with random seeds, supplied inapplicable fault parameters and crossed declared sensor groups. Prompt v4 states those constraints explicitly.
+
+A separately authorized two-call check with prompt v4 reported 539 completion tokens. One reply was rejected because its transient fault had no length. The other passed validation, reached the evaluator and was saved, verifying the live proposal-to-saved-result path. Its onset was 100 cycles before failure, outside all 22 development histories, so the result was `not_applicable` with zero evaluated histories and no measured failure. The saved result passed its checksum check, replayed exactly without provider calls and exported as aggregate evidence. A useful live measurement remains unverified; timing bounds need to reflect the fitted development histories, and provider schemas should express fault-specific parameter requirements.
+
+The recorded offline results below come from local, deterministic evaluation on synthetic data. Real equipment, ABB field performance and maintenance savings are not established; exact learned-model counts belong to their recorded fitted contexts.
 
 - **Fixed-threshold demonstration** (`scripts/demo_investigation.py`; 22 development histories; logistic model at a deliberately fragile 0.95 threshold):
   - 1 of 5 cases was a measured failure: stuck vibration plus particle count, with useful warnings falling from 22/22 to 16/22 (100% → 73%).
@@ -39,5 +43,5 @@ No live Nemotron inference has been verified yet. Everything below comes from lo
 
 ## Still needed from the owner
 
-- A live smoke run on Windows: `docs/nebius-phase-3.md` → Live smoke run, saving `output/live-capture.json`. Then add Nemotron to the benchmark with `--recorded`.
+- A bounded live run that scores eligible histories after tightening timing bounds and structured proposals: `docs/nebius-phase-3.md` → Live smoke run. Preserve both existing captures and use a fresh context and investigation after source changes. Then add verified Nemotron runs to the benchmark with `--recorded`.
 - The demo URL, a public video of at most three minutes, and Nebius/NVIDIA feedback based on that live usage: structured output, reasoning controls, latency, errors.

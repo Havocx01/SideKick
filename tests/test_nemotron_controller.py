@@ -91,6 +91,26 @@ def test_local_policy_rejection_counts_a_call_without_using_an_experiment(fitted
     assert len(store.load(investigation).proposals) == 1
 
 
+@pytest.mark.parametrize("parameters", [{"seed": 101}, {"severity_sd": 1.0, "sign": 0, "ramp_cycles": 5}, {"length": 30}])
+def test_inconsistent_provider_fault_parameters_never_reach_the_evaluator(fitted, tmp_path, monkeypatch, parameters):
+    fixed, store, investigation, config = setup(fitted, tmp_path)
+    calls = provider(monkeypatch, [json.dumps(proposal(**parameters))])
+    report = run(store, fixed, config, investigation, maxCalls=2)
+    assert report["stopReason"] == "invalid_response" and report["callsUsed"] == len(calls) == 1
+    assert report["experimentsUsed"] == 0 and store.load(investigation).proposals == []
+    from app.investigator.controller import controllerStatus
+    saved = controllerStatus(store, investigation)["calls"][0]
+    assert saved["status"] == "failed" and saved["requestId"] == "req-1" and saved["usage"]["completion_tokens"] == 40
+
+
+def test_explicit_null_parameters_accept_a_persistent_dropout(fitted, tmp_path, monkeypatch):
+    fixed, store, investigation, config = setup(fitted, tmp_path)
+    provider(monkeypatch, [json.dumps(proposal(seed=None, severity_sd=None, sign=None, ramp_cycles=None, length=None))])
+    report = run(store, fixed, config, investigation, maxCalls=1)
+    assert report["stopReason"] == "call_limit" and report["experimentsUsed"] == 1
+    assert store.load(investigation).proposals[0].status == "completed"
+
+
 def test_duplicates_do_not_consume_extra_experiments(fitted, tmp_path, monkeypatch):
     fixed, store, investigation, config = setup(fitted, tmp_path)
     provider(monkeypatch, [proposal(), proposal(), stop()])

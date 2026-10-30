@@ -96,7 +96,6 @@ A proposal may include a hypothesis: what is suspected, what measurement would s
 From the repository root on Windows, with `NEBIUS_API_KEY` and `SIDEKICK_ASSISTANT_PROVIDER=nebius` in `.env`:
 
 ```powershell
-.venv\Scripts\python.exe scripts/check_nebius.py --live
 .venv\Scripts\python.exe scripts/evaluate_fault_scenarios.py --output output/live-context
 '[]' | Out-File -Encoding ascii output/empty.json
 .venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --create output/empty.json --objective "Find sensor faults that cost useful warnings."
@@ -104,11 +103,11 @@ From the repository root on Windows, with `NEBIUS_API_KEY` and `SIDEKICK_ASSISTA
 .venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --status <id>
 ```
 
-The run uses synthetic data only and makes at most two billable calls. It is complete when a Nemotron proposal is validated, evaluated and saved, and the status read shows it. A failed call is still captured; it is evidence, not a completed end-to-end test.
+The run uses synthetic data only and makes at most two billable calls. The separate `check_nebius.py --live` probe makes additional paid calls and is not part of this sequence. It is complete when a Nemotron proposal is validated, evaluated and saved, and the status read shows it. A failed call is still captured; it is evidence, not a completed end-to-end test. Preserve previous captures, and use a fresh context and investigation after a source or prompt change.
 
 The controller holds the runner lease while the model thinks. Cancellation and the saved run-time deadline also apply while awaiting a provider response. Another runner cannot execute the same investigation concurrently, and a lost lease cannot publish a reply. Local validation failures can lead to a new proposal within the remaining limits; malformed responses and provider errors stop the invocation. Changing the saved model, endpoint, prompt or limits requires a new investigation. Rotating a key does not reset counters.
 
-`--status <id>` shows controller configuration, reservations and call outcomes without a key or model context. The final controller report includes cumulative calls/experiments used and result references. A model stop is not evidence that all failure modes were tested. Scenario reduction, remedy testing, search baselines and a browser interface remain separate work.
+`--status <id>` shows controller configuration, reservations and call outcomes without a key or model context. The final controller report includes cumulative calls/experiments used and result references. A model stop is not evidence that all failure modes were tested. Reduction, remedy comparisons, search baselines and the browser workbench are described below.
 
 ## Finding criteria
 

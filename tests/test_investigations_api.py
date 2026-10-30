@@ -159,6 +159,54 @@ def test_agent_runs_need_permission_and_stop_when_it_is_revoked(api, monkeypatch
     assert view["events"][-1]["detail"] == "cancelled" and view["state"]["proposals"] == [] and view["experimentsUsed"] == 0
 
 
+@pytest.mark.parametrize("otherOwner", ["alice", "bob"])
+def test_reduction_rejects_attempts_from_another_investigation(api, otherOwner):
+    client, service, root = api
+    investigation = create(client, seed=0)
+    headers = {"x-owner": otherOwner}
+    other = client.post("/api/investigations", headers=headers, json={
+        "context": "synthetic", "criterion": {"candidate": LR}, "proposals": [STUCK_PAIR], "seed": 0}).json()["id"]
+    client.post(f"/api/investigations/{other}/start", headers=headers, json={"requestId": "other-start"})
+    service.wait(other)
+    findings = client.get(f"/api/investigations/{other}", headers=headers).json()["findings"]
+    attempt = next(item["attempt_id"] for item in findings if item["status"] == "measured_failure")
+    response = client.post(f"/api/investigations/{investigation}/reduce", headers=HEADERS,
+        json={"requestId": "wrong-investigation", "attempt": attempt, "maxExperiments": 20})
+    service.wait(investigation)
+    assert response.status_code == 404 and started(service, investigation) == 0
+    assert client.get(f"/api/investigations/{other}", headers=headers).json()["reductions"] == []
+
+
+def test_cancelled_investigation_does_not_run_reduction(api):
+    client, service, root = api
+    investigation = create(client, seed=0)
+    client.post(f"/api/investigations/{investigation}/start", headers=HEADERS, json={"requestId": "start-before-cancel"})
+    service.wait(investigation)
+    view = client.get(f"/api/investigations/{investigation}", headers=HEADERS).json()
+    attempt = next(item["attempt_id"] for item in view["findings"] if item["status"] == "measured_failure")
+    client.post(f"/api/investigations/{investigation}/cancel", headers=HEADERS)
+    response = client.post(f"/api/investigations/{investigation}/reduce", headers=HEADERS,
+        json={"requestId": "cancelled-reduction", "attempt": attempt, "maxExperiments": 20})
+    assert response.status_code == 200
+    service.wait(investigation)
+    reductions = client.get(f"/api/investigations/{investigation}", headers=HEADERS).json()["reductions"]
+    assert len(reductions) == 1 and reductions[0]["status"] == "cancelled" and reductions[0]["experiments"] == 0
+
+
+def test_public_export_keeps_failed_attempts_readable(api):
+    client, service, root = api
+    investigation = create(client, seed=0)
+    from app.faults.investigation import ExperimentRunner
+    def fail(*args, **kwargs):
+        raise RuntimeError("private evaluator failure")
+    ExperimentRunner(service.store, service.evaluator("synthetic"), execute=fail).run(investigation)
+    response = client.get(f"/api/investigations/{investigation}/public-export", headers=HEADERS)
+    assert response.status_code == 200
+    evidence = response.json()
+    assert evidence["experiments"] == [] and len(evidence["executionErrors"]) == 2
+    assert "private evaluator failure" not in response.text
+
+
 def test_restart_marks_unfinished_work_interrupted(api):
     client, service, root = api
     investigation = create(client)

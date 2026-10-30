@@ -60,11 +60,12 @@ test("answer reveal settles once, preserves layout and respects reduced motion",
   const answer = page.getByRole("region", { name: "Assessment", exact: true });
   await expect(answer).toHaveAttribute("aria-busy", "true");
   await expect(answer.locator(".assistant-stream-word").last()).toHaveCSS("opacity", "0");
-  const initialHeight = (await answer.boundingBox())!.height;
+  // Layout height excludes the dialog's entrance scale animation.
+  const initialHeight = await answer.evaluate(node => node.clientHeight);
   const nextCheck = page.getByRole("region", { name: "Next check", exact: true });
   await expect(nextCheck).not.toBeVisible();
   await expect(answer).toHaveAttribute("aria-busy", "false");
-  expect(Math.abs((await answer.boundingBox())!.height - initialHeight)).toBeLessThan(1);
+  expect(await answer.evaluate(node => node.clientHeight)).toBe(initialHeight);
   await expect(answer.locator('.assistant-stream-word[data-revealed="false"]')).toHaveCount(0);
   await expect(nextCheck).toBeVisible();
   await answer.getByRole("button", { name: "Show evidence for finding 3" }).click();

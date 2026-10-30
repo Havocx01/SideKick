@@ -25,8 +25,8 @@ def publicExport(store, investigation, *, contextName=None) -> dict:
     state = store.load(investigation)
     criterion = loadCriterion(store, investigation)
     findings = recordFindings(store, investigation) if criterion else []
-    measured = [finding for finding in findings if finding.attempt_id]
     scenarios = {item.id: store.result(item.id).scenario for item in state.attempts if item.status == "completed"}
+    measured = [finding for finding in findings if finding.attempt_id in scenarios]
     with store.transaction() as db:
         ensureReductions(db)
         ensureRemedies(db)
@@ -50,6 +50,7 @@ def publicExport(store, investigation, *, contextName=None) -> dict:
             "duplicates": sum(item.status == "duplicate" for item in state.proposals)},
         "experiments": [{**experimentRow(finding, number), "scenario": scenarios[finding.attempt_id].model_dump(mode="json")}
             for number, finding in enumerate(measured, 1)],
+        "executionErrors": [{"status": finding.status, "scenarioId": finding.scenario_id} for finding in findings if finding.status == "execution_error"],
         "discoveryFamilies": sorted({finding.family for finding in measured if finding.is_discovery}),
         "controller": {key: controller[key] for key in ("stopReason", "modelStopReason", "callsUsed", "reservedCompletionTokens", "reportedCompletionTokens")}
             | {"model": controller["configuration"]["model"], "prompt": controller["configuration"]["prompt"],

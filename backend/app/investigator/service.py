@@ -183,6 +183,9 @@ class InvestigationService:
         return self.submit(owner, investigation, request.mode, request.requestId, work)
 
     def reduce(self, owner, investigation, request):
+        self.owned(owner, investigation)
+        if request.attempt not in {item.id for item in self.store.load(investigation).attempts}:
+            raise KeyError("Unknown experiment attempt")
         def work(engine):
             return reduce(self.store, engine, request.attempt, maxExperiments=request.maxExperiments, cancelled=self.stopping.is_set)["status"]
         return self.submit(owner, investigation, "reduce", request.requestId, work)

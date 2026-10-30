@@ -112,6 +112,25 @@ def test_cancellation_and_crashes_are_recorded_and_release_the_lease(fitted, tmp
     assert reduce(store, engine, finding.attempt_id, maxExperiments=4)["status"] in {"complete", "partial"}
 
 
+@pytest.mark.parametrize("duringRun", [False, True])
+def test_persisted_cancellation_stops_reduction(fitted, tmp_path, monkeypatch, duringRun):
+    engine, store, investigation, finding = investigate(fitted, tmp_path, DRIFT_PAIR)
+    if duringRun:
+        original = engine.evaluate
+        def cancelAfterEvaluation(case, *, cancelled=None):
+            result = original(case, cancelled=cancelled)
+            store.request_cancel(investigation)
+            return result
+        monkeypatch.setattr(engine, "evaluate", cancelAfterEvaluation)
+    else:
+        store.request_cancel(investigation)
+    reduction = reduce(store, engine, finding.attempt_id)
+    assert reduction["status"] == "cancelled" and reduction["final"] == reduction["original"]
+    assert reduction["experiments"] == 0 and reduction["steps"] == []
+    assert store.cancel_requested(investigation)
+    assert loadReduction(store, reduction["id"]) == reduction
+
+
 def test_regression_case_reproduces_and_is_bound_to_its_context(fitted, tmp_path):
     engine, store, investigation, finding = investigate(fitted, tmp_path, DRIFT_PAIR)
     reduction = reduce(store, engine, finding.attempt_id, maxExperiments=40)
