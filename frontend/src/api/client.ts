@@ -233,6 +233,7 @@ export const pilots = {
 
 export const investigations = {
   contexts: () => request<import("./types").ContextInfo[]>("/api/investigations/contexts"),
+  recorded: () => request<import("./types").RecordedInvestigation[]>("/api/investigations/recorded"),
   list: () => request<import("./types").InvestigationSummary[]>("/api/investigations"),
   get: (id: string) => request<import("./types").InvestigationView>(`/api/investigations/${id}`),
   create: (body: import("./types").InvestigationCreate) => post<import("./types").InvestigationSummary>("/api/investigations", body),

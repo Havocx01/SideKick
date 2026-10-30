@@ -206,3 +206,31 @@ test("each kind of outcome looks different and unscored cases say why", async ({
   await expect(page.getByText("Calls used 2; reserved 10240 tokens; reported 700.")).toBeVisible();
   await expect(page.getByText("Reasons and hypotheses are unverified text; only measured results above are evidence.")).toBeVisible();
 });
+
+test("the hosted site shows recorded runs, labelled, and offers nothing that starts work", async ({ page }) => {
+  const evidence = { generatedAt: "2026-10-30T03:40:00Z", digest: "f".repeat(64), demonstration: { threshold: 0.95, note: "Demonstration setting: deliberately fragile." },
+    controller: { model: "nvidia/nemotron-3-super-120b-a12b", prompt: "nemotron-fault-search-v5", callsUsed: 3, reservedCompletionTokens: 15360, reportedCompletionTokens: 1510 },
+    experiments: [{ ref: "result-1", family: failure.family, status: "measured_failure", chosenBy: "supplied", evaluatedHistories: 22, expectedHistories: 22, cleanDetection: 1, faultedDetection: 0.36 },
+      { ref: "result-2", family: "oil_particles:stuck+vibration_rms:drift", status: "no_measured_failure", chosenBy: "nemotron", evaluatedHistories: 22, expectedHistories: 22, cleanDetection: 1, faultedDetection: 1 }],
+    reductions: [{ status: "complete", family: failure.family, claims: ["Not a proof of a global minimum."] }],
+    remedies: [{ threshold: 0.5, improved: 1, degraded: 0, stillFailing: 1 }],
+    validations: [{ status: "assessed", freshHistories: 12, cases: [{ label: `discovered:${failure.family}`, original: { status: "measured_failure" } }] }] };
+  await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true"));
+  await page.route("**/api/health", route => route.fulfill({ json: { status: "ok", mode: "demo", version: "2.0.0", can_train: true } }));
+  const calls: string[] = [];
+  await page.route("**/api/investigations**", route => {
+    calls.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ json: [{ name: "nemotron-live-demo", evidence }] });
+  });
+  await page.goto("/investigations");
+  await expect(page.getByRole("heading", { name: "Run investigations locally" })).toBeVisible();
+  const run = page.getByRole("table", { name: "Recorded experiments: nemotron-live-demo" });
+  await expect(run).toContainText("Nemotron");
+  await expect(run).toContainText("100% → 36%");
+  await expect(page.getByText("Recorded, not live")).toBeVisible();
+  await expect(page.getByText("3 calls: 1510 reported completion tokens within a reserved ceiling of 15360")).toBeVisible();
+  await expect(page.getByText("1 improved, 0 degraded, 1 still failing")).toBeVisible();
+  await expect(page.getByText("Validation on 12 fresh histories (assessed):")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Create investigation|Run saved proposals|Start Nemotron search/ })).toHaveCount(0);
+  expect(calls).toEqual(["/api/investigations/recorded"]);
+});

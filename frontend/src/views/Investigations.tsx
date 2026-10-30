@@ -5,7 +5,7 @@ import { Input } from "@/components/arc/input/input";
 import { Textarea } from "@/components/arc/textarea/textarea";
 import { Select } from "@/registry/components/select/select";
 import { api, ApiError, investigations } from "../api/client";
-import type { ContextInfo, Finding, InvestigationView, ProposalDetail } from "../api/types";
+import type { ContextInfo, Finding, InvestigationView, ProposalDetail, RecordedInvestigation } from "../api/types";
 import { Badge, Button, Callout, Panel, StateBlock, type Tone } from "../components/Chrome";
 import { useApi } from "../hooks/useApi";
 import { percent } from "../format";
@@ -42,8 +42,48 @@ export function Investigations() {
   const health = useApi(() => api.health(), []);
   return <StateBlock loading={health.loading} error={health.error}>
     <header className="page-head"><h1>Fault investigations</h1><p>Search for sensor faults that cost useful warnings, then reduce, replay and compare remedies on fixed development models.</p></header>
-    {health.data?.can_train ? <Workspace /> : <Panel title="Run investigations locally"><p>Investigations train nothing in the browser and use fitted contexts stored on a local server.</p><Link to="/comparison">Explore the recorded results</Link></Panel>}
+    {health.data?.mode === "full" ? <Workspace /> : <>
+      <Panel title="Run investigations locally"><p>Live investigations use fitted contexts on a local server, so this site cannot start them or call Nemotron. Below are recorded runs.</p></Panel>
+      <Recorded />
+    </>}
   </StateBlock>;
+}
+
+interface RecordedRow { ref: string; family: string; status: Finding["status"]; chosenBy?: string; evaluatedHistories: number; expectedHistories: number;
+  cleanDetection: number | null; faultedDetection: number | null }
+interface RecordedEvidence { generatedAt: string; digest: string; demonstration?: { note: string } | null; experiments: RecordedRow[];
+  controller?: { model: string; prompt: string; callsUsed: number; reservedCompletionTokens: number; reportedCompletionTokens: number } | null;
+  reductions: { status: string; family: string; claims: string[] }[]; remedies: { threshold: number | null; improved: number; degraded: number; stillFailing?: number }[];
+  validations?: { status: string; freshHistories: number; cases: { label: string; original: { status: string } }[] }[] }
+
+function Recorded() {
+  const recorded = useApi(() => investigations.recorded(), []);
+  return <StateBlock loading={recorded.loading} error={recorded.error} empty={recorded.data?.length === 0}>
+    {recorded.data?.map(item => <RecordedRun key={item.name} item={item} />)}
+  </StateBlock>;
+}
+
+function RecordedRun({ item }: { item: RecordedInvestigation }) {
+  const evidence = item.evidence as unknown as RecordedEvidence;
+  const controller = evidence.controller;
+  return <Panel title={`Recorded: ${item.name}`} aside={<Badge tone="neutral">Recorded, not live</Badge>}
+    description={`Generated ${evidence.generatedAt}. Digest ${evidence.digest.slice(0, 12)}.`}>
+    <div className={styles.stack}>
+      {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note}</Callout>}
+      <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} calls: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
+        : "No Nemotron calls; every case was supplied."}</p>
+      <div className="table-scroll"><table aria-label={`Recorded experiments: ${item.name}`}><thead><tr><th>Result</th><th>Case family</th><th>Chosen by</th><th>Status</th>
+        <th className="num">Coverage</th><th className="num">Useful warnings</th></tr></thead>
+        <tbody>{evidence.experiments.map(row => <tr key={row.ref}><td>{row.ref}</td><td>{row.family}</td><td>{row.chosenBy === "nemotron" ? "Nemotron" : "Supplied"}</td>
+          <td><Badge tone={findingTones[row.status][1]}>{findingTones[row.status][0]}</Badge></td><td className="num">{row.evaluatedHistories} / {row.expectedHistories}</td>
+          <td className="num">{percent(row.cleanDetection)} → {percent(row.faultedDetection)}</td></tr>)}</tbody></table></div>
+      {evidence.reductions.map((reduction, index) => <p key={index}><strong>Reduction ({reduction.status}):</strong> {reduction.family}. {reduction.claims.join(" ")}</p>)}
+      {evidence.remedies.map((remedy, index) => <p key={index}><strong>Remedy, threshold {remedy.threshold}:</strong> {remedy.improved} improved, {remedy.degraded} degraded
+        {remedy.stillFailing !== undefined ? `, ${remedy.stillFailing} still failing` : ""}. Development-only; it needs fresh validation.</p>)}
+      {evidence.validations?.map((validation, index) => <p key={index}><strong>Validation on {validation.freshHistories} fresh histories ({validation.status}):</strong>{" "}
+        {validation.cases.map(row => `${row.label} ${row.original.status.replace(/_/g, " ")}`).join("; ")}.</p>)}
+    </div>
+  </Panel>;
 }
 
 function Workspace() {

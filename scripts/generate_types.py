@@ -69,6 +69,7 @@ ROOTS: list[type[BaseModel]] = [
     investigator.InvestigationSummary,
     investigator.InvestigationView,
     investigator.ReplayCheck,
+    investigator.RecordedInvestigation,
 ]
 
 SCALARS = {"string": "string", "integer": "number", "number": "number", "boolean": "boolean", "null": "null"}

@@ -1,12 +1,14 @@
 """Saved fault investigations: create, start, inspect, reduce, compare remedies."""
+import json
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
 from app.api.routes_experiments import library_owner
 from app.config import get_settings
 from app.experiments.demo import public_origin
-from app.investigator.schemas import (ContextInfo, InvestigationCreate, InvestigationSummary, InvestigationView, ReduceRequest, RemedyRequest,
-    ReplayCheck, StartRequest)
+from app.investigator.schemas import (ContextInfo, InvestigationCreate, InvestigationSummary, InvestigationView, RecordedInvestigation, ReduceRequest,
+    RemedyRequest, ReplayCheck, StartRequest)
 from app.investigator.service import Conflict, InvestigationService
 
 router = APIRouter(prefix="/api/investigations", tags=["investigations"])
@@ -57,6 +59,14 @@ def create(payload: InvestigationCreate, request: Request):
 @router.get("", response_model=list[InvestigationSummary])
 def listInvestigations(request: Request):
     return service(request).list(library_owner(request))
+
+
+@router.get("/recorded", response_model=list[RecordedInvestigation])
+def recorded():
+    # Committed public evidence only, in every mode; nothing here starts work or reads the local store.
+    folder = get_settings().bundle_path.parent / "investigations"
+    files = sorted(folder.glob("*.json")) if folder.is_dir() else []
+    return [{"name": path.stem, "evidence": json.loads(path.read_text(encoding="utf-8"))} for path in files if path.stat().st_size <= 2_000_000]
 
 
 @router.get("/{investigation}", response_model=InvestigationView)

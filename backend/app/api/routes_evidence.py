@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app import __version__
@@ -45,6 +47,7 @@ def health(config: Settings = Depends(settings)) -> dict:
         "status": "ok",
         "mode": config.mode,
         "version": __version__,
+        "revision": os.environ.get("RENDER_GIT_COMMIT", os.environ.get("SIDEKICK_REVISION", ""))[:12] or None,
         "can_edit_protocol": config.mode == "full",
         "can_freeze": config.mode == "full",
         "can_validate": config.mode == "full",

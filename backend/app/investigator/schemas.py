@@ -100,6 +100,11 @@ class InvestigationView(InvestigationSummary):
     remedies: list[dict[str, Any]]
 
 
+class RecordedInvestigation(Strict):
+    name: str
+    evidence: dict[str, Any]
+
+
 class ReplayCheck(Strict):
     attempt: str
     scenarioId: str

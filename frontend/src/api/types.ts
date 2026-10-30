@@ -884,6 +884,11 @@ export interface ProposalState {
   failed_attempts: number;
 }
 
+export interface RecordedInvestigation {
+  name: string;
+  evidence: Record<string, unknown>;
+}
+
 export interface RecordedPreprocessing {
   partition?: Partition;
   feature_window: number;

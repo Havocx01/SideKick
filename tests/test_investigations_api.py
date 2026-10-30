@@ -244,3 +244,6 @@ def test_routes_are_local_only_and_check_origin(api, monkeypatch):
     monkeypatch.setenv("SIDEKICK_MODE", "replay")
     reset_settings()
     assert client.get("/api/investigations", headers=HEADERS).status_code == 403
+    recorded = client.get("/api/investigations/recorded")
+    assert recorded.status_code == 200 and recorded.json() and all(item["evidence"]["digest"] for item in recorded.json())
+    assert client.post("/api/investigations/recorded").status_code == 405
