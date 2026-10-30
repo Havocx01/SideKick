@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.faults.investigation import ExperimentRunner, InvestigationBudget, InvestigationStore  # noqa: E402
 from app.faults.replay import load_trusted_context  # noqa: E402
 from app.investigator.findings import FindingCriterion, recordFindings, saveCriterion, summarize  # noqa: E402
+from app.investigator.search import seedSuite  # noqa: E402
 
 MAX_PROPOSAL_FILE_BYTES = 4 * 1024 * 1024
 
@@ -67,6 +68,7 @@ def main(argv=None):
     action.add_argument("--set-criterion", nargs=2, metavar=("ID", "CRITERION_JSON"), help="Save the finding criterion for an existing investigation.")
     action.add_argument("--cancel", metavar="ID", help="Ask an active or future run to stop.")
     action.add_argument("--resume", metavar="ID", help="Clear a cancellation so the investigation can run again.")
+    parser.add_argument("--seed", type=int, default=0, help="Add this many deterministic seed cases with --create.")
     parser.add_argument("--criterion", type=Path, metavar="CRITERION_JSON", help="Finding criterion to save with --create or --attach.")
     parser.add_argument("--max-experiments", type=int, default=16)
     parser.add_argument("--max-failures", type=int, default=3)
@@ -87,7 +89,9 @@ def main(argv=None):
     if args.create:
         budget = InvestigationBudget(max_experiments=args.max_experiments, max_failures=args.max_failures,
             max_attempts_per_scenario=args.max_attempts_per_scenario, max_run_seconds=args.max_run_seconds)
-        investigation = store.create(context(args), budget, read_proposals(args.create), objective=args.objective)
+        fixed = context(args)
+        seeds = seedSuite(fixed.policy, fixed.config, args.seed) if args.seed > 0 else []
+        investigation = store.create(fixed, budget, seeds + read_proposals(args.create), objective=args.objective)
         output = {"investigation_id": investigation, "proposals": len(store.load(investigation).proposals)}
         if args.criterion:
             output["criterion"] = saveCriterion(store, investigation, readCriterion(args.criterion)).model_dump(mode="json")

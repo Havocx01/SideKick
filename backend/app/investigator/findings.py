@@ -57,6 +57,7 @@ class Finding(Frozen):
     proposal_id: str | None = None
     attempt_id: str | None = None
     scenario_id: str | None = None
+    family: str | None = Field(default=None, description="Sensor and fault-kind combination, ignoring timing and severity.")
     evidence_digest: str | None = Field(default=None, description="SHA-256 of the canonical evaluation this finding was computed from.")
     context_fingerprint: str | None = None
     expected_histories: int | None = None
@@ -79,6 +80,10 @@ def digest(value) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
 
+def family(case) -> str:
+    return "+".join(sorted(f"{atom.sensor}:{atom.kind.value}" for atom in case.components))
+
+
 def warningState(outcome) -> WarningState:
     return "detected" if outcome.detected else "late" if outcome.late else "missed"
 
@@ -97,7 +102,7 @@ def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, propos
     if model is None:
         raise ValueError("Evaluation does not contain the criterion's target model")
     base = {"criterion": criterion, "criterion_fingerprint": criterion.fingerprint, "proposal_id": proposal_id,
-        "attempt_id": attempt_id, "scenario_id": evaluation.scenario_id, "evidence_digest": digest(evaluation.model_dump(mode="json")),
+        "attempt_id": attempt_id, "scenario_id": evaluation.scenario_id, "family": family(evaluation.scenario), "evidence_digest": digest(evaluation.model_dump(mode="json")),
         "context_fingerprint": evaluation.context_fingerprint, "expected_histories": evaluation.expected_histories,
         "assumptions": evaluation.policy.assumptionsFor(evaluation.scenario),
         "evaluated_histories": evaluation.evaluated_histories,
@@ -219,7 +224,10 @@ def recordFindings(store, investigation: str) -> list[Finding]:
 
 
 def summarize(findings) -> dict:
+    # Many severities of one sensor/kind combination are one discovery family, not many breakthroughs.
     counts = {}
     for finding in findings:
         counts[finding.status] = counts.get(finding.status, 0) + 1
-    return {"counts": counts, "discoveries": [finding.attempt_id for finding in findings if finding.is_discovery]}
+    discoveries = [finding for finding in findings if finding.is_discovery]
+    return {"counts": counts, "discoveries": [finding.attempt_id for finding in discoveries],
+        "discoveryFamilies": sorted({finding.family for finding in discoveries})}

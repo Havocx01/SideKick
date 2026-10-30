@@ -152,7 +152,7 @@ def test_nebius_transport_accepts_the_proposal_contract_offline(record, engine):
         calls.append(payload)
         schema = payload["response_format"]["json_schema"]
         assert schema["strict"] is True
-        assert set(schema["schema"]["required"]) == {"reason", "scenario"}
+        assert set(schema["schema"]["required"]) == {"reason", "scenario", "hypothesis"}
         assert schema["schema"]["additionalProperties"] is False
         return httpx.Response(200, json={"id": "proposal-test", "object": "chat.completion", "created": 0, "model": "fixture",
             "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": response}}]})

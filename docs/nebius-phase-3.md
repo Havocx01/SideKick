@@ -83,6 +83,14 @@ Provider call and completion-token reservations persist across restarts. Errors 
 
 Each call also records the provider's request ID, reported token usage and elapsed time; `--status` shows them with `reportedCompletionTokens` next to the reserved ceiling. Add `--capture output/live-capture.json` to an `--agent` run to save the commit, controller configuration (endpoint, model, prompt version, reasoning effort, limits), per-call records and the final report. The capture contains no key, objective or raw data.
 
+### Search context
+
+Each request starts from clean performance: every fixed model's detection and alarm burden on all development histories. Each completed experiment gets a stable `result-N` ref, its family (sensor and fault-kind combination, ignoring timing and severity) and, when a criterion is saved, its finding status. A family table (up to 24, with an omitted count) gives experiments, measured failures and the worst detection change for every family tested so far. The rejected-proposal count and the last three validator reasons are included. Full detail is kept for the latest twelve cases, so the input stays bounded however long the run.
+
+A proposal may include a hypothesis: what is suspected, what measurement would support it, what would weaken it, and the `result-N` refs it builds on. Refs are mapped to real attempt IDs before saving; an unknown ref rejects the proposal. Hypotheses are stored as unverified model text, separate from measured results. `--findings` reports `discoveryFamilies`, so many severities of one combination count as one discovery.
+
+`--create … --seed N` prepends up to N deterministic single-channel cases, choosing one channel from each declared group first, so the first measurements span the profile before the model chooses.
+
 ### Live smoke run
 
 From the repository root on Windows, with `NEBIUS_API_KEY` and `SIDEKICK_ASSISTANT_PROVIDER=nebius` in `.env`:

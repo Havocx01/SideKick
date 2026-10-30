@@ -116,7 +116,7 @@ def test_investigation_findings_separate_invalid_errors_and_failures(fitted, tmp
     error = next(f for f in findings if f.status == "execution_error")
     assert "estimator crashed" in error.reasons[0] and not error.is_discovery and error.effects == ()
     assert summarize(findings) == {"counts": {"invalid_proposal": 1, "measured_failure": 1, "execution_error": 1},
-        "discoveries": [next(f.attempt_id for f in findings if f.is_discovery)]}
+        "discoveries": [next(f.attempt_id for f in findings if f.is_discovery)], "discoveryFamilies": ["oil_particles:stuck+vibration_rms:stuck"]}
     assert recordFindings(store, investigation) == findings  # Re-reading never changes a classification.
 
     with sqlite3.connect(store.path) as db:

@@ -12,9 +12,24 @@ if TYPE_CHECKING:
 MAX_PROPOSAL_BYTES = 16 * 1024
 
 
+class Hypothesis(Frozen):
+    suspected: str = Field(min_length=1, max_length=400)
+    supportIf: str = Field(min_length=1, max_length=400)
+    weakenIf: str = Field(min_length=1, max_length=400)
+    basedOn: tuple[str, ...] = Field(default=(), max_length=8)
+
+    @field_validator("suspected", "supportIf", "weakenIf")
+    @classmethod
+    def validateText(cls, value):
+        if not value.strip():
+            raise ValueError("Hypothesis fields cannot be blank")
+        return value.strip()
+
+
 class ScenarioProposal(Frozen):
     scenario: FaultCase
     reason: str = Field(min_length=1, max_length=1600)
+    hypothesis: Hypothesis | None = None
 
     @field_validator("reason")
     @classmethod
