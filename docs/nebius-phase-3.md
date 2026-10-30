@@ -313,7 +313,8 @@ Recorded public evidence lives in `evidence/` and is shown read-only on the host
 - `investigations/synthetic-recorded.json`: the default synthetic package at automatically selected thresholds, three seed cases and three compound cases; no provider calls. An honest null result that shows the format.
 - `investigations/nemotron-live-default.json`: a bounded live Nemotron run on the same default context.
 - `investigations/nemotron-live-demo.json`: the full story at the demonstration threshold, with Nemotron's cases marked, reduction, remedy and validation on fresh histories.
-- `regressions/nemotron-live-demo.json`: the reduced regression case from that story.
+- `investigations/nemotron-live-browser.json`: a bounded Nemotron search started from the browser workbench, including Nemotron's own measured failure, its reduction, remedy and fresh validation.
+- `regressions/`: the reduced regression cases from both stories.
 - `benchmarks/`: the synthetic-fixture comparison and the recorded Nemotron comparison.
 
 Each was made from one commit, replayed exactly, and exported with the steps above. The private stores, context packages and sanitized live captures stay with the person who ran them.
