@@ -82,6 +82,9 @@ def test_full_lifecycle_runs_in_the_background_and_is_owned(api):
     assert view["events"][-1]["detail"] == "completed" and view["active"] is None
     assert view["experimentsUsed"] == 3 and view["discoveries"] == 1
     assert view["discoveryFamilies"] == ["oil_particles:stuck+vibration_rms:stuck"]
+    assert [item["reason"].startswith("Seed suite") for item in view["proposals"][:2]] == [True, True]
+    assert {item["sensor"] for item in view["proposals"][2]["scenario"]["components"]} == {"oil_particles", "vibration_rms"}
+    assert view["proposals"][2]["hypothesis"] is None
 
     retry = client.post(f"/api/investigations/{investigation}/start", json={"requestId": "start-request-1"}, headers=HEADERS)
     assert retry.status_code == 200 and started(service, investigation) == 1

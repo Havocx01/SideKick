@@ -705,6 +705,7 @@ export interface InvestigationView {
   maxExperiments: number;
   discoveries: number;
   state: InvestigationState;
+  proposals: ProposalDetail[];
   criterion: FindingCriterion | null;
   findings: Finding[];
   discoveryFamilies: string[];
@@ -860,6 +861,17 @@ export interface ProfileFinding {
   severity: Severity;
   message: string;
   detail?: Record<string, unknown>;
+}
+
+export interface ProposalDetail {
+  id: string;
+  sequence: number;
+  status: string;
+  scenario: Record<string, unknown> | null;
+  /** Unverified text from whoever proposed the case. */
+  reason: string | null;
+  hypothesis: Record<string, unknown> | null;
+  rejection: string | null;
 }
 
 export interface ProposalState {

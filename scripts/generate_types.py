@@ -65,6 +65,7 @@ ROOTS: list[type[BaseModel]] = [
     investigator.StartRequest,
     investigator.ReduceRequest,
     investigator.RemedyRequest,
+    investigator.ProposalDetail,
     investigator.InvestigationSummary,
     investigator.InvestigationView,
     investigator.ReplayCheck,

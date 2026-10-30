@@ -66,6 +66,16 @@ class InvestigationEvent(Strict):
     at: float
 
 
+class ProposalDetail(Strict):
+    id: str
+    sequence: int
+    status: str
+    scenario: dict[str, Any] | None
+    reason: str | None = Field(description="Unverified text from whoever proposed the case.")
+    hypothesis: dict[str, Any] | None
+    rejection: str | None
+
+
 class InvestigationSummary(Strict):
     id: str
     context: str
@@ -80,6 +90,7 @@ class InvestigationSummary(Strict):
 
 class InvestigationView(InvestigationSummary):
     state: InvestigationState
+    proposals: list[ProposalDetail]
     criterion: FindingCriterion | None
     findings: list[Finding]
     discoveryFamilies: list[str]

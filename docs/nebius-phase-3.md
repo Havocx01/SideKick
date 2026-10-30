@@ -213,3 +213,15 @@ How the API behaves:
 - Events are saved before they are shown. After a server restart, unfinished operations are marked `interrupted`; starting again recovers them within the saved limits.
 - Agent runs need `allowProvider` and the workspace's provider permission. Revoking that permission stops the run, and a reply that arrives afterwards is not saved.
 - The frontend types are generated from these models.
+
+## Browser workbench
+
+In local full mode, **Investigations** in the sidebar lists the fitted contexts and saved investigations.
+
+1. Choose a context and the model under test, review its clean performance and profile, then set the concern, experiment budget and seed cases.
+2. On the investigation page, choose **Run saved proposals** (local only) or **Start Nemotron search**. The search panel states what is sent to Nebius and what never is. It needs the consent checkbox, workspace AI permission, a call limit and a completion-token ceiling.
+3. Watch the timeline: lifecycle events, provider calls with reported tokens and time, and every proposal with its status, rejection reason and unverified hypothesis.
+4. Each finding shows coverage, clean and faulted detection and burden, its effects, the matched histories that changed and the profile assumptions it relies on. **Replay** reruns it; **Reduce** simplifies a measured failure.
+5. Compare a threshold remedy, or approved augmented retraining, and export everything shown as JSON.
+
+Opening a saved investigation never starts work. The page polls only while an operation is running, and keeps its inputs across refreshes. Cancelled, interrupted, failed, budget-exhausted and provider-error states are each shown separately. Reserved token ceilings are labelled as ceilings, not usage or cost. `tests/fault-investigations.spec.ts` covers the flow, including keyboard consent and 390px layout.

@@ -230,3 +230,17 @@ export const pilots = {
   review: (id: string, body: import("./types").PilotOutcomeCreate) =>
     post<import("./types").PilotOutcomeRecord>(`/api/experiments/${id}/pilot/review`, body)
 };
+
+export const investigations = {
+  contexts: () => request<import("./types").ContextInfo[]>("/api/investigations/contexts"),
+  list: () => request<import("./types").InvestigationSummary[]>("/api/investigations"),
+  get: (id: string) => request<import("./types").InvestigationView>(`/api/investigations/${id}`),
+  create: (body: import("./types").InvestigationCreate) => post<import("./types").InvestigationSummary>("/api/investigations", body),
+  start: (id: string, body: import("./types").StartRequest) => post<import("./types").InvestigationView>(`/api/investigations/${id}/start`, body),
+  cancel: (id: string) => post<import("./types").InvestigationView>(`/api/investigations/${id}/cancel`),
+  resume: (id: string) => post<import("./types").InvestigationView>(`/api/investigations/${id}/resume`),
+  reduce: (id: string, body: import("./types").ReduceRequest) => post<import("./types").InvestigationView>(`/api/investigations/${id}/reduce`, body),
+  remedy: (id: string, body: import("./types").RemedyRequest) => post<import("./types").InvestigationView>(`/api/investigations/${id}/remedies`, body),
+  replay: (id: string, attempt: string) => post<import("./types").ReplayCheck>(`/api/investigations/${id}/results/${attempt}/replay`),
+  exportUrl: (id: string) => `${BASE}/api/investigations/${id}/export`
+};

@@ -12,7 +12,7 @@ from app.investigator.controller import ControllerLimits, NemotronController, co
 from app.investigator.findings import digest, loadCriterion, recordFindings, saveCriterion, summarize
 from app.investigator.reduction import ensureTable as ensureReductions, reduce
 from app.investigator.remedies import compareRemedy, ensureTable as ensureRemedies
-from app.investigator.schemas import CleanMetrics, ContextInfo, InvestigationEvent, InvestigationSummary, InvestigationView
+from app.investigator.schemas import CleanMetrics, ContextInfo, InvestigationEvent, InvestigationSummary, InvestigationView, ProposalDetail
 from app.investigator.search import seedSuite
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -20,6 +20,19 @@ NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 class Conflict(RuntimeError):
     pass
+
+
+def proposalDetail(item, payload):
+    try:
+        data = json.loads(payload)
+    except ValueError:
+        data = None
+    if isinstance(data, dict) and "components" in data:
+        data = {"scenario": data}
+    data = data if isinstance(data, dict) else {}
+    return ProposalDetail(id=item.id, sequence=item.seq, status=item.status, scenario=data.get("scenario") if isinstance(data.get("scenario"), dict) else None,
+        reason=data.get("reason") if isinstance(data.get("reason"), str) else None,
+        hypothesis=data.get("hypothesis") if isinstance(data.get("hypothesis"), dict) else None, rejection=item.reason)
 
 
 class InvestigationService:
@@ -118,7 +131,10 @@ class InvestigationService:
                 "SELECT id, kind, detail, created FROM investigation_events WHERE investigation=? ORDER BY id", (investigation,))]
             reductions = [json.loads(row[0]) for row in db.execute("SELECT payload FROM reductions WHERE investigation=? ORDER BY created", (investigation,))]
             remedies = [json.loads(row[0]) for row in db.execute("SELECT payload FROM remedies WHERE investigation=? ORDER BY created", (investigation,))]
-        return InvestigationView(**self.summary(investigation, context, created).model_dump(), state=self.store.load(investigation),
+            payloads = dict(db.execute("SELECT id, payload FROM proposals WHERE investigation=?", (investigation,)).fetchall())
+        state = self.store.load(investigation)
+        proposals = [proposalDetail(item, payloads[item.id]) for item in state.proposals]
+        return InvestigationView(**self.summary(investigation, context, created).model_dump(), state=state, proposals=proposals,
             criterion=criterion, findings=findings, discoveryFamilies=summarize(findings)["discoveryFamilies"],
             controller=controllerStatus(self.store, investigation), events=events, reductions=reductions, remedies=remedies)
 

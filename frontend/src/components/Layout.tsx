@@ -3,7 +3,7 @@ import { useMotionPreference } from "../hooks/useMotionPreference";
 import { MotionToggle } from "./MotionToggle";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
-import { Activity, ArrowUpRight, ChevronDown, ClipboardCheck, Database, FlaskConical, House, Layers, Plus } from "lucide-react";
+import { Activity, ArrowUpRight, ChevronDown, ClipboardCheck, Database, FlaskConical, House, Layers, Plus, SearchCode } from "lucide-react";
 import { api, experiments } from "../api/client";
 import { useApi } from "../hooks/useApi";
 import { useExperimentId } from "../hooks/useEvidence";
@@ -37,7 +37,7 @@ function Workspace() {
   const sections = [
     { title: "Workspace", views: [
       { to: "/", label: "Overview", icon: House },
-      ...(health.data?.can_train ? [{ to: "/experiments", label: "Experiments", icon: FlaskConical }] : [])
+      ...(health.data?.can_train ? [{ to: "/experiments", label: "Experiments", icon: FlaskConical }, { to: "/investigations", label: "Investigations", icon: SearchCode }] : [])
     ] },
     { title: "Evidence", views: [
       { to: id ? `${prefix}/data` : "/benchmark", label: "Data and protocol", icon: Database },
@@ -50,7 +50,7 @@ function Workspace() {
   const workspace = health.data?.mode === "replay" ? "Recorded demo" : health.data?.mode === "demo" ? "Hosted sample workspace" : "Local workspace";
   const workspacePath = location.pathname === "/walkthrough" ? "/" : location.pathname;
   const activeView = views.find(view => view.to === workspacePath);
-  const currentView = activeView?.label ?? (location.pathname === "/walkthrough" ? "Guided walkthrough" : location.pathname.endsWith("/pilot") ? "Equipment pilot" : location.pathname === "/new" ? "New experiment" : "Experiment progress");
+  const currentView = activeView?.label ?? (location.pathname === "/walkthrough" ? "Guided walkthrough" : location.pathname.endsWith("/pilot") ? "Equipment pilot" : location.pathname === "/new" ? "New experiment" : location.pathname.startsWith("/investigations") ? "Investigation" : "Experiment progress");
   const sectionName = sections.find(section => section.views.some(view => view.to === workspacePath))?.title ?? (isEvidence ? "Evidence" : location.pathname.endsWith("/pilot") ? "Pilot" : "Workspace");
   const sectionHref = sectionName === "Evidence" ? `${prefix}/comparison` : sectionName === "Pilot" ? "/experiments" : "/";
   const PageIcon = activeView?.icon ?? (isEvidence ? Layers : location.pathname.endsWith("/pilot") ? ClipboardCheck : FlaskConical);
