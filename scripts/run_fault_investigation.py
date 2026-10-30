@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.faults.investigation import ExperimentRunner, InvestigationBudget, InvestigationStore  # noqa: E402
 from app.faults.replay import load_trusted_context  # noqa: E402
 from app.investigator.findings import FindingCriterion, recordFindings, saveCriterion, summarize  # noqa: E402
+from app.investigator.reduction import reduce, regressionCase  # noqa: E402
 from app.investigator.search import seedSuite  # noqa: E402
 
 MAX_PROPOSAL_FILE_BYTES = 4 * 1024 * 1024
@@ -66,11 +67,14 @@ def main(argv=None):
     action.add_argument("--status", metavar="ID", help="Show saved state without loading a model context.")
     action.add_argument("--findings", metavar="ID", help="Classify recorded results with the saved criterion; no model context or provider call.")
     action.add_argument("--set-criterion", nargs=2, metavar=("ID", "CRITERION_JSON"), help="Save the finding criterion for an existing investigation.")
+    action.add_argument("--reduce", metavar="ATTEMPT_ID", help="Simplify a measured failure through recorded reruns.")
+    action.add_argument("--regression", nargs=2, metavar=("REDUCTION_ID", "OUTPUT_JSON"), help="Export a finished reduction as a regression case.")
     action.add_argument("--cancel", metavar="ID", help="Ask an active or future run to stop.")
     action.add_argument("--resume", metavar="ID", help="Clear a cancellation so the investigation can run again.")
     parser.add_argument("--seed", type=int, default=0, help="Add this many deterministic seed cases with --create.")
     parser.add_argument("--criterion", type=Path, metavar="CRITERION_JSON", help="Finding criterion to save with --create or --attach.")
     parser.add_argument("--max-experiments", type=int, default=16)
+    parser.add_argument("--max-reduction-experiments", type=int, default=16)
     parser.add_argument("--max-failures", type=int, default=3)
     parser.add_argument("--max-attempts-per-scenario", type=int, default=2)
     parser.add_argument("--max-run-seconds", type=float, default=600)
@@ -138,6 +142,12 @@ def main(argv=None):
         findings = recordFindings(store, args.findings)
         output = {"investigation_id": args.findings, **summarize(findings), "provider_requests": 0,
             "findings": [finding.model_dump(mode="json") for finding in findings]}
+    elif args.reduce:
+        output = reduce(store, context(args), args.reduce, maxExperiments=args.max_reduction_experiments)
+    elif args.regression:
+        case = regressionCase(store, args.regression[0])
+        Path(args.regression[1]).write_text(json.dumps(case, indent=2) + "\n", encoding="utf-8")
+        output = {"reduction": args.regression[0], "scenarioId": case["scenarioId"], "path": args.regression[1]}
     elif args.cancel:
         store.request_cancel(args.cancel)
         output = {"investigation_id": args.cancel, "cancel_requested": True}

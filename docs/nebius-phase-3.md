@@ -140,3 +140,15 @@ Only `candidate` is required; it must be one of the investigation's fixed models
 - `invalid_proposal` and `execution_error` record rejected proposals and failed, timed-out or interrupted experiments.
 
 Each finding stores the criterion and its fingerprint, the evaluation's SHA-256 digest, scenario and context identities, coverage, absolute clean and faulted detection and burden, the effects with supporting equipment IDs, and every matched history whose warning state, lead or episode count changed. Re-running `--findings` recomputes each classification and rejects a saved finding that no longer matches its evidence.
+
+## Reduction
+
+`--reduce <attempt-id> --context … --trust-local-artifact` simplifies a measured failure. It needs a saved criterion and holds the investigation lease. Steps:
+
+1. Rerun the original case. If it is no longer a measured failure, the reduction stops as `not_reproduced`.
+2. Try removing each component, keeping a removal only if the finding still holds, until no single removal preserves it.
+3. For each remaining component, try explicit ascending grids: lower drift severity (0.5–3 SD), shorter transient length (5–80 cycles) and later onset (10-cycle steps). The first passing value is the smallest passing value on that grid, without assuming the outcome is monotonic. Drift ramps are not shortened, because a shorter ramp is more abrupt rather than simpler.
+
+Every attempt is saved with its change, case, finding status, evidence digest, evaluated-history count and whether the matched cohort changed. Reduction has its own allowance (`--max-reduction-experiments`, default 16); cached cases are free. It never adds proposals, attempts or findings to the investigation, so a family is still counted once. Outcomes are `complete`, `partial` (allowance used up), `cancelled`, `interrupted` or `not_reproduced`. Claims only cover what was tested: "component-minimal under tested single-component removals", "minimal on the tested grid for …", and always "not a proof of a global minimum".
+
+`--regression <reduction-id> file.json` exports the final case with its criterion, expected status, context and policy fingerprints, profile and source IDs. `checkRegression` reruns it and refuses a different fitted context or policy.
