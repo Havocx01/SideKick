@@ -39,7 +39,7 @@ def adaptation(store, investigation, state, refs, chosen):
     return rows
 
 
-def publicExport(store, investigation, *, contextName=None) -> dict:
+def publicExport(store, investigation, *, contextName=None, demonstration=None) -> dict:
     record = store.get(investigation)
     state = store.load(investigation)
     criterion = loadCriterion(store, investigation)
@@ -58,7 +58,7 @@ def publicExport(store, investigation, *, contextName=None) -> dict:
     attemptOf = {finding.attempt_id: number for number, finding in enumerate(measured, 1)}
     proposalOf = {item.id: item.proposal_id for item in state.attempts}
     content = {
-        "version": 1, "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "notice": NOTICE,
+        "version": 1, "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "notice": NOTICE, "demonstration": demonstration,
         "context": {"fingerprint": record.context_fingerprint, "configFingerprint": record.config_fingerprint, "partition": record.partition,
             "thresholds": {item.candidate: item.threshold for item in record.thresholds}, "policyFingerprint": record.policy.fingerprint,
             "bounds": {"maxComponents": record.policy.max_components, "maxSeveritySd": record.policy.max_severity_sd,
