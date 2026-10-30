@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
-// Paid: runs only with SIDEKICK_BROWSER_LIVE=1 and a Nebius key in the server's environment, within 2 calls and 8192 completion tokens.
+// Paid: runs only with SIDEKICK_BROWSER_LIVE=1 and a Nebius key in the server's environment, within 2 calls and 10240 completion tokens.
 const artifacts = process.env.SIDEKICK_BROWSER_ARTIFACTS!;
 test.skip(process.env.SIDEKICK_BROWSER_LIVE !== "1", "Live browser test needs SIDEKICK_BROWSER_LIVE=1");
 
@@ -25,7 +25,7 @@ test("a consented Nemotron search runs from the browser within its allowance", a
   await expect(page).toHaveURL(/\/investigations\/[0-9a-f-]{36}$/);
   const id = page.url().split("/").pop()!;
   await page.getByLabel("Provider calls").fill("2");
-  await page.getByLabel("Completion token ceiling").fill("8192");
+  await page.getByLabel("Completion token ceiling").fill("10240");
   await page.getByRole("checkbox", { name: "Allow sending this information to Nebius for this run" }).check();
   await page.getByRole("button", { name: "Start Nemotron search" }).click();
   await expect.poll(async () => (await (await page.request.get(`/api/investigations/${id}`)).json()).active, { timeout: 540_000, intervals: [2000] }).toBeNull();
@@ -36,7 +36,7 @@ test("a consented Nemotron search runs from the browser within its allowance", a
   const view = await (await page.request.get(`/api/investigations/${id}`)).json();
   expect(view.controller.callsUsed).toBeGreaterThan(0);
   expect(view.controller.callsUsed).toBeLessThanOrEqual(2);
-  expect(view.controller.reservedCompletionTokens).toBeLessThanOrEqual(8192);
+  expect(view.controller.reservedCompletionTokens).toBeLessThanOrEqual(10240);
   expect(view.events.at(-1).kind).toBe("finished:agent");
   if (view.controller.calls.some((call: { status: string }) => call.status === "accepted")) await expect(page.getByText("Chosen by Nemotron").first()).toBeVisible();
   await page.screenshot({ path: `../${artifacts}/live-investigation.png`, fullPage: true });
