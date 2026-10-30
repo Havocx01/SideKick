@@ -9,7 +9,7 @@ import time
 from app.faults.investigation import ExperimentRunner, InvestigationBudget, InvestigationStore
 from app.faults.replay import load_trusted_context
 from app.investigator.controller import ControllerLimits, NemotronController, controllerStatus
-from app.investigator.findings import digest, loadCriterion, recordFindings, saveCriterion, summarize
+from app.investigator.findings import loadCriterion, recordFindings, replayCheck, saveCriterion, summarize
 from app.investigator.publication import publicExport
 from app.investigator.reduction import ensureTable as ensureReductions, reduce
 from app.investigator.remedies import compareRemedy, ensureTable as ensureRemedies
@@ -215,10 +215,7 @@ class InvestigationService:
         context, _ = self.owned(owner, investigation)
         if attempt not in {item.id for item in self.store.load(investigation).attempts}:
             raise KeyError("Unknown experiment attempt")
-        recorded = self.store.result(attempt)
-        rerun = self.evaluator(context).evaluate(recorded.scenario)
-        expected = digest(recorded.model_dump(mode="json"))
-        return {"attempt": attempt, "scenarioId": recorded.scenario_id, "matches": digest(rerun.model_dump(mode="json")) == expected, "evidenceDigest": expected}
+        return replayCheck(self.store, self.evaluator(context), attempt)
 
     def export(self, owner, investigation):
         return self.view(owner, investigation).model_dump(mode="json")

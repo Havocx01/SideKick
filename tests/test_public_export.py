@@ -115,3 +115,18 @@ def test_cli_and_service_write_the_public_export(fitted, tmp_path, capsys):
     service = InvestigationService(tmp_path / "service", engine.config)
     with pytest.raises(KeyError):
         service.publicExport("someone-else", investigation)
+
+
+def test_cli_replay_reruns_every_completed_experiment_on_a_fresh_evaluator(fitted, tmp_path, capsys):
+    _, store, investigation = investigate(fitted, tmp_path)
+    spec = importlib.util.spec_from_file_location("replay_cli", Path(__file__).resolve().parents[1] / "scripts/run_fault_investigation.py")
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    cli.context = lambda args: FixedDevelopmentEvaluator(fitted, {LR: .95}, loadPolicy("synthetic-rotating-v1", max_evaluations=128))
+    assert cli.main(["--store", str(tmp_path / "store"), "--replay", investigation]) == 0
+    output = json.loads(capsys.readouterr().out)
+    completed = [item for item in store.load(investigation).attempts if item.status == "completed"]
+    assert output["allMatch"] and len(output["checks"]) == len(completed) > 0 and output["provider_requests"] == 0
+    cli.context = lambda args: FixedDevelopmentEvaluator(fitted, {LR: .9}, loadPolicy("synthetic-rotating-v1", max_evaluations=128))
+    with pytest.raises(ValueError):
+        cli.main(["--store", str(tmp_path / "store"), "--replay", investigation])

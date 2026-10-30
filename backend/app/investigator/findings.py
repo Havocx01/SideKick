@@ -221,6 +221,13 @@ def recordFindings(store, investigation: str) -> list[Finding]:
     return findings
 
 
+def replayCheck(store, evaluator, attempt: str) -> dict:
+    recorded = store.result(attempt)
+    expected = digest(recorded.model_dump(mode="json"))
+    rerun = digest(evaluator.evaluate(recorded.scenario).model_dump(mode="json"))
+    return {"attempt": attempt, "scenarioId": recorded.scenario_id, "matches": rerun == expected, "evidenceDigest": expected}
+
+
 def summarize(findings) -> dict:
     # Many severities of one sensor/kind combination are one discovery family, not many breakthroughs.
     counts = {}

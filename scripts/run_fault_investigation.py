@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.faults.investigation import ExperimentRunner, InvestigationBudget, InvestigationStore  # noqa: E402
 from app.faults.replay import load_trusted_context  # noqa: E402
-from app.investigator.findings import FindingCriterion, recordFindings, saveCriterion, summarize  # noqa: E402
+from app.investigator.findings import FindingCriterion, recordFindings, replayCheck, saveCriterion, summarize  # noqa: E402
 from app.investigator.publication import publicExport  # noqa: E402
 from app.investigator.reduction import reduce, regressionCase  # noqa: E402
 from app.investigator.remedies import compareRemedy  # noqa: E402
@@ -69,6 +69,7 @@ def main(argv=None):
     action.add_argument("--status", metavar="ID", help="Show saved state without loading a model context.")
     action.add_argument("--findings", metavar="ID", help="Classify recorded results with the saved criterion; no model context or provider call.")
     action.add_argument("--set-criterion", nargs=2, metavar=("ID", "CRITERION_JSON"), help="Save the finding criterion for an existing investigation.")
+    action.add_argument("--replay", metavar="ID", help="Rerun every completed experiment and compare it with the saved evidence.")
     action.add_argument("--reduce", metavar="ATTEMPT_ID", help="Simplify a measured failure through recorded reruns.")
     action.add_argument("--regression", nargs=2, metavar=("REDUCTION_ID", "OUTPUT_JSON"), help="Export a finished reduction as a regression case.")
     action.add_argument("--remedy", nargs=2, metavar=("ID", "KIND"), help="Compare a remedy (threshold or augmented) on recorded cases.")
@@ -158,6 +159,11 @@ def main(argv=None):
         findings = recordFindings(store, args.findings)
         output = {"investigation_id": args.findings, **summarize(findings), "provider_requests": 0,
             "findings": [finding.model_dump(mode="json") for finding in findings]}
+    elif args.replay:
+        fixed = context(args)
+        store.get(args.replay).check_context(fixed)
+        checks = [replayCheck(store, fixed, item.id) for item in store.load(args.replay).attempts if item.status == "completed"]
+        output = {"investigation_id": args.replay, "checks": checks, "allMatch": bool(checks) and all(item["matches"] for item in checks), "provider_requests": 0}
     elif args.reduce:
         output = reduce(store, context(args), args.reduce, maxExperiments=args.max_reduction_experiments)
     elif args.regression:
