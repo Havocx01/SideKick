@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "scenario": {
+    "components": [
+      {
+        "duration": "persistent",
+        "kind": "stuck",
+        "length": null,
+        "onset_before_failure": 30,
+        "ramp_cycles": null,
+        "seed": null,
+        "sensor": "oil_particles",
+        "severity_sd": null,
+        "sign": null
+      },
+      {
+        "duration": "persistent",
+        "kind": "stuck",
+        "length": null,
+        "onset_before_failure": 60,
+        "ramp_cycles": null,
+        "seed": null,
+        "sensor": "vibration_rms",
+        "severity_sd": null,
+        "sign": null
+      }
+    ],
+    "version": 1
+  },
+  "scenarioId": "compound-v1-293cb54dc07a61a286b37b8c",
+  "family": "oil_particles:stuck+vibration_rms:stuck",
+  "criterion": {
+    "version": 1,
+    "candidate": "logistic_regression/lr-probe",
+    "min_coverage": 0.8,
+    "min_histories": 10,
+    "min_clean_detection": 0.8,
+    "min_lost_warnings": 1,
+    "max_alarm_burden": 0.05,
+    "min_burden_increase": 0.01
+  },
+  "expected": "measured_failure",
+  "claims": [
+    "Component-minimal under tested single-component removals.",
+    "Minimal on the tested grid for: oil_particles onset_before_failure, vibration_rms onset_before_failure.",
+    "Not a proof of a global minimum."
+  ],
+  "contextFingerprint": "6012ad3fcbce5c2c02036f094ad85e7015da9bcaad6fb7464e3e0be7614d416c",
+  "policyFingerprint": "87db3bfa93d5532150fbb9b63c8858c29a769927b8784d37234e605b49f0b2f5",
+  "profile": "synthetic-rotating-v1",
+  "source": {
+    "investigation": "8c2ed17d-1db5-4203-a13c-79a28a5be277",
+    "attempt": "ae941a60b84647bcad58a59274d2d669",
+    "reduction": "55b0b861639243dcb1c5e42e023bf560"
+  }
+}

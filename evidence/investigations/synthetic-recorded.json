@@ -1,14 +1,15 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-30T01:17:56Z",
+  "generatedAt": "2026-10-30T16:38:47Z",
   "notice": "Aggregate development evidence. The objective, equipment identifiers, raw readings, fitted models and keys are excluded. The digest shows this file is unchanged, not who made it or that it may be disclosed.",
+  "demonstration": null,
   "context": {
-    "fingerprint": "863c91c329db0ccf36c2cbea7689d12a137f5893e17da1b0e1dff5d7480beccd",
+    "fingerprint": "a65d7933dca67ff93fe7d7d01cfd4f586448739d583201fa33c3dbf3450c4243",
     "configFingerprint": "d0e566c63bffcf09",
     "partition": "out_of_fold",
     "thresholds": {
-      "age_baseline/age-probe": 70.0,
-      "logistic_regression/lr-probe": 0.3675778189263765
+      "age_baseline/age-probe": 69.0,
+      "logistic_regression/lr-probe": 0.38288789553811803
     },
     "policyFingerprint": "959c364b48739eca73e9da9493a141e959a4338078ff0fe28dd5152db9a122b3",
     "bounds": {
@@ -146,7 +147,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 2,
+      "changedHistories": 0,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -168,7 +169,8 @@
             "seed": null
           }
         ]
-      }
+      },
+      "chosenBy": "supplied"
     },
     {
       "ref": "result-2",
@@ -184,7 +186,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 5,
+      "changedHistories": 3,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -206,7 +208,8 @@
             "seed": null
           }
         ]
-      }
+      },
+      "chosenBy": "supplied"
     },
     {
       "ref": "result-3",
@@ -222,7 +225,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 3,
+      "changedHistories": 1,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -244,7 +247,8 @@
             "seed": null
           }
         ]
-      }
+      },
+      "chosenBy": "supplied"
     },
     {
       "ref": "result-4",
@@ -260,7 +264,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 21,
+      "changedHistories": 22,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -294,7 +298,8 @@
             "seed": null
           }
         ]
-      }
+      },
+      "chosenBy": "supplied"
     },
     {
       "ref": "result-5",
@@ -310,7 +315,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 21,
+      "changedHistories": 22,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -343,7 +348,8 @@
             "seed": null
           }
         ]
-      }
+      },
+      "chosenBy": "supplied"
     },
     {
       "ref": "result-6",
@@ -359,7 +365,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 17,
+      "changedHistories": 21,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -392,13 +398,16 @@
             "seed": null
           }
         ]
-      }
+      },
+      "chosenBy": "supplied"
     }
   ],
+  "executionErrors": [],
   "discoveryFamilies": [],
   "controller": null,
   "reductions": [],
   "remedies": [],
+  "validations": [],
   "reproduction": {
     "public": true,
     "steps": [
@@ -407,5 +416,5 @@
       "Compare each result's scenarioId and finding status with this file."
     ]
   },
-  "digest": "55e68f989c0ec05821cff56b724066d81300871ba52c35948db6265e768b6b8f"
+  "digest": "0e1b1894f55a8e07f0f829082415175c5817a5fe9c4abb2d32620c0b8e8c0f47"
 }

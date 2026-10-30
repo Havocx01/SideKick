@@ -1,0 +1,340 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-30T16:39:52Z",
+  "notice": "Aggregate development evidence. The objective, equipment identifiers, raw readings, fitted models and keys are excluded. The digest shows this file is unchanged, not who made it or that it may be disclosed.",
+  "demonstration": null,
+  "context": {
+    "fingerprint": "a65d7933dca67ff93fe7d7d01cfd4f586448739d583201fa33c3dbf3450c4243",
+    "configFingerprint": "d0e566c63bffcf09",
+    "partition": "out_of_fold",
+    "thresholds": {
+      "age_baseline/age-probe": 69.0,
+      "logistic_regression/lr-probe": 0.38288789553811803
+    },
+    "policyFingerprint": "959c364b48739eca73e9da9493a141e959a4338078ff0fe28dd5152db9a122b3",
+    "bounds": {
+      "maxComponents": 2,
+      "maxSeveritySd": 3.0,
+      "maxDuration": 120,
+      "maxOnset": 500,
+      "allowedGroups": [
+        [
+          "temp_bearing",
+          "vibration_rms",
+          "oil_particles"
+        ],
+        [
+          "pressure_out",
+          "flow_rate",
+          "valve_position"
+        ],
+        [
+          "current_draw",
+          "speed_rpm"
+        ],
+        [
+          "temp_bearing",
+          "ambient_temp"
+        ]
+      ]
+    },
+    "profile": {
+      "id": "synthetic-rotating-v1",
+      "version": 1,
+      "equipment": "Synthetic rotating pump fixture",
+      "synthetic": true,
+      "constraints": [
+        {
+          "rule": "Channels on one acquisition module or I/O card may fail together; other combinations are not tested.",
+          "provenance": "prototype_assumption",
+          "sensors": [],
+          "source": null
+        },
+        {
+          "rule": "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled.",
+          "provenance": "prototype_assumption",
+          "sensors": [],
+          "source": null
+        },
+        {
+          "rule": "Bearing temperature, vibration and particle count share one condition-monitoring module.",
+          "provenance": "prototype_assumption",
+          "sensors": [
+            "temp_bearing",
+            "vibration_rms",
+            "oil_particles"
+          ],
+          "source": null
+        },
+        {
+          "rule": "Particle counts saturate or stop rather than drift.",
+          "provenance": "prototype_assumption",
+          "sensors": [
+            "oil_particles"
+          ],
+          "source": null
+        },
+        {
+          "rule": "Pressure, flow and valve feedback share one hydraulic I/O card; drift is capped at 2 SD.",
+          "provenance": "prototype_assumption",
+          "sensors": [
+            "pressure_out",
+            "flow_rate",
+            "valve_position"
+          ],
+          "source": null
+        },
+        {
+          "rule": "Drive-reported current and speed fail together on a drive communication fault; speed does not drift.",
+          "provenance": "prototype_assumption",
+          "sensors": [
+            "current_draw",
+            "speed_rpm"
+          ],
+          "source": null
+        },
+        {
+          "rule": "The ambient reference is only combined with bearing temperature and is not drift-tested.",
+          "provenance": "prototype_assumption",
+          "sensors": [
+            "ambient_temp"
+          ],
+          "source": null
+        },
+        {
+          "rule": "Constant nameplate channels are excluded because corrupting them changes no readings.",
+          "provenance": "prototype_assumption",
+          "sensors": [],
+          "source": null
+        }
+      ]
+    },
+    "assumptions": "Synthetic Synthetic rotating pump fixture profile v1; bounds are not equipment-validated."
+  },
+  "criterion": {
+    "version": 1,
+    "candidate": "logistic_regression/lr-probe",
+    "min_coverage": 0.8,
+    "min_histories": 10,
+    "min_clean_detection": 0.8,
+    "min_lost_warnings": 1,
+    "max_alarm_burden": 0.05,
+    "min_burden_increase": 0.01
+  },
+  "budget": {
+    "maxExperiments": 4,
+    "experimentsUsed": 3,
+    "failures": 0,
+    "stopReason": "completed"
+  },
+  "proposals": {
+    "total": 3,
+    "rejected": 0,
+    "duplicates": 0
+  },
+  "experiments": [
+    {
+      "ref": "result-1",
+      "scenarioId": "compound-v1-dc043a7e6b44e6f3b21958fa",
+      "family": "temp_bearing:drift+vibration_rms:stuck",
+      "status": "no_measured_failure",
+      "evaluatedHistories": 22,
+      "expectedHistories": 22,
+      "coverage": 1.0,
+      "cleanDetection": 1.0,
+      "faultedDetection": 1.0,
+      "cleanBurden": 0.0,
+      "faultedBurden": 0.0,
+      "reasons": [],
+      "effects": [],
+      "changedHistories": 20,
+      "assumptions": [
+        "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
+        "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
+        "Bearing temperature, vibration and particle count share one condition-monitoring module. (prototype assumption)",
+        "Constant nameplate channels are excluded because corrupting them changes no readings. (prototype assumption)"
+      ],
+      "scenario": {
+        "version": 1,
+        "components": [
+          {
+            "kind": "drift",
+            "duration": "persistent",
+            "sensor": "temp_bearing",
+            "onset_before_failure": 60,
+            "severity_sd": 2.5,
+            "sign": -1,
+            "ramp_cycles": 5,
+            "length": null,
+            "seed": null
+          },
+          {
+            "kind": "stuck",
+            "duration": "persistent",
+            "sensor": "vibration_rms",
+            "onset_before_failure": 60,
+            "severity_sd": null,
+            "sign": null,
+            "ramp_cycles": null,
+            "length": null,
+            "seed": null
+          }
+        ]
+      },
+      "chosenBy": "nemotron"
+    },
+    {
+      "ref": "result-2",
+      "scenarioId": "compound-v1-d0164cf0e6a9d64bb458386d",
+      "family": "oil_particles:dropout+temp_bearing:drift",
+      "status": "no_measured_failure",
+      "evaluatedHistories": 22,
+      "expectedHistories": 22,
+      "coverage": 1.0,
+      "cleanDetection": 1.0,
+      "faultedDetection": 1.0,
+      "cleanBurden": 0.0,
+      "faultedBurden": 0.0007993605115907274,
+      "reasons": [],
+      "effects": [],
+      "changedHistories": 11,
+      "assumptions": [
+        "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
+        "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
+        "Bearing temperature, vibration and particle count share one condition-monitoring module. (prototype assumption)",
+        "Particle counts saturate or stop rather than drift. (prototype assumption)",
+        "Constant nameplate channels are excluded because corrupting them changes no readings. (prototype assumption)"
+      ],
+      "scenario": {
+        "version": 1,
+        "components": [
+          {
+            "kind": "dropout",
+            "duration": "transient",
+            "sensor": "oil_particles",
+            "onset_before_failure": 70,
+            "severity_sd": null,
+            "sign": null,
+            "ramp_cycles": null,
+            "length": 10,
+            "seed": null
+          },
+          {
+            "kind": "drift",
+            "duration": "persistent",
+            "sensor": "temp_bearing",
+            "onset_before_failure": 70,
+            "severity_sd": 2.5,
+            "sign": -1,
+            "ramp_cycles": 5,
+            "length": null,
+            "seed": null
+          }
+        ]
+      },
+      "chosenBy": "nemotron"
+    },
+    {
+      "ref": "result-3",
+      "scenarioId": "compound-v1-324a4b76b379f7d78a78cef2",
+      "family": "flow_rate:stuck+pressure_out:drift",
+      "status": "no_measured_failure",
+      "evaluatedHistories": 22,
+      "expectedHistories": 22,
+      "coverage": 1.0,
+      "cleanDetection": 1.0,
+      "faultedDetection": 1.0,
+      "cleanBurden": 0.0,
+      "faultedBurden": 0.0,
+      "reasons": [],
+      "effects": [],
+      "changedHistories": 10,
+      "assumptions": [
+        "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
+        "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
+        "Pressure, flow and valve feedback share one hydraulic I/O card; drift is capped at 2 SD. (prototype assumption)",
+        "Constant nameplate channels are excluded because corrupting them changes no readings. (prototype assumption)"
+      ],
+      "scenario": {
+        "version": 1,
+        "components": [
+          {
+            "kind": "stuck",
+            "duration": "persistent",
+            "sensor": "flow_rate",
+            "onset_before_failure": 70,
+            "severity_sd": null,
+            "sign": null,
+            "ramp_cycles": null,
+            "length": null,
+            "seed": null
+          },
+          {
+            "kind": "drift",
+            "duration": "persistent",
+            "sensor": "pressure_out",
+            "onset_before_failure": 70,
+            "severity_sd": 2.0,
+            "sign": -1,
+            "ramp_cycles": 5,
+            "length": null,
+            "seed": null
+          }
+        ]
+      },
+      "chosenBy": "nemotron"
+    }
+  ],
+  "executionErrors": [],
+  "discoveryFamilies": [],
+  "controller": {
+    "stopReason": "token_limit",
+    "modelStopReason": null,
+    "callsUsed": 3,
+    "reservedCompletionTokens": 15360,
+    "reportedCompletionTokens": 1121,
+    "model": "nvidia/nemotron-3-super-120b-a12b",
+    "prompt": "nemotron-fault-search-v5",
+    "reasoningEffort": "low",
+    "adaptation": [
+      {
+        "proposal": 1,
+        "family": "temp_bearing:drift+vibration_rms:stuck",
+        "basedOn": [],
+        "basisRecorded": true,
+        "newFamily": true
+      },
+      {
+        "proposal": 2,
+        "family": "oil_particles:dropout+temp_bearing:drift",
+        "basedOn": [
+          "result-1"
+        ],
+        "basisRecorded": true,
+        "newFamily": true
+      },
+      {
+        "proposal": 3,
+        "family": "flow_rate:stuck+pressure_out:drift",
+        "basedOn": [
+          "result-1",
+          "result-2"
+        ],
+        "basisRecorded": true,
+        "newFamily": true
+      }
+    ]
+  },
+  "reductions": [],
+  "remedies": [],
+  "validations": [],
+  "reproduction": {
+    "public": true,
+    "steps": [
+      "python scripts/evaluate_fault_scenarios.py --profile synthetic-rotating-v1 --output artifacts/investigations/contexts/synthetic",
+      "Create an investigation with the criterion above and the listed scenarios as proposals, then run it.",
+      "Compare each result's scenarioId and finding status with this file."
+    ]
+  },
+  "digest": "ec563393944cb2b1ef8232a413595425ffdc7d68e45e28e0983f1c3dce6d1a36"
+}
