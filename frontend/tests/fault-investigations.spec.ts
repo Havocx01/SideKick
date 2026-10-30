@@ -253,9 +253,24 @@ test("the hosted site shows recorded runs, labelled, and offers nothing that sta
   await expect(run).toContainText("Nemotron");
   await expect(run).toContainText("100% → 36%");
   await expect(page.getByText("Recorded, not live")).toBeVisible();
+  await expect(page.locator(".callout").filter({ hasText: "Demonstration setting" })).toContainText(/Deliberately fragile\./);
   await expect(page.getByText("3 calls: 1510 reported completion tokens within a reserved ceiling of 15360")).toBeVisible();
   await expect(page.getByText("1 improved, 0 degraded, 1 still failing")).toBeVisible();
   await expect(page.getByText("Validation on 12 fresh histories (assessed):")).toBeVisible();
   await expect(page.getByRole("button", { name: /Create investigation|Run saved proposals|Start Nemotron search/ })).toHaveCount(0);
   expect(calls).toEqual(["/api/investigations/recorded"]);
+});
+
+test("a failed action deep in the page is reported where the user can see it", async ({ page }) => {
+  await fixture(page, finished());
+  await page.route("**/replay", route => route.fulfill({ status: 403, json: { detail: "Replay needs the context this investigation used." } }));
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto("/investigations/inv-1");
+  const card = page.getByRole("article", { name: /Measured failure/ });
+  await card.getByRole("button", { name: "Replay" }).click();
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Replay needs the context this investigation used.");
+  await expect(alert).toBeInViewport();
+  await alert.getByRole("button", { name: "Dismiss" }).click();
+  await expect(alert).toHaveCount(0);
 });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Download } from "lucide-react";
 import { Input } from "@/components/arc/input/input";
@@ -70,7 +71,7 @@ function RecordedRun({ item }: { item: RecordedInvestigation }) {
   return <Panel title={`Recorded: ${item.name}`} aside={<Badge tone="neutral">Recorded, not live</Badge>}
     description={`Generated ${evidence.generatedAt}. Digest ${evidence.digest.slice(0, 12)}.`}>
     <div className={styles.stack}>
-      {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note.replace(/^Demonstration setting:\s*/, "")}</Callout>}
+      {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note.replace(/^Demonstration setting:\s*(\w)/, (_, first: string) => first.toUpperCase())}</Callout>}
       <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} ${controller.callsUsed === 1 ? "call" : "calls"}: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
         : "No Nemotron calls; every case was supplied."}</p>
       <div className="table-scroll"><table aria-label={`Recorded experiments: ${item.name}`}><thead><tr><th>Result</th><th>Case family</th><th>Chosen by</th><th>Status</th>
@@ -212,7 +213,9 @@ function Detail({ data, reload }: { data: InvestigationView; reload: () => void 
     {failed && <Callout tone="fault" title="The last operation failed">{failed.detail}</Callout>}
     {lastEvent?.kind === "interrupted" && <Callout tone="warn" title="Interrupted">{lastEvent.detail} Start again to recover within the saved limits.</Callout>}
     {data.state.cancel_requested && !data.active && <Callout tone="warn" title="Cancellation is saved">Resume before starting more work.</Callout>}
-    {error && <p role="alert" className={styles.error}>{error}</p>}
+    {/* The page wrapper animates with a transform, which would pin a fixed alert to the page instead of the screen. */}
+    {error && createPortal(<div role="alert" className={`${styles.error} ${styles.toast}`}><span>{error}</span>
+      <Button variant="ghost" onClick={() => setError("")}>Dismiss</Button></div>, document.body)}
     <Controls data={data} busy={busy} act={act} />
     <Findings data={data} busy={busy} act={act} />
     <Timeline data={data} />

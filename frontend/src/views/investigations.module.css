@@ -5,6 +5,11 @@
 .stack .actions, .finding .actions, .preview .actions { margin-bottom: 0; }
 .footnote { color: var(--text-secondary); font-size: var(--text-xs); margin: 0; max-width: 65ch; }
 .error { color: var(--danger); margin: 0 0 var(--space-4); }
+/* Actions sit far down the page, so their failures stay in view wherever the button was. */
+.toast { position: fixed; z-index: 20; left: 50%; bottom: var(--space-4); transform: translateX(-50%); width: min(560px, calc(100vw - 2 * var(--space-4)));
+  display: flex; align-items: flex-start; gap: var(--space-3); margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--danger);
+  border-radius: var(--radius-inner); background: var(--surface-raised); box-shadow: 0 6px 24px rgb(0 0 0 / 0.18); }
+.toast span { flex: 1; overflow-wrap: anywhere; }
 .heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
 .heading h1 { overflow-wrap: anywhere; }
 .command { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--fill); padding: var(--space-3); border-radius: var(--radius-inner); font-size: var(--text-xs); }
