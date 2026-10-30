@@ -1,6 +1,6 @@
 # Include training dependencies for local experiments.
 
-FROM python:3.11-slim
+FROM python:3.11.9-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -12,8 +12,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt backend/requirements-train.txt ./
-RUN pip install --no-cache-dir -r requirements-train.txt
+COPY backend/requirements.txt backend/requirements-train.txt docker/runtime-constraints.txt ./
+RUN pip install --no-cache-dir -r requirements-train.txt -c runtime-constraints.txt
 
 COPY backend/app ./app
 COPY scripts ./scripts

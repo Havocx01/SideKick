@@ -50,8 +50,11 @@ def make_synthetic_dataset(
         for sensorIndex, sensor in enumerate(SYNTHETIC_SENSORS):
             direction = 1.0 if sensorIndex % 3 != 2 else -1.0
             scale = 1.0 + sensorIndex * 0.4
-            sharpness = 2.0 + (sensorIndex % 4)
-            signal = direction * scale * (wear + progress**sharpness) * 10.0
+            # Repeated multiplication is exact IEEE arithmetic; libm pow differs in the last bit between Windows and Linux.
+            curve = progress.copy()
+            for _ in range(1 + sensorIndex % 4):
+                curve = curve * progress
+            signal = direction * scale * (wear + curve) * 10.0
             level = 100.0 + sensorIndex * 25.0
             jitter = generator.normal(0.0, noise * scale, size=life)
             frame[sensor] = level + signal + jitter

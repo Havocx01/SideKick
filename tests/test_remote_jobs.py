@@ -179,15 +179,12 @@ def test_cli_runs_through_remote_workers_only_with_transfer_consent(remote, caps
     assert len(list((root / "outbox").glob("*.json"))) == 1
 
 
-def test_worker_constraints_pin_the_coordinator_versions(tmp_path, capsys):
-    import importlib.util
-    from app.experiments.validation import dependency_versions
-    spec = importlib.util.spec_from_file_location("constraints_cli", ROOT / "scripts/worker_constraints.py")
-    cli = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cli)
-    assert cli.main(["--output", str(tmp_path / "constraints.txt")]) == 0
-    lines = (tmp_path / "constraints.txt").read_text().splitlines()
-    versions = dependency_versions()
-    assert {f"{name}=={version}" for name, version in versions.items()} <= set(lines)
-    assert f"xgboost-cpu=={versions['xgboost']}" in lines
-    assert f"--build-arg PYTHON={sys.version_info.major}.{sys.version_info.minor}" in capsys.readouterr().out
+def test_contexts_workers_and_the_app_share_one_pinned_runtime():
+    from app.experiments.validation import DEPENDENCIES
+    pins = dict(line.split("==") for line in (ROOT / "docker/runtime-constraints.txt").read_text().splitlines() if "==" in line)
+    assert set(DEPENDENCIES) <= set(pins) and pins["xgboost"] == pins["xgboost-cpu"]
+    worker, app, local = (ROOT / "docker/worker.Dockerfile").read_text(), (ROOT / "Dockerfile").read_text(), (ROOT / "docker/api.dev.Dockerfile").read_text()
+    base = "FROM python:3.11.9-slim-bookworm"
+    assert base in worker and f"{base} AS replay" in app and base in local
+    assert "-c docker/runtime-constraints.txt" in worker and app.count("-c runtime-constraints.txt") == 2 and "-c runtime-constraints.txt" in local
+    assert "scripts/evaluate_fault_scenarios.py" in worker and "scripts/run_fault_investigation.py" in worker

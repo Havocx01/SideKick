@@ -41,7 +41,7 @@ def investigated(fitted, tmp_path):
 def test_a_frozen_procedure_is_assessed_once_on_fresh_histories(investigated, fitted):
     fixed, store, investigation = investigated
     attempt = next(item.id for item in store.load(investigation).attempts if store.result(item.id).scenario.scenario_id.startswith("compound"))
-    reduce(store, fixed, attempt, maxExperiments=4)
+    assert reduce(store, fixed, attempt, maxExperiments=16)["status"] == "complete"
     frozen = freeze(store, investigation, remedyThreshold=.5)
     labels = [case["label"] for case in frozen["procedure"]["cases"]]
     assert "discovered:oil_particles:stuck+vibration_rms:stuck" in labels and any(label.startswith("reduced:") for label in labels)

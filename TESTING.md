@@ -62,12 +62,11 @@ docker build --target demo -t sidekick-memory .
 docker run -d --name sidekick-memory --memory=512m --memory-swap=512m sidekick-memory
 docker cp scripts/check_hosted_memory.py sidekick-memory:/tmp/check_hosted_memory.py
 docker exec sidekick-memory python /tmp/check_hosted_memory.py
-.venv\Scripts\python.exe scripts/worker_constraints.py
-docker build -f docker/worker.Dockerfile --build-arg PYTHON=<printed version> -t sidekick-worker .
+docker build -f docker/worker.Dockerfile -t sidekick-worker .
 .venv\Scripts\python.exe scripts/check_worker_image.py
 ```
 
-A worker needs the coordinator's numerical runtime as well as matching source and dependency versions. Native Windows and Linux predictions can have different byte digests even when their warning metrics agree. `check_worker_image.py` prepares evidence in one container and checks a separate worker container using the same image; both run without network access. Its `--command` option checks local execution instead. Build worker images from `worker_constraints.py`; create deployment context packages in the coordinator's Linux image when using Linux workers.
+Deployment contexts, workers and the hosted app share one pinned Linux runtime: Python 3.11.9 and the exact versions in `docker/runtime-constraints.txt`. Matching versions alone is not enough; native Windows and Linux fits differ in the last bits, so strict replay refuses a context made on another platform. Create deployment context packages inside the worker image. `check_worker_image.py` prepares evidence in one container and checks a separate worker container from the same image; both run without network access. Its `--command` option checks local execution instead. The synthetic generator uses only exact arithmetic, so its data is identical on Windows and Linux.
 
 The GitHub workflow runs backend, generated-contract, frontend, browser, worker-image and hosted-memory checks, all offline; paid provider checks only run through `check_nebius.py --live` or an explicit `--agent --allow-nebius` command. It does not deploy. Failed browser traces and reports are retained for seven days in the `browser-failure-diagnostics` artifact; inspect traces with `npx playwright show-trace <trace.zip>`.
 

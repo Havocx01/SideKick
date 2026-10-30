@@ -46,4 +46,3 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/settings.json
-docker/worker-constraints.txt

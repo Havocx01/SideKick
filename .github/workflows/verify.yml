@@ -57,9 +57,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r backend/requirements-train.txt
-      - run: python scripts/worker_constraints.py
-      - run: docker build -f docker/worker.Dockerfile --build-arg PYTHON=3.11 -t sidekick-worker .
+      - run: pip install -r backend/requirements-train.txt -c docker/runtime-constraints.txt
+      - run: docker build -f docker/worker.Dockerfile -t sidekick-worker .
       - run: python scripts/check_worker_image.py
   hosted-memory:
     runs-on: ubuntu-latest

@@ -54,7 +54,6 @@ def main(argv=None):
         # Matching package versions alone does not ensure identical Windows and Linux prediction bytes.
         subprocess.run(["docker", "run", "--rm", "--network", "none", "--entrypoint", "python", "-v", f"{work}:/jobs",
             "-v", f"{ROOT / 'scripts/check_worker_image.py'}:/app/scripts/check_worker_image.py:ro",
-            "-v", f"{ROOT / 'scripts/evaluate_fault_scenarios.py'}:/app/scripts/evaluate_fault_scenarios.py:ro",
             args.image, "/app/scripts/check_worker_image.py", "--prepare", "/jobs"], check=True, cwd=ROOT)
         command = ["docker", "run", "--rm", "--network", "none", "-v", f"{work}:/jobs", args.image,
             "--manifest", "/jobs/outbox/job.json", "--context", "/jobs/context", "--inbox", "/jobs/inbox"]

@@ -67,7 +67,7 @@ Budgets limit context rows/histories, model/fold counts and new scenario evaluat
 
 `context.joblib` contains fitted Python objects and **raw development data and identifiers**. Keep real-data packages local unless disclosure is authorized. This is not the public submission export format. No reserved history rows are included.
 
-Only load a package you created and trust. `--trust-local-artifact` is required because Python/joblib deserialization can execute code. Checksums detect accidental modification; they do not authenticate a malicious package. Replay requires the same source and dependency versions, checks file sizes/checksums before loading, and compares the complete recomputed result. It makes no changes to the original package or application exposure ledger.
+Only load a package you created and trust. `--trust-local-artifact` is required because Python/joblib deserialization can execute code. Checksums detect accidental modification; they do not authenticate a malicious package. Replay requires the same source and dependency versions and the same platform, checks file sizes/checksums before loading, and compares the complete recomputed result. Windows and Linux model fits differ in the last bits even with identical versions, so a package made natively on Windows replays on Windows; deployment packages are made in the pinned Linux image (`docker/runtime-constraints.txt`). The synthetic data itself is generated identically on both. It makes no changes to the original package or application exposure ledger.
 
 ## Fault profiles
 

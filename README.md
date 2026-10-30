@@ -39,7 +39,7 @@ No API key is needed for these workflows. Routine analysis explains the selected
 2. Open the extracted folder and double-click **Start Sidekick.cmd**.
 3. Sidekick prepares itself and opens your browser. Start with **View walkthrough** or **Set up sample**.
 
-The first launch needs internet and may take a few minutes. Install [Python](https://www.python.org/downloads/windows/) 3.11+ and [Node.js LTS](https://nodejs.org/en/download) once if the launcher asks for them. Python 3.12 was used for the Windows verification; Node.js must be 22.12+ or 20.19+.
+The first launch needs internet and may take a few minutes. Install [Python](https://www.python.org/downloads/windows/) 3.11+ and [Node.js LTS](https://nodejs.org/en/download) once if the launcher asks for them. Python 3.11.9 was used for the Windows verification; Node.js must be 22.12+ or 20.19+.
 
 For later launches, double-click **Start Sidekick.cmd** again. It reuses the installation and rebuilds the interface when files change. Keep its window open while using the app; press **Ctrl+C** to stop it. The local address is [http://127.0.0.1:8140](http://127.0.0.1:8140). No API key is needed.
 

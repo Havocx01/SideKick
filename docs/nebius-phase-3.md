@@ -253,9 +253,12 @@ Opening a saved investigation never starts work. The page polls only while an op
 
 Experiments can run on finite remote workers while SQLite stays with one coordinator:
 
+Deployment contexts, the coordinator and workers use one pinned Linux runtime: Python 3.11.9 with the versions in `docker/runtime-constraints.txt`. Loading a context reruns its recorded evaluation, so the coordinator runs in the same image as the context it loads:
+
 ```powershell
-.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/investigations --context output/context-package --trust-local-artifact --run <id> --remote-outbox jobs/outbox --remote-inbox jobs/inbox --allow-transfer
 docker build -f docker/worker.Dockerfile -t sidekick-worker .
+docker run --rm --entrypoint python -v ${PWD}/output:/out sidekick-worker scripts/evaluate_fault_scenarios.py --profile synthetic-rotating-v1 --output /out/context-package
+docker run --rm --entrypoint python -v ${PWD}/output:/out -v ${PWD}/jobs:/jobs sidekick-worker scripts/run_fault_investigation.py --store /out/investigations --context /out/context-package --trust-local-artifact --run <id> --remote-outbox /jobs/outbox --remote-inbox /jobs/inbox --allow-transfer
 docker run --rm -v ${PWD}/jobs:/jobs -v ${PWD}/output/context-package:/context:ro sidekick-worker --manifest /jobs/outbox/<job>.json --context /context --inbox /jobs/inbox --trust-local-artifact
 ```
 
@@ -273,7 +276,7 @@ The coordinator accepts only a result whose job ID and manifest digest match the
 - Duplicate deliveries are expected and ignored after the first match. Forged or stale results are never read as valid.
 - A failed or timed-out job is retried with a new job ID up to three times, then recorded as one failed attempt.
 - A result that arrives after cancellation is never published.
-- Remote results are identical to local execution, because the evaluation is deterministic.
+- A remote result matches local execution only when both run in the same numerical runtime. Package versions are not enough: Windows and Linux fits differ in the last bits, so a worker refuses a context made on another platform when its recorded evaluation does not reproduce.
 
 Context packages contain raw development data, so remote execution needs `--allow-transfer`, and local execution remains the default. The outbox and inbox can be shared folders or a synced object store. Workers never touch the SQLite file. GPUs and serverless endpoints are unnecessary for these small tabular models; measure a real workload before adding them.
 

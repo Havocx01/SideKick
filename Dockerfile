@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN npm run build
 
 
-FROM python:3.11-slim AS replay
+FROM python:3.11.9-slim-bookworm AS replay
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -20,8 +20,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt docker/runtime-constraints.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -c runtime-constraints.txt
 
 COPY backend/app ./app
 COPY evidence ./evidence
@@ -44,7 +44,7 @@ ENV SIDEKICK_MODE=demo \
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements-train.txt ./
-RUN pip install --no-cache-dir -r requirements-train.txt \
+RUN pip install --no-cache-dir -r requirements-train.txt -c runtime-constraints.txt \
     && useradd --create-home sidekick \
     && mkdir -p /app/artifacts /app/data \
     && chown -R sidekick:sidekick /app/artifacts /app/data

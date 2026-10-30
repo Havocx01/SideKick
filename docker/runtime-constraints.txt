@@ -1,0 +1,10 @@
+# The one numerical runtime for deployment contexts, remote workers and the hosted app (Python 3.11, Linux x86_64).
+# Contexts made under any other pins or platform are refused on replay, so change these deliberately.
+joblib==1.6.0
+numpy==2.4.6
+pandas==2.3.3
+scikit-learn==1.9.1
+scipy==1.17.1
+threadpoolctl==3.7.0
+xgboost==3.2.0
+xgboost-cpu==3.2.0
