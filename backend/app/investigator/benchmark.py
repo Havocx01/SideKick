@@ -95,7 +95,6 @@ def outcome(history, counts, elapsed, providerCalls, **extra):
 
 
 def suppliedCases(store, investigation):
-    # The cases a recorded run started from, so every strategy gets the same initial evidence.
     chosen = {call["proposalId"] for call in controllerStatus(store, investigation)["calls"] if call["proposalId"]}
     with store.connection() as db:
         rows = db.execute("SELECT id, payload FROM proposals WHERE investigation=? ORDER BY seq", (investigation,)).fetchall()

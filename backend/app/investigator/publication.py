@@ -60,44 +60,67 @@ def publicExport(store, investigation, *, contextName=None, demonstration=None) 
     profile = record.policy.profile
     controller = controllerStatus(store, investigation)
     chosen = {call["proposalId"] for call in controller["calls"] if call.get("proposalId")} if controller else set()
-    attemptOf = {finding.attempt_id: number for number, finding in enumerate(measured, 1)}
     proposalOf = {item.id: item.proposal_id for item in state.attempts}
+    experiments = []
+    for number, finding in enumerate(measured, 1):
+        chosenBy = "nemotron" if proposalOf[finding.attempt_id] in chosen else "supplied"
+        experiments.append({**experimentRow(finding, number), "scenario": scenarios[finding.attempt_id].model_dump(mode="json"), "chosenBy": chosenBy})
+    refs = {finding.attempt_id: f"result-{number}" for number, finding in enumerate(measured, 1)}
+    policy = record.policy
     content = {
         "version": 1, "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "notice": NOTICE, "demonstration": demonstration,
         "context": {"fingerprint": record.context_fingerprint, "configFingerprint": record.config_fingerprint, "partition": record.partition,
-            "thresholds": {item.candidate: item.threshold for item in record.thresholds}, "policyFingerprint": record.policy.fingerprint,
-            "bounds": {"maxComponents": record.policy.max_components, "maxSeveritySd": record.policy.max_severity_sd,
-                "maxDuration": record.policy.max_duration, "maxOnset": record.policy.max_onset, "allowedGroups": [list(group) for group in record.policy.allowed_groups]},
-            "profile": {"id": profile.id, "version": profile.version, "equipment": profile.equipment, "synthetic": profile.synthetic,
-                "constraints": [item.model_dump(mode="json") for item in profile.constraints]} if profile else None,
-            "assumptions": record.policy.assumptions},
+            "thresholds": {item.candidate: item.threshold for item in record.thresholds}, "policyFingerprint": policy.fingerprint,
+            "bounds": {"maxComponents": policy.max_components, "maxSeveritySd": policy.max_severity_sd, "maxDuration": policy.max_duration,
+                "maxOnset": policy.max_onset, "allowedGroups": [list(group) for group in policy.allowed_groups]},
+            "profile": profileRow(profile), "assumptions": policy.assumptions},
         "criterion": criterion.model_dump(mode="json") if criterion else None,
         "budget": {"maxExperiments": state.budget.max_experiments, "experimentsUsed": state.slots_used, "failures": state.failures, "stopReason": state.stop_reason},
         "proposals": {"total": len(state.proposals), "rejected": sum(item.status == "rejected" for item in state.proposals),
             "duplicates": sum(item.status == "duplicate" for item in state.proposals)},
-        "experiments": [{**experimentRow(finding, number), "scenario": scenarios[finding.attempt_id].model_dump(mode="json"),
-            "chosenBy": "nemotron" if proposalOf[finding.attempt_id] in chosen else "supplied"} for number, finding in enumerate(measured, 1)],
+        "experiments": experiments,
         "executionErrors": [{"status": finding.status, "scenarioId": finding.scenario_id} for finding in findings if finding.status == "execution_error"],
         "discoveryFamilies": sorted({finding.family for finding in measured if finding.is_discovery}),
-        "controller": {key: controller[key] for key in ("stopReason", "modelStopReason", "callsUsed", "reservedCompletionTokens", "reportedCompletionTokens")}
-            | {"model": controller["configuration"]["model"], "prompt": controller["configuration"]["prompt"],
-                "reasoningEffort": controller["configuration"]["reasoningEffort"],
-                "adaptation": adaptation(store, investigation, state, {attempt: f"result-{number}" for attempt, number in attemptOf.items()}, chosen)} if controller else None,
-        "reductions": [{"status": item["status"], "original": item["original"], "final": item["final"], "family": item.get("family"),
-            "claims": item["claims"], "experiments": item["experiments"],
-            "steps": [{"change": step["change"], "status": step["status"], "accepted": step["accepted"], "evaluated": step.get("evaluated"),
-                "cohortChanged": step.get("cohortChanged")} for step in item["steps"]]} for item in reductions],
-        "remedies": [{"kind": item["kind"], "threshold": item["threshold"], "improved": item["improved"], "degraded": item["degraded"],
-            "stillFailing": stillFailing(item["cases"]), "meetsCriteria": item["meetsCriteria"], "clean": item["clean"], "cost": item.get("cost"),
-            "originalContext": item["originalContext"], "remedyContext": item["remedyContext"],
-            "cases": [{"label": row["label"], "scenarioId": row["scenarioId"], "original": row["original"], "remedy": row["remedy"],
-                "matchedCohort": row["matchedCohort"], "improved": row["improved"], "degraded": row["degraded"]} for row in item["cases"]],
-            "note": item["note"]} for item in remedies],
-        "validations": [{key: item.get(key) for key in ("status", "procedureDigest", "freshHistories", "clean", "cases", "note")}
-            | {"remedy": item["procedure"]["remedy"], "frozenCases": len(item["procedure"]["cases"])} for item in validations],
+        "controller": controllerRow(controller, adaptation(store, investigation, state, refs, chosen)) if controller else None,
+        "reductions": [reductionRow(item) for item in reductions],
+        "remedies": [remedyRow(item) for item in remedies],
+        "validations": [validationRow(item) for item in validations],
         "reproduction": reproduction(profile, contextName),
     }
     return {**content, "digest": digest(content)}
+
+
+def profileRow(profile):
+    if profile is None:
+        return None
+    constraints = [item.model_dump(mode="json") for item in profile.constraints]
+    return {"id": profile.id, "version": profile.version, "equipment": profile.equipment, "synthetic": profile.synthetic, "constraints": constraints}
+
+
+def controllerRow(controller, adapted):
+    row = {key: controller[key] for key in ("stopReason", "modelStopReason", "callsUsed", "reservedCompletionTokens", "reportedCompletionTokens")}
+    configuration = controller["configuration"]
+    return {**row, "model": configuration["model"], "prompt": configuration["prompt"], "reasoningEffort": configuration["reasoningEffort"], "adaptation": adapted}
+
+
+def reductionRow(item):
+    steps = [{"change": step["change"], "status": step["status"], "accepted": step["accepted"], "evaluated": step.get("evaluated"),
+        "cohortChanged": step.get("cohortChanged")} for step in item["steps"]]
+    return {"status": item["status"], "original": item["original"], "final": item["final"], "family": item.get("family"), "claims": item["claims"],
+        "experiments": item["experiments"], "steps": steps}
+
+
+def remedyRow(item):
+    cases = [{"label": row["label"], "scenarioId": row["scenarioId"], "original": row["original"], "remedy": row["remedy"], "matchedCohort": row["matchedCohort"],
+        "improved": row["improved"], "degraded": row["degraded"]} for row in item["cases"]]
+    return {"kind": item["kind"], "threshold": item["threshold"], "improved": item["improved"], "degraded": item["degraded"], "stillFailing": stillFailing(item["cases"]),
+        "meetsCriteria": item["meetsCriteria"], "clean": item["clean"], "cost": item.get("cost"), "originalContext": item["originalContext"],
+        "remedyContext": item["remedyContext"], "cases": cases, "note": item["note"]}
+
+
+def validationRow(item):
+    row = {key: item.get(key) for key in ("status", "procedureDigest", "freshHistories", "clean", "cases", "note")}
+    return {**row, "remedy": item["procedure"]["remedy"], "frozenCases": len(item["procedure"]["cases"])}
 
 
 def reproduction(profile, contextName):
