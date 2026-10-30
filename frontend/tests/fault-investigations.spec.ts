@@ -19,7 +19,7 @@ const failure: Finding = {
 function view(overrides: Partial<InvestigationView> = {}): InvestigationView {
   return {
     id: "inv-1", context: "synthetic", objective: "Find sensor faults that cost useful warnings.", createdAt: 1_760_000_000, active: null, stopReason: null,
-    experimentsUsed: 0, maxExperiments: 16, discoveries: 0, discoveryFamilies: [], criterion, findings: [], controller: null, reductions: [], remedies: [],
+    experimentsUsed: 0, maxExperiments: 16, discoveries: 0, discoveryFamilies: [], criterion, findings: [], controller: null, reductions: [], remedies: [], research: [],
     state: { id: "inv-1", context_fingerprint: "a".repeat(64), policy_fingerprint: "b".repeat(64), budget: { max_experiments: 16, max_failures: 3, max_attempts_per_scenario: 2, max_run_seconds: 600 },
       cancel_requested: false, stop_reason: null, slots_used: 0, failures: 0, proposals: [], attempts: [] },
     proposals: [{ id: "p1", sequence: 1, status: "pending", scenario: stuckPair, reason: "Freeze two monitoring channels.", hypothesis: null, rejection: null },
@@ -62,6 +62,31 @@ async function fixture(page: Page, initial: InvestigationView, contexts: Context
   });
   return state;
 }
+
+test("fault research needs consent and saved advice reopens without another search", async ({ page }) => {
+  const state = await fixture(page, finished());
+  await page.goto("/investigations/inv-1");
+  const card = page.getByRole("article", { name: /^Measured failure/ });
+  await card.getByRole("button", { name: "Research this fault", exact: true }).click();
+  const start = card.getByRole("button", { name: "Start fault research" });
+  await expect(start).toBeDisabled();
+  await expect(card).toContainText("industrial sensor stuck readings troubleshooting manufacturer documentation predictive maintenance");
+  expect(state.posts).toHaveLength(0);
+  await card.getByRole("checkbox", { name: "Allow Tavily search and Nemotron research for this fault" }).check();
+  await start.click();
+  await expect.poll(() => state.posts.find(item => item.path.endsWith("/research"))?.body).toMatchObject({ attempt: "a1", allowResearch: true });
+  state.current = { ...finished(), research: [{ attempt: "a1", status: "completed", query: "industrial sensor stuck readings", createdAt: 1_760_000_000,
+    model: "nvidia/nemotron-3-super-120b-a12b", sources: [{ id: "source-1", title: "Sensor manual", url: "https://example.com/manual", content: "Check signal wiring." }],
+    note: { summary: "Check the signal path.", sourceIds: ["source-1"], tests: [{ action: "Inspect wiring", reason: "Separate signal faults from process changes.", sourceIds: ["source-1"] }] },
+    searchRequests: 1, modelRequests: 1, reservedCompletionTokens: 5120, reportedCompletionTokens: 80 }] };
+  await page.reload();
+  await expect(card).toContainText("Fault research · completed");
+  await expect(card).toContainText("Check the signal path.");
+  await expect(card.getByRole("link", { name: "Sensor manual" }).first()).toHaveAttribute("href", "https://example.com/manual");
+  await expect(card).toContainText("Sources do not validate the fault policy");
+  await expect(card.getByRole("button", { name: "Research this fault", exact: true })).toHaveCount(0);
+  expect(state.posts.filter(item => item.path.endsWith("/research"))).toHaveLength(1);
+});
 
 test("an empty registry explains how to add a fitted context", async ({ page }) => {
   await fixture(page, view(), []);

@@ -8,7 +8,7 @@ from app.api.routes_experiments import library_owner
 from app.config import get_settings
 from app.experiments.demo import public_origin
 from app.investigator.schemas import (ContextInfo, InvestigationCreate, InvestigationSummary, InvestigationView, RecordedInvestigation, ReduceRequest,
-    RemedyRequest, ReplayCheck, StartRequest)
+    RemedyRequest, ReplayCheck, ResearchRequest, StartRequest)
 from app.investigator.service import Conflict, InvestigationService
 
 router = APIRouter(prefix="/api/investigations", tags=["investigations"])
@@ -112,6 +112,13 @@ def remedy(investigation: str, payload: RemedyRequest, request: Request):
 @router.post("/{investigation}/results/{attempt}/replay", response_model=ReplayCheck)
 def replay(investigation: str, attempt: str, request: Request):
     return call(service(request).replay, library_owner(request), investigation, attempt)
+
+
+@router.post("/{investigation}/research", response_model=InvestigationView)
+def researchFault(investigation: str, payload: ResearchRequest, request: Request):
+    found, owner = service(request), library_owner(request)
+    call(found.research, owner, investigation, payload, consent(request))
+    return found.view(owner, investigation)
 
 
 @router.get("/{investigation}/export")

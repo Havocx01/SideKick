@@ -5,6 +5,7 @@ from pydantic import Field
 
 from app.faults.investigation import InvestigationState
 from app.investigator.findings import Finding, FindingCriterion
+from app.investigator.research import ResearchReport
 from app.schemas import Strict
 
 RequestId = Field(pattern=r"^[A-Za-z0-9_-]{8,64}$")
@@ -59,6 +60,12 @@ class RemedyRequest(Strict):
     approveTraining: bool = False
 
 
+class ResearchRequest(Strict):
+    requestId: str = RequestId
+    attempt: str = Field(min_length=1, max_length=64)
+    allowResearch: bool = False
+
+
 class InvestigationEvent(Strict):
     sequence: int
     kind: str
@@ -98,6 +105,7 @@ class InvestigationView(InvestigationSummary):
     events: list[InvestigationEvent]
     reductions: list[dict[str, Any]]
     remedies: list[dict[str, Any]]
+    research: list[ResearchReport] = Field(default_factory=list)
 
 
 class RecordedInvestigation(Strict):

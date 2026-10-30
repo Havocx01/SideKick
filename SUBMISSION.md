@@ -1,42 +1,36 @@
-# Sidekick V2 reviewer handoff
+# Sidekick reviewer guide
 
-**Sidekick: Stress-testing predictive maintenance warnings**
+Sidekick is an AI-assisted investigation workbench for engineers testing whether equipment-warning models tolerate unreliable sensors. The submission track is **Best Apps and Agents**.
 
-Sidekick checks whether equipment failure-warning models still warn in time when
-sensor readings go missing, freeze or drift. Engineers review the data and protocol,
-compare models, inspect the weakest simulated fault cases and export the evidence.
-Local workflows include CSV uploads, synthetic training, model freezing and a
-separate one-time reserved-equipment evaluation.
+## Inspect the public demo
 
-Recorded NASA C-MAPSS simulated-engine evidence and synthetic samples demonstrate
-the workflow. They do not establish ABB field performance, deployment approval or
-maintenance savings. Optional deep AI proposes tentative explanations and diagnostic
-questions; recorded metrics and verdicts remain server-owned. Its consistent extra
-benefit over regular analysis has not been measured.
+Open [Sidekick](https://sidekick-e9lu.onrender.com/) and choose **Investigations**. Recorded runs are available without keys or installation and are labelled **Recorded, not live**. The page shows who selected each scenario, coverage, measured outcomes, reductions and remedy limits. It does not initiate provider calls.
 
-## Open the app
+The deployed revision is reported by `/api/health`. Compare it with the submitted commit; an older deployment does not establish that the latest code is hosted.
 
-Prepare dependencies and build on the presentation laptop before travelling. From
-the repository root, run `.\tasks.ps1 api`, then open <http://127.0.0.1:8140>.
-Keep the terminal open. Alternatively, double-click **Start Sidekick.cmd**; first
-installation needs internet. Later recorded-evidence workflows need no API key.
+## Run the complete local example
 
-**View walkthrough** opens the introductory disclosure. **Explore benchmark** opens
-model comparison. **Set up sample** and **Upload CSV** prepare new local experiments.
+Follow the [README setup](README.md#start-here), then run:
 
-## Judge-facing demo
+```powershell
+.venv\Scripts\python.exe scripts/demo_investigation.py
+```
 
-Use the [five-minute or two-minute runbook](docs/judging-guide.md), with lr2's recorded
-sensor-dropout failure and aug3's separately recorded result. Precompute training
-before presenting; show an existing synthetic run if asked. Do not repeat reserved
-scoring during the presentation.
+Open **Investigations** and select **Demo: find sensor faults...**. This no-key example uses supplied synthetic cases and a deliberately fragile 0.95 threshold. It reproduces a compound failure, reduces it, exports a regression, compares a 0.5 threshold remedy and assesses a frozen procedure on fresh synthetic histories. Exact counts belong to the newly fitted context.
 
-Current offline media/reports are prepared under `output/judging-20261012/` on the
-presentation machine. Copy the verified package to another laptop or USB drive.
-The v1.5 images/video in `media/submission/` are historical. Use the fresh V2 recording.
-See [testing](TESTING.md) for verification commands and the
-[judging guide](docs/judging-guide.md) for presentation prerequisites.
+For real Nemotron proposals, configure the server-side Nebius key and explicit workspace/action permission as described in the [README](README.md#nvidia-nebius-and-tavily). Optional Tavily fault research also needs its own key and per-action consent. Neither feature starts automatically.
 
-Repository: <https://github.com/Havocx01/SideKick>. The README's public demo is a
-separate restricted environment. Do not assume it contains this local revision or
-rely on it for judging without a separate smoke check.
+## Evidence to inspect
+
+- [Live Nemotron run](evidence/investigations/nemotron-live-recorded.json): three accepted proposals with full 22-history coverage; no qualifying failure.
+- [Compound demonstration](evidence/investigations/compound-demo-recorded.json): a supplied stuck-sensor case reduced useful warnings from 22/22 to 8/22 at the demonstration threshold, then replayed and reduced.
+- [Fresh synthetic validation](evidence/investigations/fresh-validation-recorded.json): the remedy resolved the reduced case but left the stronger case failing.
+- [Default-threshold example](evidence/investigations/synthetic-recorded.json): six supplied cases with no measured failure.
+
+These aggregate exports contain no raw histories, equipment identifiers, private objectives, fitted objects or credentials. Their digests establish integrity, not authenticity. They preserve their original source/context identities; rerunning current code may produce different fitted results.
+
+## Three-minute demonstration
+
+Show the local workbench, recorded real Nemotron proposals and call accounting, the supplied failure and its coverage, recorded replay/reduction, the remedy and unresolved stronger failure, then the public export. Clearly label the synthetic data, fragile threshold and recorded footage. Do not present a supplied case as an AI discovery.
+
+The project description, earlier-versus-new work and service feedback are in [submission details](docs/nebius-submission.md). Test commands and runtime limits are in [TESTING.md](TESTING.md). The public repository is [Havocx01/SideKick](https://github.com/Havocx01/SideKick), licensed under MIT.

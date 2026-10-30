@@ -1,47 +1,75 @@
-# Nebius x NVIDIA submission notes
+# Nebius x NVIDIA submission details
 
-Track: **Best Apps and Agents**.
+Track: **Best Apps and Agents**. Project: **Sidekick**.
 
-## What it is
+## What it does
 
-Sidekick is an investigation workbench for engineers who must decide whether an equipment-warning model can tolerate unreliable sensors. An engineer chooses a fitted model, states a concern and sets bounds. Nemotron proposes sensor-fault experiments. Sidekick runs them against fixed development models, classifies each result with deterministic code, reduces failures to simpler reproducible cases and measures what a remedy fixes and what it costs elsewhere.
+Sidekick helps reliability and data engineers investigate equipment-warning models under unreliable sensor readings. An engineer fixes a model context, concern, criterion, fault profile and allowances. NVIDIA Nemotron proposes bounded experiments; deterministic code measures matched clean/faulted outcomes. Findings can be replayed, reduced, exported as regressions and compared with explicit remedies.
 
-Audience: reliability and data engineers selecting a warning model for one equipment family. Decision supported: which model and warning rule to take to a supervised trial, and which sensor failures to plan for.
+The supported decision is which model, warning rule and sensor-failure cases to take to further supervised testing. Real-equipment benefits and maintenance savings have not been established.
 
-## How it is built
+## Technology and services
 
-- **Model:** `nvidia/nemotron-3-super-120b-a12b` through Nebius Token Factory's OpenAI-compatible Chat Completions API, with strict JSON-schema output, explicit `reasoning_effort` and a reserved reasoning budget. Token Factory is the only Nebius service used. Serverless Jobs and Endpoints were not needed for these small tabular models.
-- **Controller:** sends Nemotron aliased channels, reviewed profile descriptions, fault bounds, clean performance and aggregate results. Nemotron returns one proposal with a hypothesis, or a stop reason. Local validation, durable call and token limits, leases and consent decide what runs.
-- **Engine:** a fixed development evaluator scores bounded compound sensor corruptions on matched clean and faulted histories. It is backed by finding criteria, versioned fault profiles, a reducer, remedy comparisons, a search benchmark and checksummed remote worker jobs.
-- **Surfaces:** a CLI, an owned HTTP API with background workers, and a React workbench. Public evidence exports exclude private data.
+- **NVIDIA model:** `nvidia/nemotron-3-super-120b-a12b`, served through Nebius Token Factory's compatible Chat Completions API.
+- **Nebius contribution:** hosted inference for structured experiment proposals without operating a separate model-serving stack. Token Factory is the Nebius service used; no Serverless Jobs, Serverless Endpoints or AI Cloud deployment is claimed.
+- **Tavily:** an explicit fault-research search retrieves references for a separate Nemotron summary. Query preview, consent, bounded excerpts, citation checks and saved results control the action.
+- **Application:** React, TypeScript and Vite; Python, FastAPI and Pydantic; SQLite; NumPy, pandas, SciPy, scikit-learn and XGBoost.
+- **Execution:** durable limits, duplicate handling, cancellation, leases, background operations and checksummed finite worker jobs. Linux context/worker deployment uses Python 3.11.9 and pinned numerical dependencies.
 
-## Earlier project and new work
+The model's hypotheses and external references never determine a measured finding or change the policy automatically. Raw histories and fitted objects remain local unless their separate worker transfer is authorized.
 
-Sidekick V2 (ABB Accelerator 2026) already trained and compared models on single-sensor faults. The adaptation started at `4c956f0` (27 October 2026, Nebius provider support). The commits from `813fa52` onward (28–29 October 2026) add, in order:
+## Significant updates to the earlier project
 
-- the compound evaluator, the runner and the Nemotron controller
-- finding criteria, fault profiles, adaptive context, reduction and remedies
-- the benchmark, the HTTP API, the browser workbench and remote workers
-- public evidence and failure-injection verification
+The earlier ABB Accelerator Sidekick V2 compared equipment-warning models under fixed single-sensor tests. The adaptation adds:
 
-`git log 4c956f0^..HEAD` lists every change.
+- Nebius/Nemotron provider integration and reasoning allowances.
+- Typed compound faults, versioned profiles and fixed development evaluation.
+- Persistent investigations, bounded execution and adaptive proposal/result feedback.
+- Fault-specific provider schemas, timing coverage and corrective feedback.
+- Deterministic finding criteria, hypothesis lineage, reduction and regression export.
+- Remedy comparisons with costs, clean performance and unresolved failures.
+- Search benchmarks, HTTP/background execution and the browser workbench.
+- Frozen-procedure assessment on fresh histories with exposure tracking.
+- Containerized remote workers, public evidence and recorded hosted investigations.
+- Optional Tavily research with cached citations and separate evidence limits.
 
-## Measured results
+The Git history preserves the earlier project and the individual implementation commits. Feature implementation dates and saved capture dates are evidence of when work occurred; later changes must not be attributed to an earlier submission period.
 
-The initial Windows live check on 30 October 2026 authenticated successfully and made two Nemotron calls. Both responses were rejected by local scenario validation before execution; 864 completion tokens were reported and no experiment ran. The observed reply combined explicit onsets with random seeds, supplied inapplicable fault parameters and crossed declared sensor groups. Prompt v4 states those constraints explicitly.
+## Recorded results
 
-A separately authorized two-call check with prompt v4 reported 539 completion tokens. One reply was rejected because its transient fault had no length. The other passed validation, reached the evaluator and was saved, verifying the live proposal-to-saved-result path. Its onset was 100 cycles before failure, outside all 22 development histories, so the result was `not_applicable` with zero evaluated histories and no measured failure. The saved result passed its checksum check, replayed exactly without provider calls and exported as aggregate evidence. A useful live measurement remains unverified; timing bounds need to reflect the fitted development histories, and provider schemas should express fault-specific parameter requirements.
+All results below are synthetic and specific to their saved fitted contexts.
 
-The recorded offline results below come from local, deterministic evaluation on synthetic data. Real equipment, ABB field performance and maintenance savings are not established; exact learned-model counts belong to their recorded fitted contexts.
+### Live experiment selection
 
-- **Fixed-threshold demonstration** (`scripts/demo_investigation.py`; 22 development histories; logistic model at a deliberately fragile 0.95 threshold):
-  - 1 of 5 cases was a measured failure: stuck vibration plus particle count, with useful warnings falling from 22/22 to 16/22 (100% → 73%).
-  - It replayed exactly and reduced to later onsets. It is component-minimal and minimal only on the tested grid.
-  - A 0.5 threshold remedy fixed 2 cases (the failure and its reduction) and degraded none, with clean burden unchanged.
-- **Search benchmark** (budget 24, 2 thresholds × 5 seeds = 10 runs per strategy): random search found 3 failure families in 2 of 10 runs; the fixed suite and hill climber found none. The Nemotron controller is not yet in this comparison, because that needs recorded live runs.
-- **Default synthetic package** (`evidence/investigations/synthetic-recorded.json`): 0 of 6 cases failed at automatically selected thresholds.
+The [recorded live investigation](../evidence/investigations/nemotron-live-recorded.json) used three accepted Nemotron proposals, each evaluated on all 22 development histories. Later proposals referenced earlier measured results. The run reported 1,083 completion tokens, and recorded request times were approximately 2.8–4.1 seconds. None of its scenarios met the failure criterion.
 
-## Still needed from the owner
+The recorded comparison on that context found no qualifying failure for Nemotron or the fixed, random and hill-climbing comparators under the compared allowance. It does not establish search superiority. An earlier, separate benchmark using different demonstration thresholds found failures with constrained random search; that is not interchangeable with the live comparison.
 
-- A bounded live run that scores eligible histories after tightening timing bounds and structured proposals: `docs/nebius-phase-3.md` → Live smoke run. Preserve both existing captures and use a fresh context and investigation after source changes. Then add verified Nemotron runs to the benchmark with `--recorded`.
-- The demo URL, a public video of at most three minutes, and Nebius/NVIDIA feedback based on that live usage: structured output, reasoning controls, latency, errors.
+### Supplied failure, reduction and remedy
+
+The [compound demonstration](../evidence/investigations/compound-demo-recorded.json) deliberately uses a fragile 0.95 threshold. A supplied stuck vibration/oil-particle case reduced useful warnings from 22/22 to 8/22: six became missed and eight became late. It was not discovered by Nemotron.
+
+The case replayed exactly and reduced to later onsets while retaining both components. Claims are limited to tested single-component removals and the specified grid, not a global minimum. A 0.5 threshold remedy resolved the reduced case and degraded none of the previously passing tested cases, but the stronger original case remained a failure.
+
+### Fresh synthetic assessment
+
+The [frozen-procedure assessment](../evidence/investigations/fresh-validation-recorded.json) used 12 fresh synthetic histories. For the reduced case, the remedy changed useful warnings from 8/12 to 12/12. For the stronger original case it changed 0/12 to 5/12, still a failure. This establishes neither field performance nor general remedy effectiveness.
+
+The [default-threshold export](../evidence/investigations/synthetic-recorded.json) contains six supplied cases and no measured failure. Historical NASA FD001 evidence remains exposed and is not a fresh holdout.
+
+### Tavily runtime verification
+
+The initial research action made one successful Tavily request, reporting one credit, and one Nemotron request, reporting 265 completion tokens. The search returned unrelated Microsoft pages; Nemotron declined sensor-specific advice. The final technical-term filter rejects those captured sources offline. Useful live retrieval remains unverified, and no further paid call was made under that allowance.
+
+## Service feedback
+
+Token Factory's compatible API fitted the existing Python application. Usage metadata supported saved accounting. Initial domain-invalid replies motivated explicit schema alternatives and timing-coverage feedback; strict JSON alone did not enforce the whole experiment contract. Clear examples of nested alternatives and reasoning-token accounting would help similar integrations.
+
+The small recorded latency and token observations above are not service-wide performance claims. Tavily's first response was irrelevant to the supplied query; source screening and the model's abstention prevented unsupported sensor advice from being treated as evidence.
+
+## Submission artifacts
+
+- [Public repository](https://github.com/Havocx01/SideKick), with the root MIT license.
+- [Public demo](https://sidekick-e9lu.onrender.com/); verify its reported deployed revision.
+- [Setup and reproduction](../README.md) and [reviewer guide](../SUBMISSION.md).
+- The owner must supply the public YouTube video link and final Devpost entry. The video should remain under three minutes and identify recorded versus live footage, synthetic data and supplied versus model-selected cases.

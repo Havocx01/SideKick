@@ -1,6 +1,7 @@
 """Owned investigations executed by background workers."""
 import asyncio
 import json
+import logging
 from pathlib import Path
 import re
 import threading
@@ -13,6 +14,7 @@ from app.investigator.findings import loadCriterion, recordFindings, replayCheck
 from app.investigator.publication import publicExport
 from app.investigator.reduction import ensureTable as ensureReductions, reduce
 from app.investigator.remedies import compareRemedy, ensureTable as ensureRemedies
+from app.investigator.research import ResearchReport, checkSettings, ensureTable as ensureResearch, runResearch, savedResearch
 from app.investigator.schemas import CleanMetrics, ContextInfo, InvestigationEvent, InvestigationSummary, InvestigationView, ProposalDetail
 from app.investigator.search import seedSuite
 
@@ -53,6 +55,11 @@ class InvestigationService:
                 " kind TEXT NOT NULL, detail TEXT, request_id TEXT, created REAL NOT NULL, UNIQUE(investigation, request_id))")
             ensureReductions(db)
             ensureRemedies(db)
+            ensureResearch(db)
+            for investigation, attempt, payload in db.execute("SELECT investigation,attempt,payload FROM fault_research WHERE status='pending'").fetchall():
+                report = ResearchReport.model_validate_json(payload).model_copy(update={"status": "interrupted", "error": "Research was interrupted; it will not retry automatically."})
+                db.execute("UPDATE fault_research SET status='interrupted',payload=? WHERE investigation=? AND attempt=?",
+                    (report.model_dump_json(), investigation, attempt))
             # Workers do not survive a restart; their leases expire and the next start recovers the work.
             for (investigation,) in db.execute("SELECT DISTINCT investigation FROM investigation_events e WHERE kind LIKE 'started:%'"
                     " AND NOT EXISTS (SELECT 1 FROM investigation_events f WHERE f.investigation=e.investigation AND f.id>e.id"
@@ -74,7 +81,11 @@ class InvestigationService:
         for path in sorted(self.contexts.iterdir()):
             if not NAME.match(path.name) or not (path / "manifest.json").is_file():
                 continue
-            engine = self.evaluator(path.name)
+            try:
+                engine = self.evaluator(path.name)
+            except (ValueError, OSError) as error:
+                logging.getLogger(__name__).warning("Skipping unavailable fitted context %s: %s", path.name, error)
+                continue
             clean = {name: CleanMetrics(detection=item.detection_fraction, alarmBurden=item.early_alarm_burden, medianLead=item.median_lead_time,
                 histories=item.engines) for name, item in engine.cleanMetrics().items()}
             contexts.append(ContextInfo(name=path.name, contextFingerprint=engine.context_fingerprint,
@@ -137,9 +148,10 @@ class InvestigationService:
         proposals = [proposalDetail(item, payloads[item.id]) for item in state.proposals]
         return InvestigationView(**self.summary(investigation, context, created).model_dump(), state=state, proposals=proposals,
             criterion=criterion, findings=findings, discoveryFamilies=summarize(findings)["discoveryFamilies"],
-            controller=controllerStatus(self.store, investigation), events=events, reductions=reductions, remedies=remedies)
+            controller=controllerStatus(self.store, investigation), events=events, reductions=reductions, remedies=remedies,
+            research=savedResearch(self.store, investigation))
 
-    def submit(self, owner, investigation, kind, requestId, work):
+    def submit(self, owner, investigation, kind, requestId, work, *, loadContext=True):
         """Start background work once per request ID; a retried request never starts a second job."""
         context, _ = self.owned(owner, investigation)
         with self.lock:
@@ -150,14 +162,14 @@ class InvestigationService:
                     raise Conflict("Another operation is running for this investigation")
                 db.execute("INSERT INTO investigation_events(investigation,kind,detail,request_id,created) VALUES(?,?,?,?,?)",
                     (investigation, f"started:{kind}", None, requestId, time.time()))
-            thread = threading.Thread(target=self.work, args=(investigation, context, kind, work), daemon=True, name=f"investigation-{kind}")
+            thread = threading.Thread(target=self.work, args=(investigation, context, kind, work, loadContext), daemon=True, name=f"investigation-{kind}")
             self.active[investigation] = (kind, thread)
         thread.start()
         return True
 
-    def work(self, investigation, context, kind, work):
+    def work(self, investigation, context, kind, work, loadContext):
         try:
-            detail = work(self.evaluator(context))
+            detail = work(self.evaluator(context) if loadContext else None)
             self.event(investigation, f"finished:{kind}", detail)
         except Exception as error:  # A worker failure is recorded for the owner rather than lost in a thread.
             self.event(investigation, f"failed:{kind}", f"{type(error).__name__}: {error}")
@@ -197,6 +209,20 @@ class InvestigationService:
             report = compareRemedy(self.store, engine, investigation, request.kind, threshold=request.threshold, approveTraining=request.approveTraining)
             return f"{report['improved']} improved, {report['degraded']} degraded"
         return self.submit(owner, investigation, "remedy", request.requestId, work)
+
+    def research(self, owner, investigation, request, consent):
+        self.owned(owner, investigation)
+        if request.attempt not in {item.id for item in self.store.load(investigation).attempts if item.status == "completed"}:
+            raise KeyError("Unknown completed experiment")
+        if any(item.attempt == request.attempt for item in savedResearch(self.store, investigation)):
+            return False
+        if not request.allowResearch or not consent():
+            raise PermissionError("Research needs permission for Tavily search and workspace AI permission for Nemotron")
+        checkSettings(self.settings)
+        def work(_):
+            allowed = lambda: not self.stopping.is_set() and consent() and not self.store.load(investigation).cancel_requested  # noqa: E731
+            return asyncio.run(runResearch(self.store, investigation, request.attempt, self.settings, allowed)).status
+        return self.submit(owner, investigation, "research", request.requestId, work, loadContext=False)
 
     def cancel(self, owner, investigation):
         self.owned(owner, investigation)

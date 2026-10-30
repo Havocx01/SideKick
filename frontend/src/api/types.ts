@@ -713,6 +713,7 @@ export interface InvestigationView {
   events: InvestigationEvent[];
   reductions: Record<string, unknown>[];
   remedies: Record<string, unknown>[];
+  research?: ResearchReport[];
 }
 
 export interface LibraryFolder {
@@ -962,6 +963,48 @@ export interface ReproducibilityCheck {
   max_absolute_difference: number;
   metrics_compared: number;
   reproduced: boolean;
+}
+
+export interface ResearchNote {
+  summary: string;
+  sourceIds: string[];
+  tests: ResearchTest[];
+}
+
+export interface ResearchReport {
+  attempt: string;
+  status: "pending" | "completed" | "failed" | "cancelled" | "interrupted";
+  query: string;
+  createdAt: number;
+  model: string;
+  prompt?: string;
+  sources?: ResearchSource[];
+  note?: ResearchNote | null;
+  error?: string | null;
+  searchRequests?: number;
+  modelRequests?: number;
+  reservedCompletionTokens?: number;
+  reportedCompletionTokens?: number | null;
+  searchCredits?: number | null;
+}
+
+export interface ResearchRequest {
+  requestId: string;
+  attempt: string;
+  allowResearch?: boolean;
+}
+
+export interface ResearchSource {
+  id: string;
+  title: string;
+  url: string;
+  content: string;
+}
+
+export interface ResearchTest {
+  action: string;
+  reason: string;
+  sourceIds: string[];
 }
 
 export interface RunRecord {

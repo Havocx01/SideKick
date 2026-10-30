@@ -19,7 +19,7 @@ loaded.check_context(evaluator)
 
 The experiment cap cannot exceed the evaluator policy. `check_context` rejects a different evaluator; the caller must supply the original fitted context. The record alone cannot reconstruct it.
 
-Setup, validation, status and ordinary runner actions stay local. Only the explicit controller action makes provider requests. This developer interface has no HTTP route; existing workspace, consent and exposure databases are separate.
+Setup, validation, status and ordinary runner actions stay local. The explicit controller and fault-research actions make provider requests. The Python record interface below is also exposed through the owned HTTP API described later in this guide.
 
 ## Scenario proposals
 
@@ -279,6 +279,16 @@ The coordinator accepts only a result whose job ID and manifest digest match the
 - A remote result matches local execution only when both run in the same numerical runtime. Package versions are not enough: Windows and Linux fits differ in the last bits, so a worker refuses a context made on another platform when its recorded evaluation does not reproduce.
 
 Context packages contain raw development data, so remote execution needs `--allow-transfer`, and local execution remains the default. The outbox and inbox can be shared folders or a synced object store. Workers never touch the SQLite file. GPUs and serverless endpoints are unnecessary for these small tabular models; measure a real workload before adding them.
+
+## Fault research
+
+Each completed finding has **Research this fault**. Review the generic fault-type search, then explicitly allow one Tavily search and one Nemotron request. Workspace AI permission must also be enabled. Set `TAVILY_API_KEY` alongside the existing `NEBIUS_API_KEY` in the local `.env`, then restart Sidekick. Keep keys on the server.
+
+Tavily receives only the displayed query. Results without sensor or measurement terminology in their title or saved excerpt are excluded; this simple filter does not establish relevance or authority. Nemotron receives up to three bounded source excerpts and aliased aggregate results, with at most 1024 output tokens plus 4096 reasoning tokens. Sources are untrusted context; citation IDs must match the returned sources. Research never changes the finding, criterion, policy or model and does not load a fitted context.
+
+The initial live check made one successful Tavily request (one reported credit) and one Nemotron request (265 reported completion tokens). Tavily returned unrelated Microsoft pages; Nemotron declined to infer sensor-specific tests. The sources are now rejected by the technical-term filter in an offline replay. Live retrieval of useful engineering references remains unverified.
+
+One research attempt is saved per experiment, including failures, cancellations and interruptions. Reopening or submitting another request reuses it without paid retries. Revocation and cancellation are checked before each provider stage and before publishing advice. Running requests stop at the next safe checkpoint. Research appears in the private investigation export; the public measured-evidence export excludes it. Hosted recorded investigations remain read-only.
 
 ## Public evidence
 

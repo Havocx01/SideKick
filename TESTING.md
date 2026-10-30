@@ -47,6 +47,7 @@ The recorded `evidence/bundle.json` must retain its exact bytes. `.gitattributes
 .venv\Scripts\python.exe -m pytest -q tests/test_nemotron_controller.py tests/test_fault_investigation.py
 .venv\Scripts\python.exe -m pytest -q tests/test_investigation_findings.py tests/test_fault_profiles.py tests/test_adaptive_search.py tests/test_reduction.py tests/test_remedies.py
 .venv\Scripts\python.exe -m pytest -q tests/test_search_benchmark.py tests/test_investigations_api.py tests/test_remote_jobs.py tests/test_public_export.py tests/test_failure_injection.py
+.venv\Scripts\python.exe -m pytest -q tests/test_fault_research.py
 .venv\Scripts\python.exe scripts/evaluate_deep.py --output output/deep-review-new
 ```
 

@@ -1,4 +1,6 @@
 import sqlite3
+import json
+import shutil
 import threading
 
 from fastapi import FastAPI
@@ -63,6 +65,20 @@ def test_contexts_come_only_from_the_server_registry(api):
     assert contexts[0]["profile"] == "synthetic-rotating-v1" and contexts[0]["clean"][LR]["histories"] == 22
     assert client.post("/api/investigations", json={"context": "missing"}, headers=HEADERS).status_code == 404
     assert client.post("/api/investigations", json={"context": "../synthetic"}, headers=HEADERS).status_code == 422
+
+
+def test_old_contexts_do_not_block_the_current_registry(api, caplog):
+    client, service, root = api
+    stale = root / "contexts" / "stale"
+    shutil.copytree(root / "contexts" / "synthetic", stale)
+    manifest = json.loads((stale / "manifest.json").read_text())
+    manifest["source_digest"] = "0" * 64
+    (stale / "manifest.json").write_text(json.dumps(manifest))
+    response = client.get("/api/investigations/contexts")
+    assert response.status_code == 200 and [item["name"] for item in response.json()] == ["synthetic"]
+    assert "Skipping unavailable fitted context stale" in caplog.text
+    assert stale.is_dir()
+    assert client.post("/api/investigations", json={"context": "stale"}, headers=HEADERS).status_code == 422
 
 
 def test_full_lifecycle_runs_in_the_background_and_is_owned(api):

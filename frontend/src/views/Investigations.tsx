@@ -306,8 +306,46 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
         })}>Replay</Button>
         {replay && <span role="status" className={styles.footnote}>{replay}</span>}
       </div>
+      <FaultResearch finding={finding} data={data} busy={busy} act={act} />
     </>}
   </article>;
+}
+
+function FaultResearch({ finding, data, busy, act }: { finding: Finding; data: InvestigationView; busy: string; act: Act }) {
+  const [open, setOpen] = useState(false);
+  const [allow, setAllow] = useState(false);
+  const attempt = finding.attempt_id ?? "";
+  const report = data.research?.find(item => item.attempt === attempt);
+  const proposal = data.proposals.find(item => item.id === finding.proposal_id);
+  const components = (proposal?.scenario?.components ?? []) as Component[];
+  const kinds = [...new Set(components.map(item => item.kind))].sort().join(" ");
+  const query = `industrial sensor ${kinds} readings troubleshooting manufacturer documentation predictive maintenance`;
+  const sources = (ids: string[]) => (report?.sources ?? []).filter(source => ids.includes(source.id)).map(source =>
+    <a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>);
+  if (report) return <div className={styles.stack}>
+    <strong>Fault research · {report.status}</strong>
+    <p className={styles.footnote}>External references and AI suggestions; separate from measured findings. Sources do not validate the fault policy or prove a physical cause.</p>
+    {report.error && <p role="status">{report.error}</p>}
+    {report.note && <>
+      <p>{report.note.summary}</p><div className={styles.actions}>{sources(report.note.sourceIds)}</div>
+      {report.note.tests.map((test, index) => <div key={index}><strong>{test.action}</strong><p>{test.reason}</p>
+        <div className={styles.actions}>{sources(test.sourceIds)}</div></div>)}
+      <details><summary>Saved source excerpts and search</summary><p>{report.query}</p>{(report.sources ?? []).map(source =>
+        <div key={source.id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a><p>{source.content}</p></div>)}</details>
+    </>}
+    <span className={styles.footnote}>Tavily searches {report.searchRequests}; Nemotron requests {report.modelRequests}; reserved completion ceiling {report.reservedCompletionTokens}; reported tokens {report.reportedCompletionTokens ?? "unavailable"}. Saved results are reused.</span>
+  </div>;
+  return <div className={styles.stack}>
+    <Button variant="ghost" onClick={() => setOpen(!open)} aria-expanded={open}>Research this fault</Button>
+    {open && <fieldset className={styles.preview}><legend>Research this fault</legend>
+      <p>Tavily receives this search:</p><p>{query}</p>
+      <p>Nemotron receives up to three source excerpts and aliased aggregate experiment results. No raw readings, sensor names, equipment IDs or private concern are sent.</p>
+      <p>One search and one Nemotron request, with at most 5,120 completion tokens. References are unverified context and do not change your measured findings. Workspace AI permission is also required.</p>
+      <label className={styles.check}><input type="checkbox" checked={allow} onChange={event => setAllow(event.target.checked)} />Allow Tavily search and Nemotron research for this fault</label>
+      <Button disabled={!allow || Boolean(data.active) || data.state.cancel_requested} loading={busy === `research-${attempt}`}
+        onClick={() => act(`research-${attempt}`, () => investigations.research(data.id, { requestId: requestId(), attempt, allowResearch: true }))}>Start fault research</Button>
+    </fieldset>}
+  </div>;
 }
 
 const eventLabels: Record<string, string> = { created: "Created", cancel_requested: "Cancellation requested", resumed: "Resumed", interrupted: "Interrupted" };

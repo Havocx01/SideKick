@@ -12,7 +12,7 @@
 !evidence/**
 !docker/
 !docker/*.Dockerfile
-!docker/worker-constraints.txt
+!docker/runtime-constraints.txt
 !scripts/
 !scripts/*.py
 !pyproject.toml

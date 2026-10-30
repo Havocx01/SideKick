@@ -242,6 +242,7 @@ export const investigations = {
   resume: (id: string) => post<import("./types").InvestigationView>(`/api/investigations/${id}/resume`),
   reduce: (id: string, body: import("./types").ReduceRequest) => post<import("./types").InvestigationView>(`/api/investigations/${id}/reduce`, body),
   remedy: (id: string, body: import("./types").RemedyRequest) => post<import("./types").InvestigationView>(`/api/investigations/${id}/remedies`, body),
+  research: (id: string, body: import("./types").ResearchRequest) => post<import("./types").InvestigationView>(`/api/investigations/${id}/research`, body),
   replay: (id: string, attempt: string) => post<import("./types").ReplayCheck>(`/api/investigations/${id}/results/${attempt}/replay`),
   exportUrl: (id: string) => `${BASE}/api/investigations/${id}/export`,
   publicExportUrl: (id: string) => `${BASE}/api/investigations/${id}/public-export`

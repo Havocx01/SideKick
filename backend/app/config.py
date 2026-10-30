@@ -148,6 +148,7 @@ class Settings:
     openai_api_key: str = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY", ""), repr=False)
     assistant_provider: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PROVIDER", "openai"))
     nebius_api_key: str = field(default_factory=lambda: os.environ.get("NEBIUS_API_KEY", ""), repr=False)
+    tavily_api_key: str = field(default_factory=lambda: os.environ.get("TAVILY_API_KEY", ""), repr=False)
     nebius_base_url: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"))
     # Reasoning shares the request's completion allowance.
     nebius_reasoning_effort: str = field(default_factory=lambda: os.environ.get("SIDEKICK_NEBIUS_REASONING_EFFORT", "low"))
