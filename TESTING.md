@@ -43,8 +43,12 @@ The recorded `evidence/bundle.json` must retain its exact bytes. `.gitattributes
 .venv\Scripts\python.exe -m pytest -q tests/test_investigation_records.py tests/test_scenario_proposals.py tests/test_compound_faults.py tests/test_fault_investigation.py
 .venv\Scripts\python.exe -m pytest -q tests/test_nebius_provider.py tests/test_deep_investigation.py
 .venv\Scripts\python.exe -m pytest -q tests/test_nemotron_controller.py tests/test_fault_investigation.py
+.venv\Scripts\python.exe -m pytest -q tests/test_investigation_findings.py tests/test_fault_profiles.py tests/test_adaptive_search.py tests/test_reduction.py tests/test_remedies.py
+.venv\Scripts\python.exe -m pytest -q tests/test_search_benchmark.py tests/test_investigations_api.py tests/test_remote_jobs.py tests/test_public_export.py tests/test_failure_injection.py
 .venv\Scripts\python.exe scripts/evaluate_deep.py --output output/deep-review-new
 ```
+
+`tests/test_failure_injection.py` runs one investigation through provider truncation, malformed and unknown-alias replies, network errors, lease loss and a process crash, and checks that earlier evidence, its finding and paid-call counters never change or reset. The investigation workbench browser tests are in `frontend/tests/fault-investigations.spec.ts`.
 
 The offline deep review needs a new output directory to preserve previous results and reviewer notes. See the [Nebius setup](docs/nebius-phase-1.md), [compound evaluation guide](docs/nebius-phase-2.md) and [engineer evaluation guide](docs/sidekick-engineer-evaluation.md) for those workflows.
 
@@ -56,8 +60,13 @@ docker build --target demo -t sidekick-memory .
 docker run -d --name sidekick-memory --memory=512m --memory-swap=512m sidekick-memory
 docker cp scripts/check_hosted_memory.py sidekick-memory:/tmp/check_hosted_memory.py
 docker exec sidekick-memory python /tmp/check_hosted_memory.py
+.venv\Scripts\python.exe scripts/worker_constraints.py
+docker build -f docker/worker.Dockerfile --build-arg PYTHON=<printed version> -t sidekick-worker .
+.venv\Scripts\python.exe scripts/check_worker_image.py
 ```
 
-The GitHub workflow runs backend, generated-contract, frontend, browser and hosted-memory checks. It does not deploy. Failed browser traces and reports are retained for seven days in the `browser-failure-diagnostics` artifact; inspect traces with `npx playwright show-trace <trace.zip>`.
+A worker only loads context packages made with the same Python version and scoring dependencies, so build its image from `worker_constraints.py`; `check_worker_image.py` confirms the container returns exactly the local result.
+
+The GitHub workflow runs backend, generated-contract, frontend, browser, worker-image and hosted-memory checks, all offline; paid provider checks only run through `check_nebius.py --live` or an explicit `--agent --allow-nebius` command. It does not deploy. Failed browser traces and reports are retained for seven days in the `browser-failure-diagnostics` artifact; inspect traces with `npx playwright show-trace <trace.zip>`.
 
 Automated checks establish software behavior on fixtures and synthetic data. Real-equipment reliability, deployment suitability and measured engineer usefulness require separate evaluation.

@@ -177,3 +177,17 @@ def test_cli_runs_through_remote_workers_only_with_transfer_consent(remote, caps
         assert cli.main([*command, "--allow-transfer"]) == 0
     assert json.loads(capsys.readouterr().out)["stop_reason"] == "completed"
     assert len(list((root / "outbox").glob("*.json"))) == 1
+
+
+def test_worker_constraints_pin_the_coordinator_versions(tmp_path, capsys):
+    import importlib.util
+    from app.experiments.validation import dependency_versions
+    spec = importlib.util.spec_from_file_location("constraints_cli", ROOT / "scripts/worker_constraints.py")
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    assert cli.main(["--output", str(tmp_path / "constraints.txt")]) == 0
+    lines = (tmp_path / "constraints.txt").read_text().splitlines()
+    versions = dependency_versions()
+    assert {f"{name}=={version}" for name, version in versions.items()} <= set(lines)
+    assert f"xgboost-cpu=={versions['xgboost']}" in lines
+    assert f"--build-arg PYTHON={sys.version_info.major}.{sys.version_info.minor}" in capsys.readouterr().out

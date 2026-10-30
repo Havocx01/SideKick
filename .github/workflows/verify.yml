@@ -48,6 +48,19 @@ jobs:
             frontend/playwright-report/
           if-no-files-found: ignore
           retention-days: 7
+  worker-image:
+    runs-on: ubuntu-latest
+    env:
+      SIDEKICK_MLFLOW: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r backend/requirements-train.txt
+      - run: python scripts/worker_constraints.py
+      - run: docker build -f docker/worker.Dockerfile --build-arg PYTHON=3.11 -t sidekick-worker .
+      - run: python scripts/check_worker_image.py
   hosted-memory:
     runs-on: ubuntu-latest
     steps:
