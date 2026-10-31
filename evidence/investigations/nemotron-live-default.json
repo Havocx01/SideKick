@@ -1,14 +1,15 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-30T08:27:40Z",
+  "generatedAt": "2026-10-30T16:39:52Z",
   "notice": "Aggregate development evidence. The objective, equipment identifiers, raw readings, fitted models and keys are excluded. The digest shows this file is unchanged, not who made it or that it may be disclosed.",
+  "demonstration": null,
   "context": {
-    "fingerprint": "f58bed14c1b7dd011adb69ab571405f729a23570ca820a756289101ab164da27",
+    "fingerprint": "a65d7933dca67ff93fe7d7d01cfd4f586448739d583201fa33c3dbf3450c4243",
     "configFingerprint": "d0e566c63bffcf09",
     "partition": "out_of_fold",
     "thresholds": {
       "age_baseline/age-probe": 69.0,
-      "logistic_regression/lr-probe": 0.46446488352649523
+      "logistic_regression/lr-probe": 0.38288789553811803
     },
     "policyFingerprint": "959c364b48739eca73e9da9493a141e959a4338078ff0fe28dd5152db9a122b3",
     "bounds": {
@@ -134,7 +135,7 @@
   "experiments": [
     {
       "ref": "result-1",
-      "scenarioId": "compound-v1-88d877cfa13f20bec174383c",
+      "scenarioId": "compound-v1-dc043a7e6b44e6f3b21958fa",
       "family": "temp_bearing:drift+vibration_rms:stuck",
       "status": "no_measured_failure",
       "evaluatedHistories": 22,
@@ -146,7 +147,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 15,
+      "changedHistories": 20,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -160,7 +161,7 @@
             "kind": "drift",
             "duration": "persistent",
             "sensor": "temp_bearing",
-            "onset_before_failure": 30,
+            "onset_before_failure": 60,
             "severity_sd": 2.5,
             "sign": -1,
             "ramp_cycles": 5,
@@ -171,7 +172,7 @@
             "kind": "stuck",
             "duration": "persistent",
             "sensor": "vibration_rms",
-            "onset_before_failure": 30,
+            "onset_before_failure": 60,
             "severity_sd": null,
             "sign": null,
             "ramp_cycles": null,
@@ -184,7 +185,58 @@
     },
     {
       "ref": "result-2",
-      "scenarioId": "compound-v1-f8b6e056c26dc85fb1e096e0",
+      "scenarioId": "compound-v1-d0164cf0e6a9d64bb458386d",
+      "family": "oil_particles:dropout+temp_bearing:drift",
+      "status": "no_measured_failure",
+      "evaluatedHistories": 22,
+      "expectedHistories": 22,
+      "coverage": 1.0,
+      "cleanDetection": 1.0,
+      "faultedDetection": 1.0,
+      "cleanBurden": 0.0,
+      "faultedBurden": 0.0007993605115907274,
+      "reasons": [],
+      "effects": [],
+      "changedHistories": 11,
+      "assumptions": [
+        "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
+        "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
+        "Bearing temperature, vibration and particle count share one condition-monitoring module. (prototype assumption)",
+        "Particle counts saturate or stop rather than drift. (prototype assumption)",
+        "Constant nameplate channels are excluded because corrupting them changes no readings. (prototype assumption)"
+      ],
+      "scenario": {
+        "version": 1,
+        "components": [
+          {
+            "kind": "dropout",
+            "duration": "transient",
+            "sensor": "oil_particles",
+            "onset_before_failure": 70,
+            "severity_sd": null,
+            "sign": null,
+            "ramp_cycles": null,
+            "length": 10,
+            "seed": null
+          },
+          {
+            "kind": "drift",
+            "duration": "persistent",
+            "sensor": "temp_bearing",
+            "onset_before_failure": 70,
+            "severity_sd": 2.5,
+            "sign": -1,
+            "ramp_cycles": 5,
+            "length": null,
+            "seed": null
+          }
+        ]
+      },
+      "chosenBy": "nemotron"
+    },
+    {
+      "ref": "result-3",
+      "scenarioId": "compound-v1-324a4b76b379f7d78a78cef2",
       "family": "flow_rate:stuck+pressure_out:drift",
       "status": "no_measured_failure",
       "evaluatedHistories": 22,
@@ -193,10 +245,10 @@
       "cleanDetection": 1.0,
       "faultedDetection": 1.0,
       "cleanBurden": 0.0,
-      "faultedBurden": 0.010458567980691875,
+      "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 16,
+      "changedHistories": 10,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -210,57 +262,6 @@
             "kind": "stuck",
             "duration": "persistent",
             "sensor": "flow_rate",
-            "onset_before_failure": 40,
-            "severity_sd": null,
-            "sign": null,
-            "ramp_cycles": null,
-            "length": null,
-            "seed": null
-          },
-          {
-            "kind": "drift",
-            "duration": "persistent",
-            "sensor": "pressure_out",
-            "onset_before_failure": 40,
-            "severity_sd": 2.0,
-            "sign": -1,
-            "ramp_cycles": 5,
-            "length": null,
-            "seed": null
-          }
-        ]
-      },
-      "chosenBy": "nemotron"
-    },
-    {
-      "ref": "result-3",
-      "scenarioId": "compound-v1-4a98ea4722199a80c27067df",
-      "family": "ambient_temp:dropout+temp_bearing:drift",
-      "status": "no_measured_failure",
-      "evaluatedHistories": 22,
-      "expectedHistories": 22,
-      "coverage": 1.0,
-      "cleanDetection": 1.0,
-      "faultedDetection": 1.0,
-      "cleanBurden": 0.0,
-      "faultedBurden": 0.0,
-      "reasons": [],
-      "effects": [],
-      "changedHistories": 18,
-      "assumptions": [
-        "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
-        "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
-        "Bearing temperature, vibration and particle count share one condition-monitoring module. (prototype assumption)",
-        "The ambient reference is only combined with bearing temperature and is not drift-tested. (prototype assumption)",
-        "Constant nameplate channels are excluded because corrupting them changes no readings. (prototype assumption)"
-      ],
-      "scenario": {
-        "version": 1,
-        "components": [
-          {
-            "kind": "dropout",
-            "duration": "persistent",
-            "sensor": "ambient_temp",
             "onset_before_failure": 70,
             "severity_sd": null,
             "sign": null,
@@ -271,7 +272,7 @@
           {
             "kind": "drift",
             "duration": "persistent",
-            "sensor": "temp_bearing",
+            "sensor": "pressure_out",
             "onset_before_failure": 70,
             "severity_sd": 2.0,
             "sign": -1,
@@ -291,7 +292,7 @@
     "modelStopReason": null,
     "callsUsed": 3,
     "reservedCompletionTokens": 15360,
-    "reportedCompletionTokens": 1083,
+    "reportedCompletionTokens": 1121,
     "model": "nvidia/nemotron-3-super-120b-a12b",
     "prompt": "nemotron-fault-search-v5",
     "reasoningEffort": "low",
@@ -305,7 +306,7 @@
       },
       {
         "proposal": 2,
-        "family": "flow_rate:stuck+pressure_out:drift",
+        "family": "oil_particles:dropout+temp_bearing:drift",
         "basedOn": [
           "result-1"
         ],
@@ -314,7 +315,7 @@
       },
       {
         "proposal": 3,
-        "family": "ambient_temp:dropout+temp_bearing:drift",
+        "family": "flow_rate:stuck+pressure_out:drift",
         "basedOn": [
           "result-1",
           "result-2"
@@ -326,6 +327,7 @@
   },
   "reductions": [],
   "remedies": [],
+  "validations": [],
   "reproduction": {
     "public": true,
     "steps": [
@@ -334,5 +336,5 @@
       "Compare each result's scenarioId and finding status with this file."
     ]
   },
-  "digest": "a60b1b3461b5361b964aa26a5ea31dfea5f5312ac85e20f5eee4fca8b92afe53"
+  "digest": "ec563393944cb2b1ef8232a413595425ffdc7d68e45e28e0983f1c3dce6d1a36"
 }

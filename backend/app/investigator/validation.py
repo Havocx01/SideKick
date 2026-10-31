@@ -11,6 +11,7 @@ from app.faults.scenarios import FaultCase
 from app.investigator.controller import controllerStatus
 from app.investigator.findings import classify, digest, loadCriterion, recordFindings
 from app.investigator.reduction import ensureTable as ensureReductions
+from app.investigator.remedies import cleanSummary
 from app.models.train import FoldFit, TrainingResult, fit_final
 from app.schemas import SplitAssignment
 
@@ -115,15 +116,16 @@ def assess(store, validation, evaluator, fresh) -> dict:
     contexts = {"original": freshContext(evaluator, fresh)}
     if procedure["remedy"]:
         contexts["remedy"] = freshContext(evaluator, fresh, {criterion.candidate: procedure["remedy"]["threshold"]})
-    clean = {label: context.cleanMetrics()[criterion.candidate] for label, context in contexts.items()}
+    clean = {label: cleanSummary(context.cleanMetrics()[criterion.candidate]) for label, context in contexts.items()}
     rows = []
     for case in procedure["cases"]:
         scenario = FaultCase.model_validate(case["scenario"])
-        rows.append({"label": case["label"], "scenarioId": case["scenarioId"], **{label: summary(classify(context.evaluate(scenario), criterion))
-            for label, context in contexts.items()}})
-    frozen |= {"status": "assessed", "assessedAt": time.time(), "freshHistories": len(identities), "note": NOTE,
-        "clean": {label: {"detection": item.detection_fraction, "alarmBurden": item.early_alarm_burden, "medianLead": item.median_lead_time,
-            "histories": item.engines} for label, item in clean.items()}, "cases": rows, "elapsedSeconds": round(time.monotonic() - started, 3)}
+        row = {"label": case["label"], "scenarioId": case["scenarioId"]}
+        for label, context in contexts.items():
+            row[label] = summary(classify(context.evaluate(scenario), criterion))
+        rows.append(row)
+    frozen |= {"status": "assessed", "assessedAt": time.time(), "freshHistories": len(identities), "note": NOTE, "clean": clean, "cases": rows,
+        "elapsedSeconds": round(time.monotonic() - started, 3)}
     with store.transaction() as db:
         db.execute("UPDATE validations SET status='assessed', payload=? WHERE id=?", (json.dumps(frozen, sort_keys=True), validation))
     return frozen

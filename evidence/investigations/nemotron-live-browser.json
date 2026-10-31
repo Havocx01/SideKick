@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-30T15:07:14Z",
+  "generatedAt": "2026-10-30T17:11:35Z",
   "notice": "Aggregate development evidence. The objective, equipment identifiers, raw readings, fitted models and keys are excluded. The digest shows this file is unchanged, not who made it or that it may be disclosed.",
   "demonstration": {
     "threshold": 0.95,
     "note": "Demonstration setting: this warning threshold is deliberately fragile so that faults cost warnings. Do not read these findings as properties of a recommended model."
   },
   "context": {
-    "fingerprint": "7709f421eba37c1b1d2d14c33e44915f61e4c8015a7cb0c43e661484b20ae3a9",
+    "fingerprint": "2022d59c45908441dc8652c3ebce45aa0fb1b86c2c9d1a129b69518ac23ad586",
     "configFingerprint": "d0e566c63bffcf09",
     "partition": "out_of_fold",
     "thresholds": {
@@ -125,12 +125,12 @@
   },
   "budget": {
     "maxExperiments": 12,
-    "experimentsUsed": 7,
+    "experimentsUsed": 6,
     "failures": 0,
     "stopReason": "completed"
   },
   "proposals": {
-    "total": 7,
+    "total": 6,
     "rejected": 0,
     "duplicates": 0
   },
@@ -149,7 +149,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 0,
+      "changedHistories": 5,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -188,7 +188,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 9,
+      "changedHistories": 12,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -227,7 +227,7 @@
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [],
-      "changedHistories": 1,
+      "changedHistories": 2,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -261,18 +261,14 @@
       "expectedHistories": 22,
       "coverage": 1.0,
       "cleanDetection": 1.0,
-      "faultedDetection": 0.36363636363636365,
+      "faultedDetection": 0.8181818181818182,
       "cleanBurden": 0.0,
       "faultedBurden": 0.0,
       "reasons": [],
       "effects": [
         {
-          "kind": "missed_warnings",
-          "histories": 6
-        },
-        {
           "kind": "late_warnings",
-          "histories": 8
+          "histories": 4
         }
       ],
       "changedHistories": 22,
@@ -364,19 +360,24 @@
     },
     {
       "ref": "result-6",
-      "scenarioId": "compound-v1-6cd60c7e1289d63112f49834",
+      "scenarioId": "compound-v1-c0317f5bffc365f6d3e3770f",
       "family": "ambient_temp:stuck+temp_bearing:drift",
-      "status": "no_measured_failure",
+      "status": "measured_failure",
       "evaluatedHistories": 22,
       "expectedHistories": 22,
       "coverage": 1.0,
       "cleanDetection": 1.0,
-      "faultedDetection": 1.0,
+      "faultedDetection": 0.9545454545454546,
       "cleanBurden": 0.0,
       "faultedBurden": 0.0,
       "reasons": [],
-      "effects": [],
-      "changedHistories": 22,
+      "effects": [
+        {
+          "kind": "late_warnings",
+          "histories": 1
+        }
+      ],
+      "changedHistories": 17,
       "assumptions": [
         "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
         "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
@@ -391,7 +392,7 @@
             "kind": "stuck",
             "duration": "persistent",
             "sensor": "ambient_temp",
-            "onset_before_failure": 70,
+            "onset_before_failure": 30,
             "severity_sd": null,
             "sign": null,
             "ramp_cycles": null,
@@ -402,60 +403,9 @@
             "kind": "drift",
             "duration": "persistent",
             "sensor": "temp_bearing",
-            "onset_before_failure": 70,
-            "severity_sd": 2.5,
-            "sign": -1,
-            "ramp_cycles": 5,
-            "length": null,
-            "seed": null
-          }
-        ]
-      },
-      "chosenBy": "nemotron"
-    },
-    {
-      "ref": "result-7",
-      "scenarioId": "compound-v1-7e303a95d5aafe9898bcb55e",
-      "family": "oil_particles:stuck+vibration_rms:drift",
-      "status": "no_measured_failure",
-      "evaluatedHistories": 22,
-      "expectedHistories": 22,
-      "coverage": 1.0,
-      "cleanDetection": 1.0,
-      "faultedDetection": 1.0,
-      "cleanBurden": 0.0,
-      "faultedBurden": 0.0,
-      "reasons": [],
-      "effects": [],
-      "changedHistories": 19,
-      "assumptions": [
-        "Channels on one acquisition module or I/O card may fail together; other combinations are not tested. (prototype assumption)",
-        "Faults on different channels are independent corruptions of clean readings; same-channel overlap is not modeled. (prototype assumption)",
-        "Bearing temperature, vibration and particle count share one condition-monitoring module. (prototype assumption)",
-        "Particle counts saturate or stop rather than drift. (prototype assumption)",
-        "Constant nameplate channels are excluded because corrupting them changes no readings. (prototype assumption)"
-      ],
-      "scenario": {
-        "version": 1,
-        "components": [
-          {
-            "kind": "stuck",
-            "duration": "persistent",
-            "sensor": "oil_particles",
-            "onset_before_failure": 50,
-            "severity_sd": null,
-            "sign": null,
-            "ramp_cycles": null,
-            "length": null,
-            "seed": null
-          },
-          {
-            "kind": "drift",
-            "duration": "persistent",
-            "sensor": "vibration_rms",
-            "onset_before_failure": 50,
+            "onset_before_failure": 30,
             "severity_sd": 2.0,
-            "sign": 1,
+            "sign": -1,
             "ramp_cycles": 5,
             "length": null,
             "seed": null
@@ -467,14 +417,15 @@
   ],
   "executionErrors": [],
   "discoveryFamilies": [
+    "ambient_temp:stuck+temp_bearing:drift",
     "oil_particles:stuck+vibration_rms:stuck"
   ],
   "controller": {
     "stopReason": "token_limit",
     "modelStopReason": null,
-    "callsUsed": 3,
-    "reservedCompletionTokens": 15360,
-    "reportedCompletionTokens": 1510,
+    "callsUsed": 1,
+    "reservedCompletionTokens": 5120,
+    "reportedCompletionTokens": 436,
     "model": "nvidia/nemotron-3-super-120b-a12b",
     "prompt": "nemotron-fault-search-v5",
     "reasoningEffort": "low",
@@ -487,20 +438,6 @@
           "result-2",
           "result-3",
           "result-4"
-        ],
-        "basisRecorded": true,
-        "newFamily": true
-      },
-      {
-        "proposal": 7,
-        "family": "oil_particles:stuck+vibration_rms:drift",
-        "basedOn": [
-          "result-1",
-          "result-2",
-          "result-3",
-          "result-4",
-          "result-5",
-          "result-6"
         ],
         "basisRecorded": true,
         "newFamily": true
@@ -543,7 +480,7 @@
             "duration": "persistent",
             "kind": "stuck",
             "length": null,
-            "onset_before_failure": 20,
+            "onset_before_failure": 30,
             "ramp_cycles": null,
             "seed": null,
             "sensor": "oil_particles",
@@ -554,7 +491,7 @@
             "duration": "persistent",
             "kind": "stuck",
             "length": null,
-            "onset_before_failure": 30,
+            "onset_before_failure": 60,
             "ramp_cycles": null,
             "seed": null,
             "sensor": "vibration_rms",
@@ -570,7 +507,7 @@
         "Minimal on the tested grid for: oil_particles onset_before_failure, vibration_rms onset_before_failure.",
         "Not a proof of a global minimum."
       ],
-      "experiments": 7,
+      "experiments": 10,
       "steps": [
         {
           "change": "reproduce original",
@@ -602,6 +539,13 @@
         },
         {
           "change": "set oil_particles onset_before_failure to 20",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set oil_particles onset_before_failure to 30",
           "status": "measured_failure",
           "accepted": true,
           "evaluated": 22,
@@ -623,6 +567,156 @@
         },
         {
           "change": "set vibration_rms onset_before_failure to 30",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set vibration_rms onset_before_failure to 40",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set vibration_rms onset_before_failure to 50",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        }
+      ]
+    },
+    {
+      "status": "complete",
+      "original": {
+        "components": [
+          {
+            "duration": "persistent",
+            "kind": "stuck",
+            "length": null,
+            "onset_before_failure": 30,
+            "ramp_cycles": null,
+            "seed": null,
+            "sensor": "ambient_temp",
+            "severity_sd": null,
+            "sign": null
+          },
+          {
+            "duration": "persistent",
+            "kind": "drift",
+            "length": null,
+            "onset_before_failure": 30,
+            "ramp_cycles": 5,
+            "seed": null,
+            "sensor": "temp_bearing",
+            "severity_sd": 2.0,
+            "sign": -1
+          }
+        ],
+        "version": 1
+      },
+      "final": {
+        "components": [
+          {
+            "duration": "persistent",
+            "kind": "stuck",
+            "length": null,
+            "onset_before_failure": 20,
+            "ramp_cycles": null,
+            "seed": null,
+            "sensor": "ambient_temp",
+            "severity_sd": null,
+            "sign": null
+          },
+          {
+            "duration": "persistent",
+            "kind": "drift",
+            "length": null,
+            "onset_before_failure": 20,
+            "ramp_cycles": 5,
+            "seed": null,
+            "sensor": "temp_bearing",
+            "severity_sd": 2.0,
+            "sign": -1
+          }
+        ],
+        "version": 1
+      },
+      "family": "ambient_temp:stuck+temp_bearing:drift",
+      "claims": [
+        "Component-minimal under tested single-component removals.",
+        "Minimal on the tested grid for: ambient_temp onset_before_failure, temp_bearing severity_sd, temp_bearing onset_before_failure.",
+        "Not a proof of a global minimum."
+      ],
+      "experiments": 9,
+      "steps": [
+        {
+          "change": "reproduce original",
+          "status": "measured_failure",
+          "accepted": true,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "remove ambient_temp",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "remove temp_bearing",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set ambient_temp onset_before_failure to 10",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set ambient_temp onset_before_failure to 20",
+          "status": "measured_failure",
+          "accepted": true,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set temp_bearing severity_sd to 0.5",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set temp_bearing severity_sd to 1.0",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set temp_bearing severity_sd to 1.5",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set temp_bearing onset_before_failure to 10",
+          "status": "no_measured_failure",
+          "accepted": false,
+          "evaluated": 22,
+          "cohortChanged": false
+        },
+        {
+          "change": "set temp_bearing onset_before_failure to 20",
           "status": "measured_failure",
           "accepted": true,
           "evaluated": 22,
@@ -635,30 +729,30 @@
     {
       "kind": "threshold",
       "threshold": 0.5,
-      "improved": 1,
+      "improved": 2,
       "degraded": 0,
-      "stillFailing": 1,
+      "stillFailing": 0,
       "meetsCriteria": true,
       "clean": {
         "original": {
           "alarmBurden": 0.0,
           "detection": 1.0,
           "histories": 22,
-          "medianLead": 15.0
+          "medianLead": 17.0
         },
         "remedy": {
           "alarmBurden": 0.0,
           "detection": 1.0,
           "histories": 22,
-          "medianLead": 20.5
+          "medianLead": 19.0
         }
       },
       "cost": {
-        "evaluateSeconds": 0.156,
-        "prepareSeconds": 0.047
+        "evaluateSeconds": 0.515,
+        "prepareSeconds": 0.204
       },
-      "originalContext": "7709f421eba37c1b1d2d14c33e44915f61e4c8015a7cb0c43e661484b20ae3a9",
-      "remedyContext": "926c4fb873d13a6b1cb790cda32ef259d092715b8c43278aaaaf328bb97d0bbf",
+      "originalContext": "2022d59c45908441dc8652c3ebce45aa0fb1b86c2c9d1a129b69518ac23ad586",
+      "remedyContext": "1fb1ef934aae1985811772bb3324a1f16a20c9c93218a8d25172afbf6ce348b3",
       "cases": [
         {
           "label": "tested:temp_bearing:stuck",
@@ -680,7 +774,7 @@
             "exclusions": 0,
             "faultedBurden": 0.0,
             "faultedDetection": 1.0,
-            "faultedMedianLead": 20.5,
+            "faultedMedianLead": 19.0,
             "status": "no_measured_failure"
           },
           "matchedCohort": true,
@@ -690,33 +784,6 @@
         {
           "label": "tested:pressure_out:stuck",
           "scenarioId": "single-v1-c1549c2fd8ba00ef397def58",
-          "original": {
-            "cleanBurden": 0.0,
-            "cleanDetection": 1.0,
-            "evaluated": 22,
-            "exclusions": 0,
-            "faultedBurden": 0.0,
-            "faultedDetection": 1.0,
-            "faultedMedianLead": 14.0,
-            "status": "no_measured_failure"
-          },
-          "remedy": {
-            "cleanBurden": 0.0,
-            "cleanDetection": 1.0,
-            "evaluated": 22,
-            "exclusions": 0,
-            "faultedBurden": 0.0,
-            "faultedDetection": 1.0,
-            "faultedMedianLead": 20.5,
-            "status": "no_measured_failure"
-          },
-          "matchedCohort": true,
-          "improved": false,
-          "degraded": false
-        },
-        {
-          "label": "tested:current_draw:stuck",
-          "scenarioId": "single-v1-1b374ab5fcd15bf7c115f652",
           "original": {
             "cleanBurden": 0.0,
             "cleanDetection": 1.0,
@@ -734,7 +801,34 @@
             "exclusions": 0,
             "faultedBurden": 0.0,
             "faultedDetection": 1.0,
-            "faultedMedianLead": 20.5,
+            "faultedMedianLead": 19.0,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": false,
+          "degraded": false
+        },
+        {
+          "label": "tested:current_draw:stuck",
+          "scenarioId": "single-v1-1b374ab5fcd15bf7c115f652",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 16.5,
+            "status": "no_measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 19.0,
             "status": "no_measured_failure"
           },
           "matchedCohort": true,
@@ -750,8 +844,8 @@
             "evaluated": 22,
             "exclusions": 0,
             "faultedBurden": 0.0,
-            "faultedDetection": 0.36363636363636365,
-            "faultedMedianLead": 7.5,
+            "faultedDetection": 0.8181818181818182,
+            "faultedMedianLead": 8.0,
             "status": "measured_failure"
           },
           "remedy": {
@@ -760,12 +854,12 @@
             "evaluated": 22,
             "exclusions": 0,
             "faultedBurden": 0.0,
-            "faultedDetection": 0.8181818181818182,
-            "faultedMedianLead": 9.5,
-            "status": "measured_failure"
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 12.5,
+            "status": "no_measured_failure"
           },
           "matchedCohort": true,
-          "improved": false,
+          "improved": true,
           "degraded": false
         },
         {
@@ -778,7 +872,7 @@
             "exclusions": 0,
             "faultedBurden": 0.0,
             "faultedDetection": 1.0,
-            "faultedMedianLead": 11.5,
+            "faultedMedianLead": 10.0,
             "status": "no_measured_failure"
           },
           "remedy": {
@@ -788,61 +882,7 @@
             "exclusions": 0,
             "faultedBurden": 0.0,
             "faultedDetection": 1.0,
-            "faultedMedianLead": 15.5,
-            "status": "no_measured_failure"
-          },
-          "matchedCohort": true,
-          "improved": false,
-          "degraded": false
-        },
-        {
-          "label": "tested:ambient_temp:stuck+temp_bearing:drift",
-          "scenarioId": "compound-v1-6cd60c7e1289d63112f49834",
-          "original": {
-            "cleanBurden": 0.0,
-            "cleanDetection": 1.0,
-            "evaluated": 22,
-            "exclusions": 0,
-            "faultedBurden": 0.0,
-            "faultedDetection": 1.0,
-            "faultedMedianLead": 12.0,
-            "status": "no_measured_failure"
-          },
-          "remedy": {
-            "cleanBurden": 0.0,
-            "cleanDetection": 1.0,
-            "evaluated": 22,
-            "exclusions": 0,
-            "faultedBurden": 0.0,
-            "faultedDetection": 1.0,
-            "faultedMedianLead": 17.0,
-            "status": "no_measured_failure"
-          },
-          "matchedCohort": true,
-          "improved": false,
-          "degraded": false
-        },
-        {
-          "label": "tested:oil_particles:stuck+vibration_rms:drift",
-          "scenarioId": "compound-v1-7e303a95d5aafe9898bcb55e",
-          "original": {
-            "cleanBurden": 0.0,
-            "cleanDetection": 1.0,
-            "evaluated": 22,
-            "exclusions": 0,
-            "faultedBurden": 0.0,
-            "faultedDetection": 1.0,
-            "faultedMedianLead": 17.5,
-            "status": "no_measured_failure"
-          },
-          "remedy": {
-            "cleanBurden": 0.0,
-            "cleanDetection": 1.0,
-            "evaluated": 22,
-            "exclusions": 0,
-            "faultedBurden": 0.02333065164923572,
-            "faultedDetection": 1.0,
-            "faultedMedianLead": 24.0,
+            "faultedMedianLead": 14.5,
             "status": "no_measured_failure"
           },
           "matchedCohort": true,
@@ -851,7 +891,7 @@
         },
         {
           "label": "reduced:oil_particles:stuck+vibration_rms:stuck",
-          "scenarioId": "compound-v1-700b309d9e001ce8124b82f8",
+          "scenarioId": "compound-v1-293cb54dc07a61a286b37b8c",
           "original": {
             "cleanBurden": 0.0,
             "cleanDetection": 1.0,
@@ -859,7 +899,200 @@
             "exclusions": 0,
             "faultedBurden": 0.0,
             "faultedDetection": 0.9545454545454546,
-            "faultedMedianLead": 9.0,
+            "faultedMedianLead": 8.0,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 13.0,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": true,
+          "degraded": false
+        }
+      ],
+      "note": "Development-only comparison. The remedy was chosen with these cases, so it needs fresh validation; no deployed model was changed."
+    },
+    {
+      "kind": "threshold",
+      "threshold": 0.5,
+      "improved": 4,
+      "degraded": 0,
+      "stillFailing": 0,
+      "meetsCriteria": true,
+      "clean": {
+        "original": {
+          "alarmBurden": 0.0,
+          "detection": 1.0,
+          "histories": 22,
+          "medianLead": 17.0
+        },
+        "remedy": {
+          "alarmBurden": 0.0,
+          "detection": 1.0,
+          "histories": 22,
+          "medianLead": 19.0
+        }
+      },
+      "cost": {
+        "evaluateSeconds": 0.312,
+        "prepareSeconds": 0.11
+      },
+      "originalContext": "2022d59c45908441dc8652c3ebce45aa0fb1b86c2c9d1a129b69518ac23ad586",
+      "remedyContext": "1fb1ef934aae1985811772bb3324a1f16a20c9c93218a8d25172afbf6ce348b3",
+      "cases": [
+        {
+          "label": "tested:temp_bearing:stuck",
+          "scenarioId": "single-v1-9db48af644916b75cc5e03bb",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 15.0,
+            "status": "no_measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 19.0,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": false,
+          "degraded": false
+        },
+        {
+          "label": "tested:pressure_out:stuck",
+          "scenarioId": "single-v1-c1549c2fd8ba00ef397def58",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 14.5,
+            "status": "no_measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 19.0,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": false,
+          "degraded": false
+        },
+        {
+          "label": "tested:current_draw:stuck",
+          "scenarioId": "single-v1-1b374ab5fcd15bf7c115f652",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 16.5,
+            "status": "no_measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 19.0,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": false,
+          "degraded": false
+        },
+        {
+          "label": "discovered:oil_particles:stuck+vibration_rms:stuck",
+          "scenarioId": "compound-v1-ccb93bfbefba9614f9660903",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 0.8181818181818182,
+            "faultedMedianLead": 8.0,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 12.5,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": true,
+          "degraded": false
+        },
+        {
+          "label": "tested:flow_rate:dropout+pressure_out:drift",
+          "scenarioId": "compound-v1-87c0a0f32244b88f65157aba",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 10.0,
+            "status": "no_measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 14.5,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": false,
+          "degraded": false
+        },
+        {
+          "label": "discovered:ambient_temp:stuck+temp_bearing:drift",
+          "scenarioId": "compound-v1-c0317f5bffc365f6d3e3770f",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 0.9545454545454546,
+            "faultedMedianLead": 11.0,
             "status": "measured_failure"
           },
           "remedy": {
@@ -875,18 +1108,260 @@
           "matchedCohort": true,
           "improved": true,
           "degraded": false
+        },
+        {
+          "label": "reduced:oil_particles:stuck+vibration_rms:stuck",
+          "scenarioId": "compound-v1-293cb54dc07a61a286b37b8c",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 0.9545454545454546,
+            "faultedMedianLead": 8.0,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 13.0,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": true,
+          "degraded": false
+        },
+        {
+          "label": "reduced:ambient_temp:stuck+temp_bearing:drift",
+          "scenarioId": "compound-v1-8fe0f524500192ef4deac672",
+          "original": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 0.9545454545454546,
+            "faultedMedianLead": 13.0,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanBurden": 0.0,
+            "cleanDetection": 1.0,
+            "evaluated": 22,
+            "exclusions": 0,
+            "faultedBurden": 0.0,
+            "faultedDetection": 1.0,
+            "faultedMedianLead": 17.5,
+            "status": "no_measured_failure"
+          },
+          "matchedCohort": true,
+          "improved": true,
+          "degraded": false
         }
       ],
       "note": "Development-only comparison. The remedy was chosen with these cases, so it needs fresh validation; no deployed model was changed."
     }
   ],
+  "validations": [
+    {
+      "status": "assessed",
+      "procedureDigest": "ab58c0fae4d3825963e85a9bec4a0c60be66961f7d42b8ad63782e273b177d1d",
+      "freshHistories": 12,
+      "clean": {
+        "original": {
+          "alarmBurden": 0.0,
+          "detection": 1.0,
+          "histories": 12,
+          "medianLead": 16.5
+        },
+        "remedy": {
+          "alarmBurden": 0.0014005602240896359,
+          "detection": 1.0,
+          "histories": 12,
+          "medianLead": 20.0
+        }
+      },
+      "cases": [
+        {
+          "label": "reduced:oil_particles:stuck+vibration_rms:stuck",
+          "original": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.25,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.75,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "scenarioId": "compound-v1-293cb54dc07a61a286b37b8c"
+        },
+        {
+          "label": "discovered:oil_particles:stuck+vibration_rms:stuck",
+          "original": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.16666666666666666,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.75,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "scenarioId": "compound-v1-ccb93bfbefba9614f9660903"
+        }
+      ],
+      "note": "Validation on histories outside the development context. The procedure was frozen before these histories were read; changing it after reading the results needs another set of fresh histories for a new independent claim.",
+      "remedy": {
+        "kind": "threshold",
+        "threshold": 0.5
+      },
+      "frozenCases": 2
+    },
+    {
+      "status": "assessed",
+      "procedureDigest": "b965441db9127a32a5704b3093bfd185f667219c3373dd46c2aec7def15149a1",
+      "freshHistories": 12,
+      "clean": {
+        "original": {
+          "alarmBurden": 0.0,
+          "detection": 1.0,
+          "histories": 12,
+          "medianLead": 17.0
+        },
+        "remedy": {
+          "alarmBurden": 0.0,
+          "detection": 1.0,
+          "histories": 12,
+          "medianLead": 20.5
+        }
+      },
+      "cases": [
+        {
+          "label": "reduced:oil_particles:stuck+vibration_rms:stuck",
+          "original": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.3333333333333333,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.9166666666666666,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "scenarioId": "compound-v1-293cb54dc07a61a286b37b8c"
+        },
+        {
+          "label": "reduced:ambient_temp:stuck+temp_bearing:drift",
+          "original": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 1.0,
+            "reproduced": false,
+            "status": "no_measured_failure"
+          },
+          "remedy": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 1.0,
+            "reproduced": false,
+            "status": "no_measured_failure"
+          },
+          "scenarioId": "compound-v1-8fe0f524500192ef4deac672"
+        },
+        {
+          "label": "discovered:ambient_temp:stuck+temp_bearing:drift",
+          "original": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 1.0,
+            "reproduced": false,
+            "status": "no_measured_failure"
+          },
+          "remedy": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 1.0,
+            "reproduced": false,
+            "status": "no_measured_failure"
+          },
+          "scenarioId": "compound-v1-c0317f5bffc365f6d3e3770f"
+        },
+        {
+          "label": "discovered:oil_particles:stuck+vibration_rms:stuck",
+          "original": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.3333333333333333,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "remedy": {
+            "cleanDetection": 1.0,
+            "coverage": 1.0,
+            "evaluated": 12,
+            "expected": 12,
+            "faultedDetection": 0.5833333333333334,
+            "reproduced": true,
+            "status": "measured_failure"
+          },
+          "scenarioId": "compound-v1-ccb93bfbefba9614f9660903"
+        }
+      ],
+      "note": "Validation on histories outside the development context. The procedure was frozen before these histories were read; changing it after reading the results needs another set of fresh histories for a new independent claim.",
+      "remedy": {
+        "kind": "threshold",
+        "threshold": 0.5
+      },
+      "frozenCases": 4
+    }
+  ],
   "reproduction": {
     "public": true,
     "steps": [
-      "python scripts/evaluate_fault_scenarios.py --profile synthetic-rotating-v1 --output artifacts/investigations/contexts/demo-fragile-threshold-2f1f76ec",
+      "python scripts/evaluate_fault_scenarios.py --profile synthetic-rotating-v1 --output artifacts/investigations/contexts/demo-fragile-threshold-5a9f3c08",
       "Create an investigation with the criterion above and the listed scenarios as proposals, then run it.",
       "Compare each result's scenarioId and finding status with this file."
     ]
   },
-  "digest": "03d5c31954b5a76eab84f06bd1d61093a90bdd1f7cad0dafbfea0a3c1d8cbffb"
+  "digest": "190cb03fc70402836f0bf1d28af8d7b1c5d8b69e5cd1cbbe0affccc0eff4458d"
 }

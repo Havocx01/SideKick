@@ -147,7 +147,7 @@ test("a run is started explicitly, polled to completion and its finding can be i
   await expect(card).toContainText("27 percentage points lower");
   await expect(card).toContainText("22 of 22");
   await card.getByRole("button", { name: "Timing, affected histories, and assumptions" }).click();
-  await card.getByText("1 histories with recorded changes").click();
+  await card.getByText("1 history with recorded changes").click();
   await expect(card.getByRole("cell", { name: "SYN-001" })).toBeVisible();
   await card.getByText("Profile assumptions").click();
   await expect(card).toContainText("(prototype assumption)");
@@ -261,7 +261,8 @@ test("the hosted site shows recorded runs, labelled, and offers nothing that sta
   const evidence = { generatedAt: "2026-10-30T03:40:00Z", digest: "f".repeat(64), demonstration: { threshold: 0.95, note: "Demonstration setting: deliberately fragile." },
     controller: { model: "nvidia/nemotron-3-super-120b-a12b", prompt: "nemotron-fault-search-v5", callsUsed: 3, reservedCompletionTokens: 15360, reportedCompletionTokens: 1510 },
     experiments: [{ ref: "result-1", family: failure.family, status: "measured_failure", chosenBy: "supplied", evaluatedHistories: 22, expectedHistories: 22, cleanDetection: 1, faultedDetection: 0.36 },
-      { ref: "result-2", family: "oil_particles:stuck+vibration_rms:drift", status: "no_measured_failure", chosenBy: "nemotron", evaluatedHistories: 22, expectedHistories: 22, cleanDetection: 1, faultedDetection: 1 }],
+      { ref: "result-2", family: "oil_particles:stuck+vibration_rms:drift", status: "no_measured_failure", chosenBy: "nemotron", evaluatedHistories: 22, expectedHistories: 22, cleanDetection: 1, faultedDetection: 1 },
+      { ref: "result-3", family: "ambient_temp:stuck+temp_bearing:drift", status: "measured_failure", chosenBy: "nemotron", evaluatedHistories: 22, expectedHistories: 22, cleanDetection: 1, faultedDetection: 21 / 22 }],
     reductions: [{ status: "complete", family: failure.family, claims: ["Not a proof of a global minimum."] }],
     remedies: [{ threshold: 0.5, improved: 1, degraded: 0, stillFailing: 1 }],
     validations: [{ status: "assessed", freshHistories: 12, cases: [{ label: `discovered:${failure.family}`, original: { status: "measured_failure" } }] }] };
@@ -270,15 +271,19 @@ test("the hosted site shows recorded runs, labelled, and offers nothing that sta
   const calls: string[] = [];
   await page.route("**/api/investigations**", route => {
     calls.push(new URL(route.request().url()).pathname);
-    return route.fulfill({ json: [{ name: "nemotron-live-demo", evidence }] });
+    return route.fulfill({ json: [{ name: "nemotron-live-browser", evidence }] });
   });
   await page.goto("/investigations");
   await expect(page.getByRole("heading", { name: "Run investigations locally" })).toBeVisible();
-  await page.getByRole("button", { name: "All recorded tests (2)", exact: false }).click();
-  const run = page.getByRole("table", { name: "Recorded experiments: nemotron-live-demo" });
+  await expect(page.getByRole("heading", { name: "A sensor failure proposed by Nemotron", exact: true })).toBeVisible();
+  await expect(page.getByRole("figure").first()).toContainText("95%");
+  await expect(page.getByText("This case was proposed by Nemotron.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "All recorded tests (3)", exact: false }).click();
+  const run = page.getByRole("table", { name: "Recorded experiments: nemotron-live-browser" });
   await expect(run).toContainText("Nemotron");
   await expect(run).toContainText("100% → 36%");
   await expect(page.getByText("Recorded, not live")).toBeVisible();
+  await expect(page.locator(".callout").filter({ hasText: "Demonstration setting" })).toContainText(/Deliberately fragile\./);
   await page.getByRole("button", { name: "Model usage and record details" }).click();
   await expect(page.getByText("3 calls: 1510 reported completion tokens within a reserved ceiling of 15360")).toBeVisible();
   await expect(page.getByText("1 improved, 0 degraded, 1 still failing")).toBeVisible();
@@ -298,6 +303,20 @@ test("a recorded incomplete result never claims there was no measured failure", 
   await expect(page.getByRole("heading", { name: "Inconclusive", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "No measured failure in this test", exact: true })).toHaveCount(0);
   await expect(page.getByText("3 of 22 machine histories evaluated.", { exact: false })).toBeVisible();
+});
+
+test("a failed action deep in the page is reported where the user can see it", async ({ page }) => {
+  await fixture(page, finished());
+  await page.route("**/replay", route => route.fulfill({ status: 403, json: { detail: "Replay needs the context this investigation used." } }));
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto("/investigations/inv-1");
+  const card = page.getByRole("article", { name: /Measured failure/ });
+  await card.getByRole("button", { name: "Replay" }).click();
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Replay needs the context this investigation used.");
+  await expect(alert).toBeInViewport();
+  await alert.getByRole("button", { name: "Dismiss" }).click();
+  await expect(alert).toHaveCount(0);
 });
 
 test("a failed poll keeps saved results visible and refresh only reads the existing investigation", async ({ page }) => {

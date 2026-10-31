@@ -26,7 +26,7 @@ For a prefilled demonstration with a failure, reduction and remedy comparison, y
 .venv\Scripts\python.exe scripts/demo_investigation.py
 ```
 
-Then open **Investigations** and select the saved concern beginning **Demo: find sensor faults**. The command trains a synthetic fixture, evaluates supplied cases, reproduces and reduces a failure, compares a threshold remedy, assesses a frozen procedure on fresh synthetic histories and exports public evidence. It makes no provider calls. Its 0.95 warning threshold is deliberately fragile so the demonstration contains a failure; it is not a recommended setting.
+Then open **Investigations** and select the saved concern beginning **Demo: find sensor faults**. The command trains a synthetic fixture, evaluates supplied cases, reproduces and reduces a failure, compares a threshold remedy, assesses a frozen procedure on fresh synthetic histories and exports public evidence. It makes no provider calls. Its 0.95 warning threshold is deliberately fragile so the demonstration contains a failure; it is not a recommended setting. With the Nebius key in `.env`, add `--allow-nebius` to let Nemotron propose further cases within 4 calls and 16,384 completion tokens.
 
 ## Investigation workflow
 
@@ -62,13 +62,13 @@ Token Factory is the default and only live model provider. No OpenAI account or 
 
 ## Recorded results and limits
 
-These are historical synthetic results tied to their saved fitted contexts, not guarantees for a newly trained model:
+These synthetic results are tied to their saved fitted contexts and recorded code revisions. They are historical evidence, not guarantees for a newly prepared model:
 
 | Recorded evaluation | Result |
 | --- | --- |
-| [Live Nemotron investigation](evidence/investigations/nemotron-live-recorded.json) | Three accepted proposals, each evaluated on 22/22 histories. Later proposals referenced earlier results. No qualifying failure; 1,083 reported completion tokens. |
-| [Supplied compound-fault demonstration](evidence/investigations/compound-demo-recorded.json) | At the deliberately fragile 0.95 threshold, stuck vibration and oil-particle channels reduced useful warnings from 22/22 to 8/22. The case replayed and was reduced. It was supplied, not discovered by Nemotron. |
-| [Fresh synthetic assessment](evidence/investigations/fresh-validation-recorded.json) | On 12 fresh histories, a 0.5 threshold remedy changed reduced-case useful warnings from 8/12 to 12/12. The stronger original case improved from 0/12 to 5/12 and still failed. |
+| [Nemotron on the default context](evidence/investigations/nemotron-live-default.json) | Three accepted proposals, with later proposals citing earlier results, each evaluated on 22/22 histories. No qualifying failure; 1,121 reported completion tokens. |
+| [A failure Nemotron chose](evidence/investigations/nemotron-live-browser.json) | Started from the browser at the deliberately fragile 0.95 threshold. Stuck ambient temperature with bearing-temperature drift cost 1 of 22 useful warnings; it replayed, reduced and was resolved by a 0.5 threshold, but did not reproduce on 12 fresh histories. |
+| [Supplied compound-fault demonstration](evidence/investigations/nemotron-live-demo.json) | Stuck vibration and oil-particle channels reduced useful warnings from 22/22 to 18/22. It replayed, reduced and was resolved by a 0.5 threshold in development, but both it and its reduction still failed on 12 fresh histories. Supplied, not chosen by Nemotron. |
 | [Automatically selected thresholds](evidence/investigations/synthetic-recorded.json) | None of six supplied cases met the failure criterion. |
 
 The project includes fixed, random, hill-climbing and recorded-Nemotron search comparisons. The available live comparison does not establish that Nemotron outperforms simpler search.

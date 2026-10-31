@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, Download, FlaskConical } from "lucide-react";
 import { Input } from "@/components/arc/input/input";
@@ -16,6 +17,7 @@ import { RollingNumber } from "../components/cult/RollingNumber";
 import styles from "./investigations.module.css";
 
 const errorText = (error: unknown) => error instanceof ApiError ? error.detail || error.message : error instanceof Error ? error.message : "Request failed. Try again.";
+const histories = (count: number) => `${count} ${count === 1 ? "history" : "histories"}`;
 const requestId = () => crypto.randomUUID().replace(/-/g, "");
 
 const stops: Record<string, [string, Tone]> = {
@@ -65,7 +67,7 @@ interface RecordedRow { ref: string; family: string; status: Finding["status"]; 
 interface RecordedEvidence { generatedAt: string; digest: string; demonstration?: { note: string } | null; experiments: RecordedRow[];
   controller?: { model: string; prompt: string; callsUsed: number; reservedCompletionTokens: number; reportedCompletionTokens: number } | null;
   reductions: { status: string; family: string; claims: string[] }[]; remedies: { threshold: number | null; improved: number; degraded: number; stillFailing?: number }[];
-  validations?: { status: string; freshHistories: number; cases: { label: string; original: { status: string } }[] }[] }
+  validations?: { status: string; freshHistories: number; cases: { label: string; original: { status: string }; remedy?: { status: string } }[] }[] }
 
 function Recorded() {
   const recorded = useApi(() => investigations.recorded(), []);
@@ -77,15 +79,17 @@ function Recorded() {
 function RecordedRun({ item }: { item: RecordedInvestigation }) {
   const evidence = item.evidence as unknown as RecordedEvidence;
   const controller = evidence.controller;
-  const titles: Record<string, string> = { "nemotron-live-recorded": "Nemotron search", "compound-demo-recorded": "A combined sensor failure", "fresh-validation-recorded": "Checking a fix on fresh data", "synthetic-recorded": "Initial sensor checks" };
-  const focus = evidence.experiments.find(row => row.status === "measured_failure") ?? evidence.experiments[0];
+  const titles: Record<string, string> = { "nemotron-live-recorded": "Nemotron search", "compound-demo-recorded": "A combined sensor failure", "fresh-validation-recorded": "Checking a fix on fresh data", "synthetic-recorded": "Initial sensor checks",
+    "nemotron-live-default": "Nemotron search on the default model", "nemotron-live-browser": "A sensor failure proposed by Nemotron", "nemotron-live-demo": "A supplied sensor failure" };
+  const focus = evidence.experiments.find(row => row.status === "measured_failure" && row.chosenBy === "nemotron")
+    ?? evidence.experiments.find(row => row.status === "measured_failure") ?? evidence.experiments[0];
   const failures = evidence.experiments.filter(row => row.status === "measured_failure").length;
   return <Panel title={titles[item.name] ?? item.name.replace(/[-_]/g, " ")} aside={<Badge tone="neutral">Recorded, not live</Badge>}
     description="Saved synthetic development evidence. Opening this record does not run an experiment or make an AI request.">
     <div className={styles.stack}>
-      {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note}</Callout>}
+      {evidence.demonstration && <Callout tone="warn" title="Demonstration setting">{evidence.demonstration.note.replace(/^Demonstration setting:\s*(\w)/, (_, first: string) => first.toUpperCase())}</Callout>}
       <div className={styles.recordSummary}><span><strong>{evidence.experiments.length}</strong> saved tests</span><span><strong>{failures}</strong> measured {failures === 1 ? "failure" : "failures"}</span>
-        <span>{controller ? `${controller.callsUsed} Nemotron calls` : "Cases supplied by the builder"}</span></div>
+        <span>{controller ? `${controller.callsUsed} Nemotron ${controller.callsUsed === 1 ? "call" : "calls"}` : "Cases supplied by the builder"}</span></div>
       {focus && <div><div className={styles.heading}><h3>{focus.status === "measured_failure" ? "A fault that cost useful warnings" : focus.status === "no_measured_failure" ? "No measured failure in this test" : findingTones[focus.status][0]}</h3>
         <Badge tone={findingTones[focus.status][1]}>{findingTones[focus.status][0]}</Badge></div>
         <WarningComparison before={focus.cleanDetection} after={focus.faultedDetection} />
@@ -100,9 +104,9 @@ function RecordedRun({ item }: { item: RecordedInvestigation }) {
       {evidence.remedies.map((remedy, index) => <p key={index}><strong>Remedy, threshold {remedy.threshold}:</strong> {remedy.improved} improved, {remedy.degraded} degraded
         {remedy.stillFailing !== undefined ? `, ${remedy.stillFailing} still failing` : ""}. Development-only; it needs fresh validation.</p>)}
       {evidence.validations?.map((validation, index) => <p key={index}><strong>Validation on {validation.freshHistories} fresh histories ({validation.status}):</strong>{" "}
-        {validation.cases.map(row => `${row.label} ${row.original.status.replace(/_/g, " ")}`).join("; ")}.</p>)}
+        {validation.cases.map(row => `${row.label} ${row.original.status.replace(/_/g, " ")}${row.remedy ? ` (with remedy: ${row.remedy.status.replace(/_/g, " ")})` : ""}`).join("; ")}.</p>)}
       <Disclosure title="Model usage and record details">
-        <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} calls: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
+        <p>{controller ? `Nemotron (${controller.model}, ${controller.prompt}) used ${controller.callsUsed} ${controller.callsUsed === 1 ? "call" : "calls"}: ${controller.reportedCompletionTokens} reported completion tokens within a reserved ceiling of ${controller.reservedCompletionTokens}.`
           : "No Nemotron calls; every case was supplied."}</p><p className={styles.footnote}>Recorded at {evidence.generatedAt}. Record: {item.name}. Integrity digest: {evidence.digest}.</p>
       </Disclosure>
     </div>
@@ -254,7 +258,9 @@ function Detail({ data, reload }: { data: InvestigationView; reload: () => void 
     {failed && <Callout tone="fault" title="The last operation failed">{failed.detail}</Callout>}
     {lastEvent?.kind === "interrupted" && <Callout tone="warn" title="Interrupted">{lastEvent.detail} Start again to recover within the saved limits.</Callout>}
     {data.state.cancel_requested && !data.active && <Callout tone="warn" title="Cancellation is saved">Resume before starting more work.</Callout>}
-    {error && <p role="alert" className={styles.error}>{error}</p>}
+    {/* The page transform would pin a fixed alert to the page instead of the screen. */}
+    {error && createPortal(<div role="alert" className={`${styles.error} ${styles.toast}`}><span>{error}</span>
+      <Button variant="ghost" onClick={() => setError("")}>Dismiss</Button></div>, document.body)}
     <nav className={styles.sectionNav} aria-label="Investigation sections"><a href="#results">Results</a><a href="#run-checks">Run tests</a><a href="#compare-fix">Compare a fix</a><a href="#activity">Activity</a></nav>
     <div id="results"><Findings data={data} busy={busy} act={act} />{data.reductions.length > 0 && <Reductions reductions={data.reductions} />}</div>
     <div id="run-checks"><Disclosure title={data.experimentsUsed ? "Run more fault tests" : "Run your first fault tests"} initiallyOpen={!data.experimentsUsed || Boolean(data.active)}
@@ -339,9 +345,9 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
       <p className={styles.coverage}><strong>{finding.evaluated_histories ?? 0} of {finding.expected_histories ?? 0}</strong> machine histories evaluated{partial ? ". Partial coverage limits this conclusion." : ". Full coverage for this test."}</p>
       {unscored && <p><strong>Why this was not scored as a finding:</strong></p>}
       {finding.reasons?.map(reason => <p key={reason} className={styles.reason}>{reason}</p>)}
-      {finding.effects?.map(effect => <p key={effect.kind}>{effect.kind.replace(/_/g, " ")}: {effect.histories.length} histories</p>)}
+      {finding.effects?.map(effect => <p key={effect.kind}>{effect.kind.replace(/_/g, " ")}: {histories(effect.histories.length)}</p>)}
       <Disclosure title="Timing, affected histories, and assumptions"><p className={styles.footnote}>{describeCase(proposal?.scenario)}</p>
-      {(finding.support?.length ?? 0) > 0 && <details><summary>{finding.support?.length} histories with recorded changes</summary>
+        {(finding.support?.length ?? 0) > 0 && <details><summary>{histories(finding.support?.length ?? 0)} with recorded changes</summary>
         <div className="table-scroll"><table><thead><tr><th>History</th><th>Clean</th><th>Faulted</th><th className="num">Lead</th></tr></thead>
           <tbody>{finding.support?.map(row => <tr key={row.equipment_id}><td>{row.equipment_id}</td><td>{row.clean}</td><td>{row.faulted}</td>
             <td className="num">{row.clean_lead ?? "—"} → {row.faulted_lead ?? "—"}</td></tr>)}</tbody></table></div>

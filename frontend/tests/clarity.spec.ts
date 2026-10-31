@@ -210,6 +210,8 @@ test("metric scopes and loss severity stay clear while switching models", async 
   await expect(page.getByTestId("recommendation-strip")).toContainText("aug3");
 
   const inspect = result.getByRole("link", { name: "Inspect fault", exact: true });
+  // The link points at the matrix until the replay index for the newly selected model arrives.
+  await expect(inspect).toHaveAttribute("href", /scenario=dropout-persistent-sensor_8/);
   const href = await inspect.getAttribute("href");
   const target = new URL(href!, "http://127.0.0.1:8136");
   expect(target.searchParams.get("candidate")).toBe("logistic_regression/lr2");

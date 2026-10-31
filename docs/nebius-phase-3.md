@@ -104,14 +104,16 @@ A proposal may include a hypothesis: what is suspected, what measurement would s
 From the repository root on Windows, with `NEBIUS_API_KEY` and `SIDEKICK_ASSISTANT_PROVIDER=nebius` in `.env`:
 
 ```powershell
-.venv\Scripts\python.exe scripts/evaluate_fault_scenarios.py --output output/live-context
+.venv\Scripts\python.exe scripts/evaluate_fault_scenarios.py --profile synthetic-rotating-v1 --output output/live-context
 '[]' | Out-File -Encoding ascii output/empty.json
-.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --create output/empty.json --objective "Find sensor faults that cost useful warnings."
-.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --agent <id> --allow-nebius --max-provider-calls 2 --max-completion-tokens 10240 --capture output/live-capture.json
-.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --status <id>
+'{"candidate": "logistic_regression/lr-probe"}' | Out-File -Encoding ascii output/criterion.json
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --create output/empty.json --criterion output/criterion.json --max-experiments 4 --objective "Find sensor faults that cost useful warnings."
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --agent <id> --allow-nebius --max-provider-calls 4 --max-completion-tokens 16384 --capture output/live-capture.json
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --context output/live-context --trust-local-artifact --replay <id>
+.venv\Scripts\python.exe scripts/run_fault_investigation.py --store output/live-store --public-export <id> output/live-evidence.json
 ```
 
-The run uses synthetic data only and makes at most two billable calls. The separate `check_nebius.py --live` probe makes additional paid calls and is not part of this sequence. It is complete when a Nemotron proposal is validated, evaluated and saved, and the status read shows it. A failed call is still captured; it is evidence, not a completed end-to-end test. Preserve previous captures, and use a fresh context and investigation after a source or prompt change.
+The run uses synthetic data only and makes at most four billable calls within 16,384 reserved completion tokens. `--replay` reruns every completed experiment without provider calls and reports whether each matches its saved evidence; it needs the same source and runtime that made the context. `scripts/demo_investigation.py --allow-nebius` runs the full story with the same allowance. The separate `check_nebius.py --live` probe makes additional paid calls and is not part of this sequence. A failed call is still captured; it is evidence, not a completed end-to-end test. Preserve previous captures, and use a fresh context and investigation after a source or prompt change.
 
 The controller holds the runner lease while the model thinks. Cancellation and the saved run-time deadline also apply while awaiting a provider response. Another runner cannot execute the same investigation concurrently, and a lost lease cannot publish a reply. Local validation failures can lead to a new proposal within the remaining limits; malformed responses and provider errors stop the invocation. Changing the saved model, endpoint, prompt or limits requires a new investigation. Rotating a key does not reset counters.
 
@@ -189,7 +191,7 @@ Discovery, reduction and remedy choice all use the same development histories, s
 
 ## Search benchmark
 
-`scripts/benchmark_search.py --output report.json` compares search strategies on the synthetic fixture. Every strategy gets:
+`scripts/benchmark_search.py --output report.json` compares search strategies on the synthetic fixture. With `--recorded <store> <id> --context <package> --trust-local-artifact`, it instead compares a saved Nemotron run on that run's own context, criterion, experiment allowance and supplied cases, and the baselines run under the same terms. Every strategy gets:
 
 - a fresh evaluator for each run, so no strategy reuses another's cache
 - the same profile and the same finding criterion
@@ -201,11 +203,11 @@ Each strategy runs once per context (`--thresholds`) and seed (`--seeds`). Strat
 - `fixed`: every permitted single-channel fault at the warning horizon, in order.
 - `random`: constrained random sampling within the profile's groups, kinds, severity caps and onsets.
 - `climb`: (1+1) hill climbing on a discrete encoding. It changes one onset, one severity or one kind, or adds or drops one channel in the same group, around the case with the largest detection drop, never repeats a tested case, and restarts at random one time in five.
-- `recorded` (`--recorded cases.json --provider-calls N`): the cases a Nemotron run proposed, replayed under the same budget.
+- `nemotron` (with `--recorded`): the saved controller run as it happened. Nothing is re-executed; every call, rejected reply, duplicate, failed execution, reported token and reduction experiment counts.
 
 Infeasible proposals, duplicates and failed executions are counted. Each run reports discoveries, discovery families (the dedup rule is stated in the report), experiments to the first discovery, the strongest detection drop, the most lost warnings, mean coverage, families tested, feasibility rate, elapsed time and provider calls. Results are out-of-fold development evidence; findings chosen adaptively are exploratory.
 
-A first run (budget 24, five seeds, thresholds 0.95 and 0.9) found 3 discovery families with `random` in 2 of 10 runs, and none with `fixed` or `climb`. The climber has no signal to follow when early cases change nothing, so random sampling did better here. That is the result to report. A Nemotron comparison needs a recorded live run.
+On the synthetic fixture (budget 24, five seeds, thresholds 0.95 and 0.9; `evidence/benchmarks/synthetic-fixture.json`), `random` found 5 discovery families in 6 of 10 runs, `climb` 2 families in 1 of 10 and `fixed` none. The climber has no signal to follow when early cases change nothing, so random sampling did better here. That is the result to report. The recorded Nemotron comparison is in `evidence/benchmarks/nemotron-default-context.json`.
 
 ## HTTP API
 
@@ -298,10 +300,21 @@ One research attempt is saved per experiment, including failures, cancellations 
 - the finding criterion, budget use, and proposal, rejection and duplicate counts
 - every tested case's parameters, finding status, coverage, clean and faulted metrics, effect counts and the assumptions it relies on
 - discovery families
-- the controller's model, prompt version, reasoning effort, call count, and reserved and reported tokens
-- reduction steps and claims, and remedy comparisons
+- who chose each case (`nemotron` or `supplied`)
+- the controller's model, prompt version, reasoning effort, call count, reserved and reported tokens, and for each Nemotron proposal the results it cited and whether its fault family was new
+- reduction steps and claims, remedy comparisons with costs and unresolved failures, and validations on fresh histories
+- a `demonstration` note when a setting, such as a deliberately fragile threshold, was chosen for illustration
 - reproduction steps when the profile is synthetic
 
 It leaves out the objective, equipment IDs, per-history support, raw readings, fitted objects, keys and request IDs. A SHA-256 digest of the content shows the file is unchanged; it does not show who made it or that it may be shared. Non-synthetic contexts are marked as not publicly replayable.
 
-`evidence/investigations/synthetic-recorded.json` is a recorded example made with the steps above: the default synthetic package, its automatically selected thresholds, three seed cases and three compound cases. It contains no live inference, and none of the six cases is a measured failure under the default criterion. It shows the export format and an honest null result; it is not a demonstration of discovered failures.
+Recorded public evidence lives in `evidence/` and is shown read-only on the hosted site:
+
+- `investigations/synthetic-recorded.json`: the default synthetic package at automatically selected thresholds, three seed cases and three compound cases; no provider calls. An honest null result that shows the format.
+- `investigations/nemotron-live-default.json`: a bounded live Nemotron run on the same default context.
+- `investigations/nemotron-live-demo.json`: the full story at the demonstration threshold, with Nemotron's cases marked, reduction, remedy and validation on fresh histories.
+- `investigations/nemotron-live-browser.json`: a bounded Nemotron search started from the browser workbench, including Nemotron's own measured failure, its reduction, remedy and fresh validation.
+- `regressions/`: the reduced regression cases from both stories.
+- `benchmarks/`: the synthetic-fixture comparison and the recorded Nemotron comparison.
+
+Each was made from one commit, replayed exactly, and exported with the steps above. The private stores, context packages and sanitized live captures stay with the person who ran them.

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "scenario": {
+    "components": [
+      {
+        "duration": "persistent",
+        "kind": "stuck",
+        "length": null,
+        "onset_before_failure": 20,
+        "ramp_cycles": null,
+        "seed": null,
+        "sensor": "ambient_temp",
+        "severity_sd": null,
+        "sign": null
+      },
+      {
+        "duration": "persistent",
+        "kind": "drift",
+        "length": null,
+        "onset_before_failure": 20,
+        "ramp_cycles": 5,
+        "seed": null,
+        "sensor": "temp_bearing",
+        "severity_sd": 2.0,
+        "sign": -1
+      }
+    ],
+    "version": 1
+  },
+  "scenarioId": "compound-v1-8fe0f524500192ef4deac672",
+  "family": "ambient_temp:stuck+temp_bearing:drift",
+  "criterion": {
+    "version": 1,
+    "candidate": "logistic_regression/lr-probe",
+    "min_coverage": 0.8,
+    "min_histories": 10,
+    "min_clean_detection": 0.8,
+    "min_lost_warnings": 1,
+    "max_alarm_burden": 0.05,
+    "min_burden_increase": 0.01
+  },
+  "expected": "measured_failure",
+  "claims": [
+    "Component-minimal under tested single-component removals.",
+    "Minimal on the tested grid for: ambient_temp onset_before_failure, temp_bearing severity_sd, temp_bearing onset_before_failure.",
+    "Not a proof of a global minimum."
+  ],
+  "contextFingerprint": "2022d59c45908441dc8652c3ebce45aa0fb1b86c2c9d1a129b69518ac23ad586",
+  "policyFingerprint": "87db3bfa93d5532150fbb9b63c8858c29a769927b8784d37234e605b49f0b2f5",
+  "profile": "synthetic-rotating-v1",
+  "source": {
+    "investigation": "56cc6f51-874f-4f63-bc70-db9616955aa7",
+    "attempt": "e5bb61dc834b44fe87c531a971286d6e",
+    "reduction": "08f7ca926056434eba2e3cf287c4b2c2"
+  }
+}

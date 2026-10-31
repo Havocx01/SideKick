@@ -3,6 +3,7 @@ import asyncio
 from dataclasses import replace
 import hashlib
 import json
+import re
 import time
 from uuid import uuid4
 
@@ -55,6 +56,12 @@ class InvestigationDecision(Frozen):
 
 class ControllerStopped(RuntimeError):
     pass
+
+
+def citedRef(text):
+    # Nemotron sometimes annotates a citation ("result-1 (no effect at onset 20)"); the leading reference is what counts.
+    found = re.match(r"\s*(result-\d+)", text)
+    return found.group(1) if found else text
 
 
 def feedback(error) -> str:
@@ -303,8 +310,11 @@ class NemotronController:
             component["sensor"] = channels[component["sensor"]]
         if payload.get("hypothesis"):
             refs = resultRefs(self.store.load(record.id))
-            if any(ref not in refs for ref in payload["hypothesis"]["basedOn"]):
-                raise ValueError("Unknown result reference")
+            payload["hypothesis"]["basedOn"] = [citedRef(ref) for ref in payload["hypothesis"]["basedOn"]]
+            unknown = [ref for ref in payload["hypothesis"]["basedOn"] if ref not in refs]
+            if unknown:
+                valid = ", ".join(refs) or "none yet; leave basedOn empty"
+                raise ValueError(f"Unknown result reference {unknown[0][:32]}; basedOn may cite only {valid}")
             payload["hypothesis"]["basedOn"] = [refs[ref] for ref in payload["hypothesis"]["basedOn"]]
         accepted = validateProposal(json.dumps(payload), record, self.evaluator)
         preview = self.evaluator.preview(accepted.scenario)
