@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -61,6 +62,8 @@ ROOTS: list[type[BaseModel]] = [
     schemas.CopilotAnswer,
     schemas.CopilotRequest,
     investigator.ContextInfo,
+    investigator.ThresholdCheck,
+    investigator.ThresholdCheckRequest,
     investigator.ContextPreparation,
     investigator.ContextPreparationRequest,
     investigator.ContextPreparationState,
@@ -94,10 +97,10 @@ def ts_type(node: dict, defs: dict) -> str:
         return " | ".join(seen)
 
     if "const" in node:
-        return f'"{node["const"]}"'
+        return json.dumps(node['const'])
 
     if "enum" in node:
-        return " | ".join(f'"{value}"' for value in node["enum"])
+        return " | ".join(json.dumps(value) for value in node["enum"])
 
     nodeType = node.get("type")
     if nodeType == "array":
@@ -123,7 +126,7 @@ def ts_type(node: dict, defs: dict) -> str:
 
 def emit_definition(name: str, node: dict, defs: dict) -> str:
     if "enum" in node:
-        values = " | ".join(f'"{value}"' for value in node["enum"])
+        values = " | ".join(json.dumps(value) for value in node["enum"])
         return f"export type {name} = {values};\n"
 
     lines = [f"export interface {name} {{"]

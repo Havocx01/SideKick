@@ -62,6 +62,8 @@ def loadValidation(store, validation):
 
 
 def freshContext(evaluator, fresh, thresholds=None):
+    if evaluator.rawSource is not None:
+        raise ValueError('Fresh raw vibration validation requires a new verified source binding; a feature CSV is insufficient')
     # Models are refit on every development history and score only the fresh ones; the development guard of the evaluator still applies.
     training = evaluator.snapshot()
     if set(fresh.equipment_ids) & set(training.splits.development) or fresh.sensors != training.dataset.sensors:
@@ -79,6 +81,9 @@ def freshContext(evaluator, fresh, thresholds=None):
 def knownExposures(evaluator):
     training = evaluator.snapshot()
     known = {history: ("development", "Investigation development history") for history in history_ids(training.dataset, training.splits.development).values()}
+    if evaluator.rawSource is not None:
+        known |= {history: ('development', 'Previously examined raw vibration history, independent of derived feature version')
+            for history in evaluator.rawSource.historyIds.values()}
     path = get_settings().bundle_path.parent / "history-identities.json"
     if path.is_file():
         recorded = json.loads(path.read_text(encoding="utf-8"))
@@ -87,6 +92,8 @@ def knownExposures(evaluator):
 
 
 def assess(store, validation, evaluator, fresh) -> dict:
+    if evaluator.rawSource is not None:
+        raise ValueError('Fresh raw vibration validation requires a new verified source binding; a feature CSV is insufficient')
     frozen = loadValidation(store, validation)
     procedure = frozen["procedure"]
     if frozen["status"] != "frozen":

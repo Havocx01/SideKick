@@ -1,7 +1,15 @@
 """The public frontend contract must be reproducible from backend models."""
 from pathlib import Path
 
-from scripts.generate_types import render
+from scripts.generate_types import emit_definition, render, ts_type
+
+
+def test_literal_types_preserve_json_value_types():
+    assert ts_type({'const': 1}, {}) == '1'
+    assert ts_type({'const': True}, {}) == 'true'
+    assert ts_type({'enum': [1, 2]}, {}) == '1 | 2'
+    assert ts_type({'enum': ['pooled', 'per_equipment']}, {}) == '"pooled" | "per_equipment"'
+    assert emit_definition('Version', {'enum': [1, 2]}, {}) == 'export type Version = 1 | 2;\n'
 
 
 def test_public_library_contract_is_generated():

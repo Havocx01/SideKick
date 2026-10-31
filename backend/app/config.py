@@ -155,7 +155,7 @@ class Settings:
     assistant_model: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_MODEL", ""))
     assistant_presenter_code: str = field(default_factory=lambda: os.environ.get("SIDEKICK_ASSISTANT_PRESENTER_CODE", ""), repr=False)
     assistant_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_ENABLED", True))
-    assistant_live_enabled: bool = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_LIVE_ENABLED", True))
+    assistant_live_enabled: bool | None = field(default_factory=lambda: _env_bool("SIDEKICK_ASSISTANT_LIVE_ENABLED", True) if "SIDEKICK_ASSISTANT_LIVE_ENABLED" in os.environ else None)
     assistant_timeout_seconds: float = field(default_factory=lambda: float(os.environ.get("SIDEKICK_ASSISTANT_TIMEOUT", "45")))
     demo_analysis_max_records: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_ANALYSIS_MAX_RECORDS", "2000")))
     demo_analysis_max_bytes: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_ANALYSIS_MAX_BYTES", str(32 * 1024 * 1024))))
@@ -163,6 +163,16 @@ class Settings:
     demo_folder_max_per_visitor: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_DEMO_FOLDER_MAX_PER_VISITOR", "100")))
     assistant_tasks: tuple[str, ...] = field(default_factory=lambda: tuple(
         t.strip() for t in os.environ.get("SIDEKICK_ASSISTANT_TASKS", "investigate,compare,warning,brief,data,deep").split(",") if t.strip()))
+
+    hosted_owner: str = field(default_factory=lambda: os.environ.get("SIDEKICK_HOSTED_OWNER", ""))
+    hosted_origin: str = field(default_factory=lambda: os.environ.get("SIDEKICK_HOSTED_ORIGIN", ""))
+    hosted_password_hash: str = field(default_factory=lambda: os.environ.get("SIDEKICK_HOSTED_PASSWORD_HASH", ""), repr=False)
+    hosted_max_calls: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_HOSTED_MAX_CALLS", "0")))
+    hosted_max_completion_tokens: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_HOSTED_MAX_COMPLETION_TOKENS", "0")))
+    hosted_max_searches: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_HOSTED_MAX_SEARCHES", "0")))
+    hosted_max_mutations: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_HOSTED_MAX_MUTATIONS", "200")))
+    hosted_max_upload_bytes: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_HOSTED_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024))))
+    hosted_session_seconds: int = field(default_factory=lambda: int(os.environ.get("SIDEKICK_HOSTED_SESSION_SECONDS", "28800")))
 
     cors_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
@@ -173,6 +183,11 @@ class Settings:
     )
 
     def __post_init__(self):
+        from app.hosted import validateHosted
+
+        validateHosted(self)
+        if self.assistant_live_enabled is None:
+            self.assistant_live_enabled = not self.hosted
         self.assistant_provider = self.assistant_provider.strip().lower()
         if self.assistant_provider != "nebius":
             raise ValueError("SIDEKICK_ASSISTANT_PROVIDER must be nebius")
@@ -192,6 +207,10 @@ class Settings:
             raise ValueError("Demo storage limits must be positive")
         if not set(self.assistant_tasks) <= {"investigate", "compare", "warning", "brief", "data", "deep"}:
             raise ValueError("SIDEKICK_ASSISTANT_TASKS accepts investigate, compare, warning, brief, data and deep")
+
+    @property
+    def hosted(self) -> bool:
+        return bool(self.hosted_owner)
 
     @property
     def runs_dir(self) -> Path:

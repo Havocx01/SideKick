@@ -50,7 +50,7 @@ export function ContextSetup({ ready, onReady }: { ready: boolean; onReady: () =
   const content = <div className={styles.stack}>
     <p>Train models on a rotating-machine sample, then hold the models and warning thresholds fixed while you test sensor faults.</p>
     <div className={styles.sampleFacts}><span><Database size={16} aria-hidden="true" />26 simulated machine histories</span><span>22 for development</span><span>4 reserved and left untouched</span></div>
-    <p className={styles.footnote}>Synthetic practice data, not your uploaded equipment data or field validation. Preparation runs locally and makes no AI requests.</p>
+    <p className={styles.footnote}>Synthetic practice data, not your uploaded equipment data or field validation. Preparation runs in this workspace and makes no AI requests.</p>
     {!!data?.outdated && <Callout tone="warn" title="Older model setups need refreshing">{data.outdated} older {data.outdated === 1 ? "setup no longer matches" : "setups no longer match"} this version of Sidekick. Your previous investigations and files are kept.</Callout>}
     {job && <div className={styles.preparationState} role="status" aria-live="polite">
       <div className={styles.heading}><strong>{job.status === "cancelling" ? "Stopping preparation" : running ? "Preparing your sample models" : job.status === "completed" ? "Sample models ready" : "Preparation stopped"}</strong>

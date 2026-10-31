@@ -44,9 +44,14 @@ def export_evaluation(evaluator: FixedDevelopmentEvaluator, result: FaultEvaluat
         raise ValueError("Evaluation differs from the recorded engine result")
     if source_digest() != result.source_digest:
         raise ValueError("Source changed during the investigation; do not export mixed provenance")
+    rawSource = evaluator.rawSource
+    if rawSource is not None:
+        rawSource.verify()
     directory.mkdir(parents=True, exist_ok=False)
-    joblib.dump({"training": evaluator._training, "thresholds": evaluator.thresholds,
-        "policy": evaluator.policy.model_dump(mode="json")}, directory / "context.joblib", compress=3)
+    payload = {"training": evaluator._training, "thresholds": evaluator.thresholds, "policy": evaluator.policy.model_dump(mode="json")}
+    if rawSource is not None:
+        payload['raw_source'] = rawSource
+    joblib.dump(payload, directory / "context.joblib", compress=3)
     if (directory / "context.joblib").stat().st_size > MAX_CONTEXT_BYTES:
         raise ValueError("Fitted context exceeds the local replay size limit")
     write_json(directory / "evaluation.json", result.model_dump(mode="json"))
@@ -96,9 +101,16 @@ def _load_package(directory: Path, *, trusted: bool):
     case = FaultCase.model_validate(read_json(directory / "scenario.json"))
     # Checksums cannot establish trust: joblib loading can execute Python code.
     payload = joblib.load(directory / "context.joblib")
-    if not isinstance(payload, dict) or set(payload) != {"training", "thresholds", "policy"}:
+    if not isinstance(payload, dict) or set(payload) not in ({"training", "thresholds", "policy"}, {"training", "thresholds", "policy", "raw_source"}):
         raise ValueError("Unsupported fitted context")
-    evaluator = FixedDevelopmentEvaluator(payload["training"], payload["thresholds"], FaultPolicy.model_validate(payload["policy"]))
+    rawSource = payload.get('raw_source')
+    if rawSource is not None:
+        from app.faults.vibration import RawVibrationSource
+
+        if type(rawSource) is not RawVibrationSource:
+            raise ValueError('Unsupported raw vibration source')
+        rawSource.verify()
+    evaluator = FixedDevelopmentEvaluator(payload["training"], payload["thresholds"], FaultPolicy.model_validate(payload["policy"]), rawSource=rawSource)
     if evaluator.context_fingerprint != manifest.context_fingerprint:
         raise ValueError("Restored fitted context does not reproduce its identity")
     return evaluator, case, expected

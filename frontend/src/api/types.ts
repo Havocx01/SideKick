@@ -26,6 +26,12 @@ export interface AcceptanceCriteria {
   horizon_cycles: number;
 }
 
+export interface AlarmExposure {
+  eligible_cycles: number;
+  alarm_eligible_cycles: number;
+  scored_cycles: number;
+}
+
 export interface AlertEpisode {
   start_cycle: number;
   end_cycle: number;
@@ -232,11 +238,20 @@ export interface CandidateVerdict {
   coverage_complete?: boolean | null;
 }
 
+export interface CleanEquipment {
+  equipment_id: string;
+  warning: "detected" | "late" | "missed";
+  exposure: AlarmExposure;
+}
+
 export interface CleanMetrics {
   detection: number;
   alarmBurden: number | null;
   medianLead: number | null;
   histories: number;
+  equipment?: CleanEquipment[];
+  meanEquipmentBurden?: number | null;
+  worstEquipmentBurden?: number | null;
 }
 
 export interface ColumnMapping {
@@ -418,6 +433,14 @@ export interface EngineOutcome {
   episode_count?: number;
 }
 
+export interface EquipmentAlarmEvidence {
+  equipment_id: string;
+  clean_warning: "detected" | "late" | "missed";
+  faulted_warning: "detected" | "late" | "missed";
+  clean: AlarmExposure | null;
+  faulted: AlarmExposure | null;
+}
+
 export interface EvidenceBundle {
   schema_version?: number;
   experiment_id?: string | null;
@@ -570,7 +593,7 @@ export interface FaultSpec {
 }
 
 export interface Finding {
-  version?: "1";
+  version?: 1;
   status: "measured_failure" | "no_measured_failure" | "inconclusive" | "not_applicable" | "invalid_proposal" | "execution_error";
   reasons?: string[];
   criterion: FindingCriterion;
@@ -596,10 +619,11 @@ export interface Finding {
   effects?: Effect[];
   /** Matched histories whose warning outcome changed. */
   support?: HistorySupport[];
+  equipment_alarms?: EquipmentAlarmEvidence[];
 }
 
 export interface FindingCriterion {
-  version?: "1";
+  version?: 1 | 2;
   candidate: string;
   /** Evaluated / expected development histories. */
   min_coverage?: number;
@@ -612,6 +636,7 @@ export interface FindingCriterion {
   max_alarm_burden?: number;
   /** Smallest consequential faulted-minus-clean burden increase. */
   min_burden_increase?: number;
+  alarm_scope?: "pooled" | "per_equipment";
 }
 
 export interface FoldFaultSummary {
@@ -1100,6 +1125,28 @@ export interface StartRequest {
   allowProvider?: boolean;
   maxProviderCalls?: number;
   maxCompletionTokens?: number;
+}
+
+export interface ThresholdCheck {
+  status: "qualified" | "no_qualifying_threshold" | "insufficient_evidence";
+  contextFingerprint: string;
+  criterion: FindingCriterion;
+  current: ThresholdPoint;
+  suggested: ThresholdPoint | null;
+  bestWithinAlarmCap: ThresholdPoint | null;
+  reasons: string[];
+  candidateThresholds: number;
+  evaluatedThresholds: number;
+  note?: string;
+}
+
+export interface ThresholdCheckRequest {
+  criterion: FindingCriterion;
+}
+
+export interface ThresholdPoint {
+  threshold: number;
+  clean: CleanMetrics;
 }
 
 export interface ToolInvocation {

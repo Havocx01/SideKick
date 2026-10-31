@@ -8,6 +8,7 @@ from openai import AsyncOpenAI, OpenAIError
 from pydantic import Field
 
 from app.assistant.transport import client_options, nebius_options, request_structured
+from app.hosted import reserveSearch
 from app.investigator.records import Frozen
 
 INSTRUCTION = """Suggest follow-up tests for the recorded sensor-corruption experiment using the supplied web excerpts.
@@ -168,6 +169,7 @@ async def runResearch(store, investigation, attempt, settings, allowed):
     try:
         if stopped():
             return report
+        reserveSearch(settings)
         save(searchRequests=1)
         async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
             payload = await search(client, settings.tavily_api_key, report.query)

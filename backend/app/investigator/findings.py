@@ -4,9 +4,9 @@ import json
 import time
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_serializer, model_validator
 
-from app.faults.evaluator import FaultEvaluation
+from app.faults.evaluator import AlarmExposure, FaultEvaluation
 from app.faults.investigation import FAILURE_STATUSES
 from app.investigator.records import Frozen
 
@@ -16,7 +16,7 @@ WarningState = Literal["detected", "late", "missed"]
 
 
 class FindingCriterion(Frozen):
-    version: Literal[1] = 1
+    version: Literal[1, 2] = 1
     candidate: str = Field(min_length=1, max_length=256)
     min_coverage: float = Field(default=0.8, gt=0, le=1, description="Evaluated / expected development histories.")
     min_histories: int = Field(default=10, ge=1, le=1000, strict=True)
@@ -24,10 +24,32 @@ class FindingCriterion(Frozen):
     min_lost_warnings: int = Field(default=1, ge=1, le=1000, strict=True, description="Clean useful warnings that became missed or late.")
     max_alarm_burden: float = Field(default=0.05, ge=0, le=1, description="Highest acceptable early alarm burden.")
     min_burden_increase: float = Field(default=0.01, gt=0, le=1, description="Smallest consequential faulted-minus-clean burden increase.")
+    alarm_scope: Literal['pooled', 'per_equipment'] = 'pooled'
+
+    @model_validator(mode='after')
+    def checkScope(self):
+        if self.version == 1 and self.alarm_scope != 'pooled':
+            raise ValueError('Per-equipment alarm scope requires criterion version2')
+        return self
+
+    @model_serializer(mode='wrap')
+    def serializeValues(self, handler):
+        values = handler(self)
+        if self.version == 1:
+            values.pop('alarm_scope', None)
+        return values
 
     @property
     def fingerprint(self) -> str:
         return digest(self.model_dump(mode="json"))
+
+
+class EquipmentAlarmEvidence(Frozen):
+    equipment_id: str
+    clean_warning: WarningState
+    faulted_warning: WarningState
+    clean: AlarmExposure | None
+    faulted: AlarmExposure | None
 
 
 class HistorySupport(Frozen):
@@ -69,6 +91,14 @@ class Finding(Frozen):
     assumptions: tuple[str, ...] = Field(default=(), description="Profile constraints the tested scenario relies on.")
     effects: tuple[Effect, ...] = Field(default=(), description="Observed effects; only a measured_failure is a discovery.")
     support: tuple[HistorySupport, ...] = Field(default=(), description="Matched histories whose warning outcome changed.")
+    equipment_alarms: tuple[EquipmentAlarmEvidence, ...] = ()
+
+    @model_serializer(mode='wrap')
+    def serializeValues(self, handler):
+        values = handler(self)
+        if not self.equipment_alarms:
+            values.pop('equipment_alarms', None)
+        return values
 
     @property
     def is_discovery(self) -> bool:
@@ -87,7 +117,14 @@ def warningState(outcome) -> WarningState:
     return "detected" if outcome.detected else "late" if outcome.late else "missed"
 
 
+def alarmSummary(exposures):
+    burdens = [item.burden for item in exposures if item is not None and item.burden is not None]
+    return {'histories': len(exposures), 'available': len(burdens), 'missing': len(exposures)-len(burdens),
+        'mean': sum(burdens)/len(burdens) if burdens else None, 'worst': max(burdens) if burdens else None}
+
+
 def checkCriterion(criterion: FindingCriterion, thresholds) -> FindingCriterion:
+    criterion.checkScope()
     criterion = FindingCriterion.model_validate(criterion.model_dump(mode="json"))
     if criterion.candidate not in thresholds:
         raise ValueError("Finding criterion must target one of the investigation's fixed models")
@@ -95,6 +132,7 @@ def checkCriterion(criterion: FindingCriterion, thresholds) -> FindingCriterion:
 
 
 def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, proposal_id=None, attempt_id=None) -> Finding:
+    criterion.checkScope()
     criterion = FindingCriterion.model_validate(criterion.model_dump(mode="json"))
     evaluation = FaultEvaluation.model_validate(evaluation.model_dump(mode="json"))
     model = next((item for item in evaluation.models if item.candidate == criterion.candidate), None)
@@ -106,11 +144,17 @@ def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, propos
         "assumptions": evaluation.policy.assumptionsFor(evaluation.scenario),
         "evaluated_histories": evaluation.evaluated_histories,
         "coverage": evaluation.evaluated_histories / evaluation.expected_histories if evaluation.expected_histories else 0.0}
+    if evaluation.raw_source is not None:
+        base['assumptions'] += ('Faults act on raw accelerometer samples before derived and trailing features are rebuilt; mechanical damage is not simulated.',)
     if evaluation.status == "not_applicable" or model.clean_matched is None or model.faulted is None or not model.pairs:
         return Finding(status="not_applicable", reasons=("No eligible history had changed scorable readings",), **base)
     clean, faulted = model.clean_matched, model.faulted
     base |= {"clean_detection": clean.detection_fraction, "faulted_detection": faulted.detection_fraction,
         "clean_burden": clean.early_alarm_burden, "faulted_burden": faulted.early_alarm_burden}
+    if any(pair.clean_alarm is not None or pair.faulted_alarm is not None for pair in model.pairs):
+        base['equipment_alarms'] = tuple(EquipmentAlarmEvidence(equipment_id=pair.equipment_id,
+            clean_warning=warningState(pair.clean), faulted_warning=warningState(pair.faulted),
+            clean=pair.clean_alarm, faulted=pair.faulted_alarm) for pair in sorted(model.pairs, key=lambda pair: pair.equipment_id))
 
     reasons = []
     if base["coverage"] < criterion.min_coverage:
@@ -123,6 +167,15 @@ def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, propos
         reasons.append("Early alarm burden is unavailable")
     elif clean.early_alarm_burden > criterion.max_alarm_burden:
         reasons.append("Clean model already exceeds the acceptable alarm burden")
+    if criterion.alarm_scope == 'per_equipment':
+        unavailable = [pair.equipment_id for pair in model.pairs if pair.clean_alarm is None or pair.faulted_alarm is None
+            or pair.clean_alarm.burden is None or pair.faulted_alarm.burden is None]
+        above = [pair.equipment_id for pair in model.pairs if pair.clean_alarm is not None and pair.clean_alarm.burden is not None
+            and pair.clean_alarm.burden > criterion.max_alarm_burden]
+        if unavailable:
+            reasons.append(f'Per-equipment alarm evidence is unavailable for {len(unavailable)} matched histories')
+        if above:
+            reasons.append(f'Clean model exceeds the per-equipment alarm cap on {len(above)} matched histories')
 
     support, missed, late, noisier = [], [], [], []
     for pair in sorted(model.pairs, key=lambda item: item.equipment_id):
@@ -141,7 +194,14 @@ def classify(evaluation: FaultEvaluation, criterion: FindingCriterion, *, propos
     effects = []
     if len(missed) + len(late) >= criterion.min_lost_warnings:
         effects += [Effect(kind=kind, histories=tuple(ids)) for kind, ids in (("missed_warnings", missed), ("late_warnings", late)) if ids]
-    if (clean.early_alarm_burden is not None and faulted.early_alarm_burden is not None
+    if criterion.alarm_scope == 'per_equipment':
+        noisier = [pair.equipment_id for pair in model.pairs if pair.clean_alarm is not None and pair.faulted_alarm is not None
+            and pair.clean_alarm.burden is not None and pair.faulted_alarm.burden is not None
+            and pair.faulted_alarm.burden > criterion.max_alarm_burden
+            and pair.faulted_alarm.burden - pair.clean_alarm.burden >= criterion.min_burden_increase]
+        if noisier:
+            effects.append(Effect(kind='alarm_burden', histories=tuple(noisier)))
+    elif (clean.early_alarm_burden is not None and faulted.early_alarm_burden is not None
             and faulted.early_alarm_burden > criterion.max_alarm_burden
             and faulted.early_alarm_burden - clean.early_alarm_burden >= criterion.min_burden_increase):
         effects.append(Effect(kind="alarm_burden", histories=tuple(noisier), clean_value=clean.early_alarm_burden, faulted_value=faulted.early_alarm_burden))

@@ -25,6 +25,12 @@ import type {
 
 // Vite proxies /api when no base URL is configured.
 const BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
+export const SESSION_EXPIRED_EVENT = "sidekick-session-expired";
+let sessionGeneration = 0;
+
+export function invalidateSessionRequests() {
+  sessionGeneration++;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -38,12 +44,14 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const generation = sessionGeneration;
   const response = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", "X-Sidekick-Request": "1", ...init?.headers }
   });
 
   if (!response.ok) {
+    if (response.status === 401 && generation === sessionGeneration && !path.startsWith("/api/session")) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     let detail: string | undefined;
     try {
       const body = await response.json();
@@ -64,8 +72,10 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function downloadEvidence(url: string, filename: string) {
+  const generation = sessionGeneration;
   const response = await fetch(url, { headers: { "X-Sidekick-Request": "1" } });
   if (!response.ok) {
+    if (response.status === 401 && generation === sessionGeneration) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     const body = await response.json().catch(() => null);
     throw new Error(typeof body?.detail === "string" ? body.detail : `Export failed (${response.status}). Try again.`);
   }
@@ -232,6 +242,8 @@ export const pilots = {
 };
 
 export const investigations = {
+  checkThreshold: (context: string, body: import('./types').ThresholdCheckRequest) =>
+    post<import('./types').ThresholdCheck>(`/api/investigations/contexts/${encodeURIComponent(context)}/threshold-check`, body),
   contexts: () => request<import("./types").ContextInfo[]>("/api/investigations/contexts"),
   preparation: () => request<import("./types").ContextPreparationState>("/api/investigations/contexts/preparation"),
   prepareContext: (requestId: string) => post<import("./types").ContextPreparation>("/api/investigations/contexts/preparation", { requestId }),

@@ -32,7 +32,7 @@ Then open **Investigations** and select the saved concern beginning **Demo: find
 
 1. Prepare sample models in the app, or select an existing model setup. Review performance before sensor faults, enter your concern and set the experiment budget. Model IDs, warning thresholds and profile assumptions remain available under setup details.
 2. Run supplied proposals locally, or explicitly allow **Start Nemotron search**. Nemotron receives the concern, channel aliases, reviewed descriptions, bounds and aggregate results.
-3. Inspect matched clean/faulted useful warnings, lead time, early alarm burden, coverage and exclusions. Code classifies findings; model explanations remain hypotheses.
+3. Choose pooled or per-machine alarm limits, then inspect matched clean/faulted warnings, pooled/mean/worst burden, individual denominators and missing windows. The threshold check searches without applying changes. Code classifies findings; model explanations remain hypotheses.
 4. Replay a result, reduce a measured failure, compare a threshold change or explicitly approved augmented retraining, and export a regression case.
 5. Freeze the chosen procedure before assessing fresh histories. Previously exposed histories cannot become a new independent holdout.
 6. Optionally choose **Research this fault** to retrieve external references through Tavily and ask Nemotron for cited follow-up suggestions. Research is separate from measured findings.
@@ -73,6 +73,8 @@ These synthetic results are tied to their saved fitted contexts and recorded cod
 
 The project includes fixed, random, hill-climbing and recorded-Nemotron search comparisons. The available live comparison does not establish that Nemotron outperforms simpler search.
 
+[Measured bearing development checks](docs/bearing-development.md), dated October 31, added a fixed vibration feature comparison and raw-accelerometer faults. All four model arms remain unqualified under the per-machine requirements, and all 32 raw fault findings are inconclusive. Richer features did not solve the alarm problem. These are development results with provisional requirements, not fresh-equipment or field validation.
+
 The earlier NASA C-MAPSS evidence demonstrates the original single-sensor workflow. It is simulated-engine evidence and already exposed. Neither those results nor the synthetic investigations establish ABB field performance, maintenance savings or deployment approval. Fault-profile relationships are declared prototype assumptions until independently supported.
 
 ## Development and reproducibility
@@ -83,7 +85,7 @@ The stack is React/TypeScript/Vite, Python/FastAPI/Pydantic, SQLite, NumPy, pand
 - `docker compose up --build` starts local development services at [localhost:5173](http://localhost:5173).
 - Deployment contexts, coordinators and remote workers use Python 3.11.9 on Linux with [pinned numerical dependencies](docker/runtime-constraints.txt). Native Windows packages are not assumed to replay identically on Linux.
 - Contexts are bound to their source and dependencies. Old fitted contexts are excluded from new-run selection; their saved investigation records remain readable. Generate a new context after source changes.
-- Full mode is a local workspace. Publishing it remotely requires an authentication and ownership boundary beyond the restricted hosted demo.
+- Full mode runs locally without sign-in by default. The [private hosting configuration](docs/hosted-workspace.md) adds a configured owner, secure sessions, persistent storage and durable daily AI allowances. Actual public deployment verification remains separate from local checks.
 
 See [verification commands](TESTING.md), [compound evaluation](docs/nebius-phase-2.md), [investigation API/CLI and research](docs/nebius-phase-3.md), and [backup and recovery](docs/workspace-backup.md). Routine tests run offline. Paid inference requires an explicit live action.
 

@@ -13,6 +13,8 @@ import { candidateLabel, percent } from "../format";
 import { ContextSetup } from "../components/investigations/ContextSetup";
 import { Disclosure } from "../components/investigations/Disclosure";
 import { WarningComparison } from "../components/investigations/WarningComparison";
+import { EquipmentAlarms } from "../components/investigations/EquipmentAlarms";
+import { CleanAlarmSummary, ThresholdCheck } from "../components/investigations/ThresholdCheck";
 import { RollingNumber } from "../components/cult/RollingNumber";
 import styles from "./investigations.module.css";
 
@@ -153,6 +155,7 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
   const [objective, setObjective] = useState("Find sensor faults that cost useful warnings.");
   const [experiments, setExperiments] = useState("16");
   const [seed, setSeed] = useState("3");
+  const [alarmScope, setAlarmScope] = useState<"pooled" | "per_equipment">("pooled");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const target = models.includes(candidate) ? candidate : firstModel;
@@ -161,7 +164,9 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
     event.preventDefault();
     setBusy(true); setError("");
     try {
-      const created = await investigations.create({ context: context.name, objective, maxExperiments: Number(experiments), seed: Number(seed), criterion: { candidate: target } });
+      const created = await investigations.create({ context: context.name, objective, maxExperiments: Number(experiments), seed: Number(seed), criterion: {
+        version: 2, candidate: target, alarm_scope: alarmScope, min_clean_detection: .8, max_alarm_burden: .05
+      } });
       navigate(`/investigations/${created.id}`);
     } catch (failure) { setError(errorText(failure)); setBusy(false); }
   }
@@ -178,7 +183,7 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
       {target.startsWith("age_baseline/") && <p className={styles.footnote}>The age baseline uses elapsed age, not sensor readings. Select a sensor-based model to investigate the effect of sensor faults.</p>}
       <div className={styles.baseline} aria-label="Performance before sensor faults"><strong>Before sensor faults</strong><dl className={styles.metrics}>
         <div><dt>Useful warnings</dt><dd>{percent(context.clean[target]?.detection)}</dd></div><div><dt>Early alarm burden</dt><dd>{percent(context.clean[target]?.alarmBurden, 1)}</dd></div>
-        <div><dt>Machine histories</dt><dd>{context.clean[target]?.histories}</dd></div></dl><p className={styles.footnote}>Development performance. A useful warning arrives early enough to act.</p></div>
+        <div><dt>Machine histories</dt><dd>{context.clean[target]?.histories}</dd></div></dl><CleanAlarmSummary clean={context.clean[target]} /><p className={styles.footnote}>Development performance. A useful warning arrives early enough to act.</p></div>
       <Disclosure title="Model details and fault assumptions" description="Thresholds, model identifiers, and baseline performance for every model.">
         <div className="table-scroll"><table aria-label="Clean performance"><thead><tr><th>Model</th><th className="num">Threshold</th><th className="num">Useful warnings</th><th className="num">Early alarm burden</th><th className="num">Histories</th></tr></thead>
         <tbody>{models.map(name => <tr key={name}><td>{name}</td><td className="num">{context.thresholds[name]}</td><td className="num">{percent(context.clean[name]?.detection)}</td>
@@ -186,6 +191,15 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
         <p className={styles.footnote}>Model setup: {context.name}. Fault profile: {context.profile ?? "None"}. Relationships in the profile are declared assumptions, not proof of physical causes.</p>
       </Disclosure>
       <Textarea label="Concern" value={objective} maxLength={2000} onChange={event => setObjective(event.target.value)} />
+      <Select label="Alarm budget scope" value={alarmScope} onValueChange={value => setAlarmScope(value as "pooled" | "per_equipment")} options={[
+        { value: "pooled", label: "Pooled cycles" }, { value: "per_equipment", label: "Each machine" }
+      ]} />
+      <p className={styles.footnote}>Provisional development criterion: at least 80% useful warnings without sensor faults and a 5% early alarm budget. {alarmScope === "per_equipment"
+        ? "Each machine must meet the clean alarm budget; missing machine windows make the result inconclusive."
+        : "The alarm budget is measured across pooled eligible cycles. Individual machines can exceed it."} These limits require engineer review before operational use.</p>
+      <ThresholdCheck key={JSON.stringify([context.name, context.contextFingerprint, target, alarmScope])} context={context.name} disabled={busy || !target} criterion={{
+        version: 2, candidate: target, alarm_scope: alarmScope, min_clean_detection: .8, max_alarm_burden: .05
+      }} />
       <div className={styles.fields}>
         <Input label="Experiment budget" description="Maximum fault tests. Each test uses one slot." type="number" required min={1} max={128} value={experiments} onChange={event => setExperiments(event.target.value)} />
         <Input label="Initial checks" description="Known single-sensor faults to test first. These use your experiment budget." type="number" required min={0} max={Math.min(12, Number(experiments) || 12)} value={seed} onChange={event => setSeed(event.target.value)} />
@@ -264,7 +278,7 @@ function Detail({ data, reload }: { data: InvestigationView; reload: () => void 
     <nav className={styles.sectionNav} aria-label="Investigation sections"><a href="#results">Results</a><a href="#run-checks">Run tests</a><a href="#compare-fix">Compare a fix</a><a href="#activity">Activity</a></nav>
     <div id="results"><Findings data={data} busy={busy} act={act} />{data.reductions.length > 0 && <Reductions reductions={data.reductions} />}</div>
     <div id="run-checks"><Disclosure title={data.experimentsUsed ? "Run more fault tests" : "Run your first fault tests"} initiallyOpen={!data.experimentsUsed || Boolean(data.active)}
-      description="Run the saved checks locally, or explicitly allow Nemotron to propose new faults."><Controls data={data} busy={busy} act={act} /></Disclosure></div>
+      description="Run the saved checks in this workspace, or explicitly allow Nemotron to propose new faults."><Controls data={data} busy={busy} act={act} /></Disclosure></div>
     <div id="compare-fix"><Remedies data={data} busy={busy} act={act} /></div>
     <div id="activity"><Disclosure title="Activity and proposed tests" description="The saved timeline, AI request usage, rejected proposals, and technical setup.">
       <Timeline data={data} /><Proposals proposals={data.proposals} />
@@ -294,7 +308,7 @@ function Controls({ data, busy, act }: { data: InvestigationView; busy: string; 
     <div className={styles.stack}>
       <div className={styles.actions}>
         <Button disabled={locked} loading={busy === "run"} onClick={() => act("run", () => investigations.start(data.id, { requestId: requestId(), mode: "run" }))}>Run saved proposals</Button>
-        <span className={styles.footnote}>Test the faults already saved in this investigation. Runs locally, with no AI request.</span>
+        <span className={styles.footnote}>Test the faults already saved in this investigation. Runs in this workspace, with no AI request.</span>
       </div>
       <fieldset className={styles.preview}>
         <legend>Nemotron search</legend>
@@ -319,7 +333,7 @@ function Controls({ data, busy, act }: { data: InvestigationView; busy: string; 
 function Findings({ data, busy, act }: { data: InvestigationView; busy: string; act: Act }) {
   const measured = data.findings.filter(item => item.attempt_id).sort((a, b) => Number(b.status === "measured_failure") - Number(a.status === "measured_failure"));
   if (!data.criterion) return <Panel title="Findings"><p>This investigation has no finding criterion, so results are not classified.</p></Panel>;
-  return <Panel title="Findings" description="Measured failures come first. Every comparison uses the same model and matched development histories.">
+  return <Panel title="Findings" description={`Measured failures come first. Every comparison uses the same model and matched development histories. Alarm budget scope: ${String(data.criterion.version ?? 1) === "1" ? "pooled (historical v1)" : data.criterion.alarm_scope === "per_equipment" ? "each machine (v2)" : "pooled (v2)"}.`}>
     {measured.length === 0 ? <div className={styles.empty}><FlaskConical size={23} aria-hidden="true" /><h3>No results yet</h3><p>Run the initial checks or start a Nemotron search. Finished fault tests will appear here.</p><a href="#run-checks">Choose how to run tests</a></div> : <div className={styles.resultList}>
       {measured.map(finding => <FindingCard key={finding.attempt_id} finding={finding} data={data} busy={busy} act={act} />)}
     </div>}
@@ -340,12 +354,14 @@ function FindingCard({ finding, data, busy, act }: { finding: Finding; data: Inv
     <Disclosure title={finding.status === "no_measured_failure" ? "View test details" : "Measured result and next steps"} initiallyOpen={finding.status !== "no_measured_failure"}
       description={finding.status === "no_measured_failure" ? `Useful warnings ${percent(finding.clean_detection)} to ${percent(finding.faulted_detection)}. ${finding.evaluated_histories ?? 0} of ${finding.expected_histories ?? 0} histories evaluated.` : undefined}>
     {finding.status === "execution_error" ? <p>{finding.reasons?.[0]}</p> : <>
+      <p className={styles.footnote}>{String(finding.criterion.version ?? "1") === "1" ? "Historical pooled alarm criterion (v1)." : `Alarm criterion v2: ${finding.criterion.alarm_scope === "per_equipment" ? "each machine, plus pooled clean eligibility" : "pooled eligible cycles"}.`} Clean useful-warning minimum {percent(finding.criterion.min_clean_detection ?? .8)}; early alarm budget {percent(finding.criterion.max_alarm_burden ?? .05)}. Provisional development limits.</p>
       <div className={styles.comparisonGrid}><WarningComparison before={finding.clean_detection} after={finding.faulted_detection} />
         <WarningComparison label="Early alarm burden" before={finding.clean_burden} after={finding.faulted_burden} lowerIsBetter /></div>
       <p className={styles.coverage}><strong>{finding.evaluated_histories ?? 0} of {finding.expected_histories ?? 0}</strong> machine histories evaluated{partial ? ". Partial coverage limits this conclusion." : ". Full coverage for this test."}</p>
       {unscored && <p><strong>Why this was not scored as a finding:</strong></p>}
       {finding.reasons?.map(reason => <p key={reason} className={styles.reason}>{reason}</p>)}
       {finding.effects?.map(effect => <p key={effect.kind}>{effect.kind.replace(/_/g, " ")}: {histories(effect.histories.length)}</p>)}
+      <EquipmentAlarms evidence={finding.equipment_alarms} />
       <Disclosure title="Timing, affected histories, and assumptions"><p className={styles.footnote}>{describeCase(proposal?.scenario)}</p>
         {(finding.support?.length ?? 0) > 0 && <details><summary>{histories(finding.support?.length ?? 0)} with recorded changes</summary>
         <div className="table-scroll"><table><thead><tr><th>History</th><th>Clean</th><th>Faulted</th><th className="num">Lead</th></tr></thead>

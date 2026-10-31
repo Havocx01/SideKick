@@ -1,0 +1,9 @@
+{$SIDEKICK_HOSTNAME} {
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy workspace:8000 {
+		header_up Host {http.request.hostport}
+		header_up X-Forwarded-Proto {http.request.scheme}
+	}
+}
