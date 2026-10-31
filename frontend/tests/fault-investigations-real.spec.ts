@@ -20,6 +20,7 @@ async function saved(page: Page, id: string) {
 test("a real run starts once despite repeated clicks and a refresh", async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true"));
   await page.goto("/investigations");
+  await page.getByRole("button", { name: "More options", exact: false }).click();
   await page.getByLabel("Experiment budget").fill("4");
   await page.getByRole("button", { name: "Create investigation" }).click();
   await expect(page).toHaveURL(/\/investigations\/[0-9a-f-]{36}$/);
@@ -27,8 +28,7 @@ test("a real run starts once despite repeated clicks and a refresh", async ({ pa
   const run = page.getByRole("button", { name: "Run saved proposals" });
   await run.click();
   await page.reload();
-  const more = page.getByRole("button", { name: /^Run (more|your first) fault tests/ });
-  if (await more.getAttribute("aria-expanded") === "false") await more.click();
+  await page.getByRole("tab", { name: "Run tests" }).click();
   if (await run.isVisible() && await run.isEnabled()) await run.click();
   await expect(page.getByText("All proposals run").first()).toBeVisible({ timeout: 60_000 });
   const view = await saved(page, id);
@@ -51,13 +51,15 @@ test("a finished investigation replays, reduces, compares a remedy and exports t
   await expect.poll(async () => (await saved(page, id)).reductions.length, { timeout: 60_000 }).toBe(before.reductions.length + 1);
   await expect.poll(async () => (await saved(page, id)).active, { timeout: 60_000 }).toBeNull();
   await page.reload();
+  await page.getByRole("tab", { name: "Compare a fix" }).click();
   await page.getByLabel("Threshold").fill("0.6");
   await page.getByRole("button", { name: "Compare remedy" }).click();
   await expect.poll(async () => (await saved(page, id)).remedies.length, { timeout: 60_000 }).toBe(before.remedies.length + 1);
   await expect.poll(async () => (await saved(page, id)).active, { timeout: 60_000 }).toBeNull();
   await page.reload();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Public evidence" }).click();
+  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("menuitem", { name: /^Public evidence/ }).click();
   const evidence = JSON.parse(readFileSync(await (await download).path(), "utf-8"));
   expect(evidence.remedies.map((item: { threshold: number }) => item.threshold)).toEqual([0.5, 0.6]);
   expect(evidence.validations[0].status).toBe("assessed");
