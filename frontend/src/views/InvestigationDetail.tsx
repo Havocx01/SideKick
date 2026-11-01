@@ -107,10 +107,10 @@ function Detail({ data, reload }: { data: InvestigationView; reload: () => void 
         <TabsTrigger value="results">Results{failures > 0 && <span className={styles.count}>{failures}</span>}</TabsTrigger>
         <TabsTrigger value="run">Run tests</TabsTrigger><TabsTrigger value="fix">Compare a fix</TabsTrigger><TabsTrigger value="activity">Activity</TabsTrigger>
       </TabsList>
-      <TabsContent value="results"><Results data={data} busy={busy} act={act} onRun={() => setTab("run")} /></TabsContent>
-      <TabsContent value="run"><Controls data={data} busy={busy} act={start} /></TabsContent>
-      <TabsContent value="fix"><Remedies data={data} busy={busy} act={act} onRun={() => setTab("run")} /></TabsContent>
-      <TabsContent value="activity"><Activity data={data} /></TabsContent>
+      <TabsContent value="results" forceMount hidden={tab !== "results"}><Results data={data} busy={busy} act={act} onRun={() => setTab("run")} /></TabsContent>
+      <TabsContent value="run" forceMount hidden={tab !== "run"}><Controls data={data} busy={busy} act={start} /></TabsContent>
+      <TabsContent value="fix" forceMount hidden={tab !== "fix"}><Remedies data={data} busy={busy} act={act} onRun={() => setTab("run")} /></TabsContent>
+      <TabsContent value="activity" forceMount hidden={tab !== "activity"}><Activity data={data} /></TabsContent>
     </Tabs>
   </>;
 }

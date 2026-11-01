@@ -131,9 +131,15 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const budget = Number(experiments);
+    const initialChecks = Number(seed);
+    if (!experiments.trim() || !Number.isInteger(budget) || budget < 1 || budget > 128 || !seed.trim() || !Number.isInteger(initialChecks) || initialChecks < 0 || initialChecks > Math.min(12, budget)) {
+      setError("Use a whole-number budget from 1 to 128 and initial checks from 0 to the smaller of 12 or the budget. Open More options to update them.");
+      return;
+    }
     setBusy(true); setError("");
     try {
-      const created = await investigations.create({ context: context.name, objective, maxExperiments: Number(experiments), seed: Number(seed), criterion: { candidate: target } });
+      const created = await investigations.create({ context: context.name, objective, maxExperiments: budget, seed: initialChecks, criterion: { candidate: target } });
       navigate(`/investigations/${created.id}`);
     } catch (failure) { setError(errorText(failure)); setBusy(false); }
   }

@@ -116,6 +116,27 @@ test("create shows clean performance and saves the criterion", async ({ page }) 
     maxExperiments: 8, seed: 3, criterion: { candidate: LR } } });
 });
 
+test("collapsed options still reject incomplete and out-of-range investigation limits", async ({ page }) => {
+  const state = await fixture(page, view());
+  await page.goto("/investigations");
+  const options = page.getByRole("button", { name: /^More options/ });
+  for (const limits of [{ budget: "8", seed: "" }, { budget: "0", seed: "0" }, { budget: "2", seed: "3" }, { budget: "8", seed: "1.5" }]) {
+    await options.click();
+    await page.getByLabel("Experiment budget", { exact: true }).fill(limits.budget);
+    await page.getByLabel("Initial checks", { exact: true }).fill(limits.seed);
+    await options.click();
+    await page.getByRole("button", { name: "Create investigation", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Use a whole-number budget from 1 to 128");
+    expect(state.posts).toHaveLength(0);
+  }
+  await options.click();
+  await page.getByLabel("Experiment budget", { exact: true }).fill("8");
+  await page.getByLabel("Initial checks", { exact: true }).fill("0");
+  await options.click();
+  await page.getByRole("button", { name: "Create investigation", exact: true }).click();
+  await expect.poll(() => state.posts[0]?.body).toMatchObject({ maxExperiments: 8, seed: 0 });
+});
+
 test("configurations of the same model remain distinguishable and save the selected identifier", async ({ page }) => {
   const second = "logistic_regression/lr-other";
   const state = await fixture(page, view(), [{ ...context, thresholds: { ...context.thresholds, [second]: 0.5 }, clean: { ...context.clean, [second]: context.clean[LR] } }]);
@@ -155,6 +176,31 @@ test("a run is started explicitly, polled to completion and its finding can be i
   await expect(card.getByRole("status")).toHaveText("Replay reproduced this result exactly.");
   await card.getByRole("button", { name: "Reduce" }).click();
   await expect.poll(() => state.posts.find(item => item.path.endsWith("/reduce"))?.body).toMatchObject({ attempt: "a1", maxExperiments: 16 });
+});
+
+test("switching sections preserves entered budgets, remedy settings and replay feedback", async ({ page }) => {
+  const state = await fixture(page, finished());
+  await page.goto("/investigations/inv-1");
+  await page.getByRole("button", { name: "Replay", exact: true }).click();
+  await expect(page.getByText("Replay reproduced this result exactly.", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Run tests", exact: true }).click();
+  await page.getByLabel("Provider calls", { exact: true }).fill("2");
+  await page.getByLabel("Completion token ceiling", { exact: true }).fill("5120");
+  await page.getByRole("tab", { name: "Compare a fix", exact: true }).click();
+  await page.getByLabel("Threshold", { exact: true }).fill("0.2");
+  await page.getByRole("tab", { name: "Activity", exact: true }).click();
+  await expect(page.getByRole("table", { name: "Investigation proposals" })).toBeVisible();
+  await expect(page.getByLabel("Provider calls", { exact: true })).not.toBeVisible();
+  await expect(page.getByLabel("Threshold", { exact: true })).not.toBeVisible();
+  await page.getByRole("tab", { name: "Run tests", exact: true }).click();
+  await expect(page.getByLabel("Provider calls", { exact: true })).toHaveValue("2");
+  await expect(page.getByLabel("Completion token ceiling", { exact: true })).toHaveValue("5120");
+  await expect(page.getByRole("button", { name: "Start Nemotron search", exact: true })).toBeDisabled();
+  await page.getByRole("tab", { name: "Compare a fix", exact: true }).click();
+  await expect(page.getByLabel("Threshold", { exact: true })).toHaveValue("0.2");
+  await page.getByRole("tab", { name: /^Results/ }).click();
+  await expect(page.getByText("Replay reproduced this result exactly.", { exact: true })).toBeVisible();
+  expect(state.posts.map(item => item.path)).toEqual(["/api/investigations/inv-1/replay"]);
 });
 
 test("provider search needs explicit consent and states what is sent", async ({ page }) => {
