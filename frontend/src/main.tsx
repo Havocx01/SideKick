@@ -25,7 +25,7 @@ const router = createBrowserRouter([
       { path: "experiments/:experimentId/replay", lazy: async () => ({ Component: (await import("./views/WarningReplay")).WarningReplay }) },
       { path: "experiments/:experimentId/pilot", lazy: async () => ({ Component: (await import("./views/PilotReview")).PilotReview }) },
       { path: "investigations", lazy: async () => ({ Component: (await import("./views/Investigations")).Investigations }) },
-      { path: "investigations/:investigationId", lazy: async () => ({ Component: (await import("./views/Investigations")).InvestigationDetail }) },
+      { path: "investigations/:investigationId", lazy: async () => ({ Component: (await import("./views/InvestigationDetail")).InvestigationDetail }) },
       { path: "comparison", lazy: async () => ({ Component: (await import("./views/ModelComparison")).ModelComparison }) },
       { path: "replay", lazy: async () => ({ Component: (await import("./views/WarningReplay")).WarningReplay }) }
     ]

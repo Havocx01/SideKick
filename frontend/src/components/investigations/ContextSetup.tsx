@@ -71,7 +71,7 @@ export function ContextSetup({ ready, onReady }: { ready: boolean; onReady: () =
     </div>
   </div>;
 
-  return ready && !running ? <div className={styles.readySetup}><p role="status"><Check size={16} aria-hidden="true" /><strong>Model setup ready.</strong> Choose your concern below to start an investigation.</p>
-    <Disclosure title="Prepare another model setup" description="Create a fresh synthetic sample without changing saved investigations.">{content}</Disclosure></div>
+  return ready && !running ? <div className={styles.readySetup}>
+    <Disclosure title="Prepare another model setup" description="A fresh synthetic sample; saved investigations stay as they are">{content}</Disclosure></div>
     : <Panel title="Prepare models for investigation" description="Start with a sample. No terminal commands or API key needed.">{content}</Panel>;
 }

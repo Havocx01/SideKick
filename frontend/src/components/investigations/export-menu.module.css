@@ -1,0 +1,13 @@
+.trigger { gap: var(--space-2); }
+.chevron { color: var(--text-secondary); transition: transform var(--duration-fast) var(--ease-out); }
+.trigger[data-popup-open] .chevron { transform: rotate(180deg); }
+.layer { z-index: 120; }
+.popup { width: 280px; max-width: calc(100vw - 32px); padding: var(--space-1); border-radius: var(--radius); background: var(--surface-raised); color: var(--foreground); box-shadow: var(--popover-shadow); transform-origin: var(--transform-origin); transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
+.popup[data-starting-style], .popup[data-ending-style] { opacity: 0; transform: translateY(-4px); }
+.item { display: grid; gap: 2px; min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: calc(var(--radius) - var(--space-1)); cursor: pointer; outline: none; }
+.item strong { font-size: var(--text-sm); font-weight: 500; }
+.item span { font-size: var(--text-xs); color: var(--text-secondary); }
+.item[data-highlighted] { background: var(--fill-strong); }
+@media (prefers-reduced-motion: reduce) {
+  @scope (:root:not([data-motion="full"])) { .popup, .chevron { transition: none; } .popup[data-starting-style], .popup[data-ending-style] { transform: none; } }
+}

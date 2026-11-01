@@ -18,6 +18,7 @@ test("preparing another setup keeps the investigation draft and selected model",
   });
   await page.goto("/investigations");
   await page.getByLabel("Concern").fill("Keep my unfinished investigation.");
+  await page.getByRole("button", { name: "More options", exact: false }).click();
   await page.getByLabel("Experiment budget").fill("7");
   const refreshed = page.waitForResponse(response => response.url().endsWith("/api/investigations/contexts"));
   await page.getByRole("button", { name: "Prepare another model setup", exact: false }).click();
@@ -52,6 +53,7 @@ test("sample models can be prepared in the app, reopened and used for a real inv
   await expect(page.getByLabel("Performance before sensor faults")).toContainText("22");
   await expect(page.getByRole("combobox", { name: "Model under test", exact: true })).toContainText("Logistic regression");
   await page.getByLabel("Concern").fill("Check whether missing sensor readings cost useful warnings.");
+  await page.getByRole("button", { name: "More options", exact: false }).click();
   await page.getByLabel("Experiment budget").fill("4");
   await page.getByRole("button", { name: "Create investigation", exact: true }).click();
   await expect(page).toHaveURL(/\/investigations\/[0-9a-f-]{36}$/);

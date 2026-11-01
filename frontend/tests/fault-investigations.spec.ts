@@ -106,7 +106,7 @@ test("create shows clean performance and saves the criterion", async ({ page }) 
   await expect(page.getByRole("link", { name: "Investigations", exact: true })).toBeVisible();
   const clean = page.getByRole("table", { name: "Clean performance" });
   await expect(page.getByLabel("Performance before sensor faults")).toContainText("100%");
-  await page.getByRole("button", { name: "Model details and fault assumptions", exact: false }).click();
+  await page.getByRole("button", { name: "More options", exact: false }).click();
   await expect(clean).toContainText("100%");
   await expect(page.getByText("Fault profile: synthetic-rotating-v1", { exact: false })).toBeVisible();
   await page.getByLabel("Experiment budget").fill("8");
@@ -114,6 +114,27 @@ test("create shows clean performance and saves the criterion", async ({ page }) 
   await expect(page).toHaveURL(/\/investigations\/inv-1$/);
   expect(state.posts[0]).toEqual({ path: "/api/investigations", body: { context: "synthetic", objective: "Find sensor faults that cost useful warnings.",
     maxExperiments: 8, seed: 3, criterion: { candidate: LR } } });
+});
+
+test("collapsed options still reject incomplete and out-of-range investigation limits", async ({ page }) => {
+  const state = await fixture(page, view());
+  await page.goto("/investigations");
+  const options = page.getByRole("button", { name: /^More options/ });
+  for (const limits of [{ budget: "8", seed: "" }, { budget: "0", seed: "0" }, { budget: "2", seed: "3" }, { budget: "8", seed: "1.5" }]) {
+    await options.click();
+    await page.getByLabel("Experiment budget", { exact: true }).fill(limits.budget);
+    await page.getByLabel("Initial checks", { exact: true }).fill(limits.seed);
+    await options.click();
+    await page.getByRole("button", { name: "Create investigation", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Use a whole-number budget from 1 to 128");
+    expect(state.posts).toHaveLength(0);
+  }
+  await options.click();
+  await page.getByLabel("Experiment budget", { exact: true }).fill("8");
+  await page.getByLabel("Initial checks", { exact: true }).fill("0");
+  await options.click();
+  await page.getByRole("button", { name: "Create investigation", exact: true }).click();
+  await expect.poll(() => state.posts[0]?.body).toMatchObject({ maxExperiments: 8, seed: 0 });
 });
 
 test("configurations of the same model remain distinguishable and save the selected identifier", async ({ page }) => {
@@ -130,11 +151,11 @@ test("configurations of the same model remain distinguishable and save the selec
 test("a run is started explicitly, polled to completion and its finding can be inspected", async ({ page }) => {
   const state = await fixture(page, view());
   await page.goto("/investigations/inv-1");
-  await expect(page.getByText("Fixed models. Matched machine histories.", { exact: false })).toBeVisible();
   await expect(page.getByText("Not started")).toBeVisible();
   expect(state.posts).toEqual([]);
-  await page.getByRole("button", { name: "Activity and proposed tests", exact: false }).click();
+  await page.getByRole("tab", { name: "Activity" }).click();
   await expect(page.getByRole("cell", { name: /outside the allowed mapping/ })).toBeVisible();
+  await page.getByRole("tab", { name: "Run tests" }).click();
   await page.getByRole("button", { name: "Run saved proposals" }).click();
   await expect(page.getByRole("heading", { name: "Running" })).toBeVisible();
   const start = state.posts.find(item => item.path.endsWith("/start"))!;
@@ -146,7 +167,7 @@ test("a run is started explicitly, polled to completion and its finding can be i
   await expect(card).toContainText("73%");
   await expect(card).toContainText("27 percentage points lower");
   await expect(card).toContainText("22 of 22");
-  await card.getByRole("button", { name: "Timing, affected histories, and assumptions" }).click();
+  await card.getByRole("button", { name: "Details", exact: true }).click();
   await card.getByText("1 history with recorded changes").click();
   await expect(card.getByRole("cell", { name: "SYN-001" })).toBeVisible();
   await card.getByText("Profile assumptions").click();
@@ -155,6 +176,31 @@ test("a run is started explicitly, polled to completion and its finding can be i
   await expect(card.getByRole("status")).toHaveText("Replay reproduced this result exactly.");
   await card.getByRole("button", { name: "Reduce" }).click();
   await expect.poll(() => state.posts.find(item => item.path.endsWith("/reduce"))?.body).toMatchObject({ attempt: "a1", maxExperiments: 16 });
+});
+
+test("switching sections preserves entered budgets, remedy settings and replay feedback", async ({ page }) => {
+  const state = await fixture(page, finished());
+  await page.goto("/investigations/inv-1");
+  await page.getByRole("button", { name: "Replay", exact: true }).click();
+  await expect(page.getByText("Replay reproduced this result exactly.", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Run tests", exact: true }).click();
+  await page.getByLabel("Provider calls", { exact: true }).fill("2");
+  await page.getByLabel("Completion token ceiling", { exact: true }).fill("5120");
+  await page.getByRole("tab", { name: "Compare a fix", exact: true }).click();
+  await page.getByLabel("Threshold", { exact: true }).fill("0.2");
+  await page.getByRole("tab", { name: "Activity", exact: true }).click();
+  await expect(page.getByRole("table", { name: "Investigation proposals" })).toBeVisible();
+  await expect(page.getByLabel("Provider calls", { exact: true })).not.toBeVisible();
+  await expect(page.getByLabel("Threshold", { exact: true })).not.toBeVisible();
+  await page.getByRole("tab", { name: "Run tests", exact: true }).click();
+  await expect(page.getByLabel("Provider calls", { exact: true })).toHaveValue("2");
+  await expect(page.getByLabel("Completion token ceiling", { exact: true })).toHaveValue("5120");
+  await expect(page.getByRole("button", { name: "Start Nemotron search", exact: true })).toBeDisabled();
+  await page.getByRole("tab", { name: "Compare a fix", exact: true }).click();
+  await expect(page.getByLabel("Threshold", { exact: true })).toHaveValue("0.2");
+  await page.getByRole("tab", { name: /^Results/ }).click();
+  await expect(page.getByText("Replay reproduced this result exactly.", { exact: true })).toBeVisible();
+  expect(state.posts.map(item => item.path)).toEqual(["/api/investigations/inv-1/results/a1/replay"]);
 });
 
 test("provider search needs explicit consent and states what is sent", async ({ page }) => {
@@ -197,19 +243,21 @@ test("cancel, resume, failures and interruptions are shown distinctly", async ({
 test("remedies need approval for retraining and evidence exports as JSON", async ({ page }) => {
   const state = await fixture(page, finished());
   await page.goto("/investigations/inv-1");
+  await page.getByRole("tab", { name: "Compare a fix" }).click();
   await page.getByLabel("Threshold").fill("0.5");
   await page.getByRole("button", { name: "Compare remedy" }).click();
   await expect.poll(() => state.posts.find(item => item.path.endsWith("/remedies"))?.body).toMatchObject({ kind: "threshold", threshold: 0.5, approveTraining: false });
-  await page.getByRole("combobox", { name: "Remedy" }).click();
-  await page.getByRole("option", { name: "Augmented retraining" }).click();
+  await page.getByRole("group", { name: "Remedy" }).getByRole("button", { name: "Augmented retraining" }).click();
   await expect(page.getByRole("button", { name: "Compare remedy" })).toBeDisabled();
   await page.getByRole("checkbox", { name: "Approve development-only retraining" }).check();
   await expect(page.getByRole("button", { name: "Compare remedy" })).toBeEnabled();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export evidence" }).click();
+  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("menuitem", { name: /^Full evidence/ }).click();
   expect((await download).suggestedFilename()).toBe("sidekick-investigation-inv-1.json");
   const publicDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Public evidence" }).click();
+  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("menuitem", { name: /^Public evidence/ }).click();
   expect((await publicDownload).suggestedFilename()).toBe("sidekick-investigation-inv-1-public.json");
 });
 
@@ -246,15 +294,15 @@ test("each kind of outcome looks different and unscored cases say why", async ({
   const notApplicable = page.getByRole("article", { name: /^Not applicable/ });
   await expect(notApplicable).toContainText("history never reaches 100 cycles before failure");
   await expect(page.getByRole("article", { name: /^Execution error/ })).toContainText("timed_out");
-  await page.getByRole("button", { name: "Activity and proposed tests", exact: false }).click();
+  await page.getByRole("tab", { name: "Activity" }).click();
   const calls = page.getByRole("table", { name: "Provider calls" });
   await expect(calls).toContainText("rejected: invalid proposal");
   await expect(calls).toContainText("Not run: No development history can apply this case (22 checked)");
   await expect(calls.getByRole("columnheader", { name: "Reserved ceiling" })).toBeVisible();
   await expect(calls).toContainText("5120");
-  await page.getByRole("button", { name: "Run more fault tests", exact: false }).click();
+  await expect(page.getByText("Reasons and hypotheses are unverified text; only measured results are evidence.")).toBeVisible();
+  await page.getByRole("tab", { name: "Run tests" }).click();
   await expect(page.getByText("Calls used 2; reserved 10240 tokens; reported 700.")).toBeVisible();
-  await expect(page.getByText("Reasons and hypotheses are unverified text; only measured results above are evidence.")).toBeVisible();
 });
 
 test("the hosted site shows recorded runs, labelled, and offers nothing that starts work", async ({ page }) => {
@@ -284,7 +332,6 @@ test("the hosted site shows recorded runs, labelled, and offers nothing that sta
   await expect(run).toContainText("100% → 36%");
   await expect(page.getByText("Recorded, not live")).toBeVisible();
   await expect(page.locator(".callout").filter({ hasText: "Demonstration setting" })).toContainText(/Deliberately fragile\./);
-  await page.getByRole("button", { name: "Model usage and record details" }).click();
   await expect(page.getByText("3 calls: 1510 reported completion tokens within a reserved ceiling of 15360")).toBeVisible();
   await expect(page.getByText("1 improved, 0 degraded, 1 still failing")).toBeVisible();
   await expect(page.getByText("Validation on 12 fresh histories (assessed):")).toBeVisible();
@@ -340,7 +387,7 @@ test("measured failures lead the results and passing tests keep their details av
   await expect(page.getByRole("article").first()).toHaveAttribute("aria-label", /^Measured failure/);
   const passed = page.getByRole("article", { name: /^No measured failure/ });
   await expect(passed.getByRole("button", { name: "Replay", exact: true })).toHaveCount(0);
-  await passed.getByRole("button", { name: "View test details", exact: false }).click();
+  await passed.getByRole("button", { name: /Useful warnings 100% → 100%/ }).click();
   await expect(passed.getByRole("button", { name: "Replay", exact: true })).toBeVisible();
   await expect(passed).toContainText("No change");
 });
@@ -357,6 +404,7 @@ test("invalid provider allowances and thresholds never start work", async ({ pag
   expect(state.posts).toEqual([]);
   state.current = finished();
   await page.reload();
+  await page.getByRole("tab", { name: "Compare a fix" }).click();
   for (const value of ["", "-0.1", "2"]) {
     await page.getByLabel("Threshold", { exact: true }).fill(value);
     await expect(page.getByRole("button", { name: "Compare remedy", exact: true })).toBeDisabled();
