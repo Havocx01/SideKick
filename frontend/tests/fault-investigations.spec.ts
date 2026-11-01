@@ -200,7 +200,7 @@ test("switching sections preserves entered budgets, remedy settings and replay f
   await expect(page.getByLabel("Threshold", { exact: true })).toHaveValue("0.2");
   await page.getByRole("tab", { name: /^Results/ }).click();
   await expect(page.getByText("Replay reproduced this result exactly.", { exact: true })).toBeVisible();
-  expect(state.posts.map(item => item.path)).toEqual(["/api/investigations/inv-1/replay"]);
+  expect(state.posts.map(item => item.path)).toEqual(["/api/investigations/inv-1/results/a1/replay"]);
 });
 
 test("provider search needs explicit consent and states what is sent", async ({ page }) => {
