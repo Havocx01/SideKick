@@ -38,6 +38,10 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("starting Sidekick %s in %s mode", __version__, settings.mode)
     cleanupTask = None
+    if settings.hosted:
+        from app.hosted import accessFor
+
+        app.state.hosted = accessFor(settings)
     if settings.mode in ("full", "demo"):
         settings.ensure_dirs()
         from app.experiments.jobs import Jobs
@@ -145,6 +149,17 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
+    if settings.hosted:
+        from app.hosted import HostedMiddleware
+
+        app.add_middleware(HostedMiddleware, settings=settings)
+
+    @app.get("/api/session", include_in_schema=False)
+    def session():
+        from app.hosted import sessionState
+
+        return JSONResponse(sessionState(settings), headers={"Cache-Control": "no-store"})
+
     app.include_router(routes_evidence.router)
     app.include_router(routes_copilot.router)
     app.include_router(routes_experiments.router)

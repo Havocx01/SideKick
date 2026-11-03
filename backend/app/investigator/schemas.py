@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from app.faults.investigation import InvestigationState
+from app.faults.evaluator import AlarmExposure
 from app.investigator.findings import Finding, FindingCriterion
 from app.investigator.research import ResearchReport
 from app.schemas import Strict
@@ -11,11 +12,20 @@ from app.schemas import Strict
 RequestId = Field(pattern=r"^[A-Za-z0-9_-]{8,64}$")
 
 
+class CleanEquipment(Strict):
+    equipment_id: str
+    warning: Literal['detected', 'late', 'missed']
+    exposure: AlarmExposure
+
+
 class CleanMetrics(Strict):
     detection: float
     alarmBurden: float | None
     medianLead: float | None
     histories: int
+    equipment: list[CleanEquipment] = Field(default_factory=list)
+    meanEquipmentBurden: float | None = None
+    worstEquipmentBurden: float | None = None
 
 
 class ContextInfo(Strict):
@@ -29,6 +39,28 @@ class ContextInfo(Strict):
 
 class ContextPreparationRequest(Strict):
     requestId: str = RequestId
+
+
+class ThresholdCheckRequest(Strict):
+    criterion: FindingCriterion
+
+
+class ThresholdPoint(Strict):
+    threshold: float
+    clean: CleanMetrics
+
+
+class ThresholdCheck(Strict):
+    status: Literal['qualified', 'no_qualifying_threshold', 'insufficient_evidence']
+    contextFingerprint: str
+    criterion: FindingCriterion
+    current: ThresholdPoint
+    suggested: ThresholdPoint | None
+    bestWithinAlarmCap: ThresholdPoint | None
+    reasons: list[str]
+    candidateThresholds: int
+    evaluatedThresholds: int
+    note: str = 'Development calibration only. No threshold was changed and no model was retrained.'
 
 
 class ContextPreparation(Strict):

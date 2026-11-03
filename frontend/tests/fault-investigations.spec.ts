@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { ContextInfo, Finding, InvestigationView } from "../src/api/types";
+import type { ContextInfo, Finding, InvestigationView, ThresholdCheck } from "../src/api/types";
 
 const LR = "logistic_regression/lr-probe";
 const stuckPair = { components: [{ sensor: "vibration_rms", kind: "stuck", duration: "persistent", onset_before_failure: 60 },
@@ -35,8 +35,15 @@ const finished = () => view({ experimentsUsed: 1, discoveries: 1, discoveryFamil
     { sequence: 3, kind: "finished:run", detail: "completed", at: 1_760_000_020 }],
   proposals: view().proposals.map(item => item.id === "p1" ? { ...item, status: "completed" } : item) });
 
+const thresholdResult = (): ThresholdCheck => ({ status: "qualified", contextFingerprint: context.contextFingerprint,
+  criterion: { version: 2, candidate: LR, alarm_scope: "pooled", min_clean_detection: .8, max_alarm_burden: .05 },
+  current: { threshold: .95, clean: { detection: .5, alarmBurden: .01, medianLead: 17, histories: 22 } },
+  suggested: { threshold: .7, clean: { detection: .9, alarmBurden: .04, medianLead: 20, histories: 22 } },
+  bestWithinAlarmCap: null, reasons: [], candidateThresholds: 10, evaluatedThresholds: 10, note: "No threshold was changed and no model was retrained." });
+
 async function fixture(page: Page, initial: InvestigationView, contexts: ContextInfo[] = [context]) {
-  const state = { current: initial, posts: [] as { path: string; body: Record<string, unknown> | null }[], gets: 0, failReads: false };
+  const state = { current: initial, posts: [] as { path: string; body: Record<string, unknown> | null }[], gets: 0, failReads: false,
+    threshold: thresholdResult(), thresholdGate: null as Promise<void> | null };
   await page.addInitScript(() => sessionStorage.setItem("sidekick.walkthrough.intro.dismissed", "true"));
   await page.route("**/api/investigations**", async route => {
     const request = route.request();
@@ -45,6 +52,11 @@ async function fixture(page: Page, initial: InvestigationView, contexts: Context
       expect(request.headers()["x-sidekick-request"]).toBe("1");
       const body = request.postData() ? request.postDataJSON() : null;
       state.posts.push({ path, body });
+      if (path.endsWith("/threshold-check")) {
+        const result = state.threshold;
+        await state.thresholdGate;
+        return route.fulfill({ json: result });
+      }
       if (path === "/api/investigations") return route.fulfill({ json: initial });
       if (path.endsWith("/replay")) return route.fulfill({ json: { attempt: "a1", scenarioId: failure.scenario_id, matches: true, evidenceDigest: failure.evidence_digest } });
       if (path.endsWith("/cancel")) state.current = { ...state.current, state: { ...state.current.state, cancel_requested: true } };
@@ -96,7 +108,7 @@ test("an empty registry offers in-app preparation instead of a terminal command"
   await page.goto("/investigations");
   await expect(page.getByRole("heading", { name: "Prepare models for investigation" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Prepare sample models", exact: true })).toBeVisible();
-  await expect(page.getByText("Preparation runs locally and makes no AI requests.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Preparation runs in this workspace and makes no AI requests.", { exact: false })).toBeVisible();
   await expect(page.locator("pre")).toHaveCount(0);
 });
 
@@ -113,7 +125,7 @@ test("create shows clean performance and saves the criterion", async ({ page }) 
   await page.getByRole("button", { name: "Create investigation" }).click();
   await expect(page).toHaveURL(/\/investigations\/inv-1$/);
   expect(state.posts[0]).toEqual({ path: "/api/investigations", body: { context: "synthetic", objective: "Find sensor faults that cost useful warnings.",
-    maxExperiments: 8, seed: 3, criterion: { candidate: LR } } });
+    maxExperiments: 8, seed: 3, criterion: { version: 2, candidate: LR, alarm_scope: "pooled", min_clean_detection: .8, max_alarm_burden: .05 } } });
 });
 
 test("collapsed options still reject incomplete and out-of-range investigation limits", async ({ page }) => {
@@ -136,6 +148,168 @@ test("collapsed options still reject incomplete and out-of-range investigation l
   await page.getByRole("button", { name: "Create investigation", exact: true }).click();
   await expect.poll(() => state.posts[0]?.body).toMatchObject({ maxExperiments: 8, seed: 0 });
 });
+
+test("each-machine alarm scope saves v2 with unchanged provisional limits", async ({ page }) => {
+  const state = await fixture(page, view());
+  await page.goto("/investigations");
+  await page.getByRole("combobox", { name: "Alarm budget scope", exact: true }).click();
+  await page.getByRole("option", { name: "Each machine", exact: true }).click();
+  await expect(page.getByText("Each machine must meet the clean alarm budget", { exact: false })).toBeVisible();
+  await expect(page.getByText("These limits require engineer review", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Create investigation", exact: true }).click();
+  await expect.poll(() => state.posts[0]?.body).toMatchObject({ criterion: { version: 2, candidate: LR, alarm_scope: "per_equipment", min_clean_detection: .8, max_alarm_burden: .05 } });
+});
+
+test("threshold checking is deliberate and suggestions never change the setup", async ({ page }) => {
+  const state = await fixture(page, view());
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/investigations");
+  const check = page.getByRole("region", { name: "Warning threshold check" });
+  await expect(check.getByRole("button", { name: "Check warning threshold", exact: true })).toBeVisible();
+  await expect(check.getByRole("status")).toHaveCount(0);
+  expect(state.posts).toHaveLength(0);
+  await check.getByRole("button", { name: "Check warning threshold", exact: true }).click();
+  await expect(check.getByRole("status")).toHaveText("A threshold meets the development limits");
+  await expect(check).toContainText("Current threshold: 0.95");
+  await expect(check).toContainText("Suggested threshold (not applied): 0.7");
+  await expect(check).toContainText("does not apply a threshold, retrain a model, or validate on fresh data");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(state.posts[0]).toEqual({ path: "/api/investigations/contexts/synthetic/threshold-check", body: { criterion: {
+    version: 2, candidate: LR, alarm_scope: "pooled", min_clean_detection: .8, max_alarm_burden: .05
+  } } });
+  await page.getByRole("button", { name: "Create investigation", exact: true }).click();
+  expect(state.posts[1].body).toMatchObject({ criterion: { candidate: LR, max_alarm_burden: .05 } });
+  expect(state.posts[1].body).not.toHaveProperty("threshold");
+});
+
+for (const status of ["no_qualifying_threshold", "insufficient_evidence"] as const) {
+  test(`threshold check reports ${status} without inventing a suggestion`, async ({ page }) => {
+    const state = await fixture(page, view());
+    state.threshold = { ...thresholdResult(), status, suggested: null, bestWithinAlarmCap: status === "insufficient_evidence" ? null
+      : { threshold: .85, clean: { detection: .6, alarmBurden: .03, medianLead: 10, histories: 22 } },
+      reasons: [status === "insufficient_evidence" ? "Machine alarm windows are unavailable." : "No checked threshold meets both limits."], evaluatedThresholds: status === "insufficient_evidence" ? 0 : 10 };
+    await page.goto("/investigations");
+    const check = page.getByRole("region", { name: "Warning threshold check" });
+    await check.getByRole("button", { name: "Check warning threshold", exact: true }).click();
+    await expect(check.getByRole("status")).toHaveText(status === "insufficient_evidence" ? "Threshold evidence is incomplete" : "No qualifying threshold in this check");
+    await expect(check).toContainText(state.threshold.reasons[0]);
+    await expect(check).toContainText("Current threshold: 0.95");
+    await expect(check.getByText("Suggested threshold", { exact: false })).toHaveCount(0);
+    if (status === "no_qualifying_threshold") {
+      await check.getByRole("button", { name: "Best checked threshold within the alarm cap", exact: false }).click();
+      await expect(check).toContainText("Checked threshold (not applied): 0.85");
+      await expect(check).toContainText("This point did not satisfy every requirement");
+    }
+  });
+}
+
+for (const selection of ["Model setup", "Model under test", "Alarm budget scope"] as const) {
+  test(`changing ${selection} clears threshold results and ignores stale responses`, async ({ page }) => {
+    const second = "logistic_regression/lr-other";
+    const multiple = { ...context, thresholds: { ...context.thresholds, [second]: .5 }, clean: { ...context.clean, [second]: context.clean[LR] } };
+    const state = await fixture(page, view(), [multiple, { ...multiple, name: "other-setup", contextFingerprint: "b".repeat(64) }]);
+    await page.goto("/investigations");
+    const check = page.getByRole("region", { name: "Warning threshold check" });
+    await check.getByRole("button", { name: "Check warning threshold", exact: true }).click();
+    await expect(check.getByRole("status")).toHaveText("A threshold meets the development limits");
+    if (selection === "Model setup") await page.getByRole("button", { name: "More options", exact: false }).click();
+    await page.getByRole("combobox", { name: selection, exact: true }).click();
+    await page.getByRole("option", { name: selection === "Model setup" ? "other-setup" : selection === "Model under test" ? "Logistic regression · lr-other" : "Each machine", exact: true }).click();
+    await expect(check.getByRole("status")).toHaveCount(0);
+    expect(state.posts).toHaveLength(1);
+    let release!: () => void;
+    state.thresholdGate = new Promise<void>(resolve => { release = resolve; });
+    await check.getByRole("button", { name: "Check warning threshold", exact: true }).click();
+    await expect(check.getByRole("status")).toHaveText("Checking recorded development scores…");
+    await page.getByRole("combobox", { name: selection, exact: true }).click();
+    await page.getByRole("option", { name: selection === "Model setup" ? "synthetic" : selection === "Model under test" ? "Logistic regression · lr-probe" : "Pooled cycles", exact: true }).click();
+    await expect(check.getByRole("status")).toHaveCount(0);
+    const response = page.waitForResponse(value => value.url().endsWith("/threshold-check"));
+    release();
+    await response;
+    await expect(check.getByRole("status")).toHaveCount(0);
+    await expect(check.getByText("Suggested threshold", { exact: false })).toHaveCount(0);
+    expect(state.posts).toHaveLength(2);
+  });
+}
+
+test("baseline shows machine alarm extremes and missing window coverage when recorded", async ({ page }) => {
+  await fixture(page, view(), [{ ...context, clean: { [LR]: { ...context.clean[LR], histories: 3, meanEquipmentBurden: .26, worstEquipmentBurden: .51,
+    equipment: [{ equipment_id: "one", warning: "detected", exposure: { alarm_eligible_cycles: 51, eligible_cycles: 100, scored_cycles: 120 } },
+      { equipment_id: "two", warning: "missed", exposure: { alarm_eligible_cycles: 0, eligible_cycles: 0, scored_cycles: 4 } }] } } }]);
+  await page.goto("/investigations");
+  const baseline = page.getByLabel("Performance before sensor faults");
+  await expect(baseline).toContainText("Mean machine alarm burden");
+  await expect(baseline).toContainText("26.0%");
+  await expect(baseline).toContainText("Worst machine alarm burden");
+  await expect(baseline).toContainText("51.0%");
+  await expect(baseline).toContainText("Eligible alarm windows: 1 of 3 machines. 2 unavailable.");
+});
+
+const machineFinding = (): Finding => ({ ...failure, criterion: { candidate: LR, version: 2, alarm_scope: "per_equipment" }, equipment_alarms: [
+  { equipment_id: "Machine-long-history", clean_warning: "detected", faulted_warning: "late",
+    clean: { alarm_eligible_cycles: 1, eligible_cycles: 100, scored_cycles: 120 }, faulted: { alarm_eligible_cycles: 2, eligible_cycles: 100, scored_cycles: 120 } },
+  { equipment_id: "Machine-short-history", clean_warning: "detected", faulted_warning: "missed",
+    clean: { alarm_eligible_cycles: 5, eligible_cycles: 10, scored_cycles: 30 }, faulted: { alarm_eligible_cycles: 8, eligible_cycles: 10, scored_cycles: 30 } },
+  { equipment_id: "Machine-unknown-window", clean_warning: "late", faulted_warning: "missed", clean: null,
+    faulted: { alarm_eligible_cycles: 90, eligible_cycles: 100, scored_cycles: 120 } },
+  { equipment_id: "Machine-zero-window", clean_warning: "missed", faulted_warning: "missed",
+    clean: { alarm_eligible_cycles: 0, eligible_cycles: 0, scored_cycles: 4 }, faulted: { alarm_eligible_cycles: 0, eligible_cycles: 0, scored_cycles: 4 } }
+] });
+
+test("machine evidence uses matched recorded denominators and exposes hidden burden", async ({ page }) => {
+  await fixture(page, { ...finished(), findings: [machineFinding()] });
+  await page.goto("/investigations/inv-1");
+  const card = page.getByRole("article", { name: /^Measured failure/ });
+  await expect(card).toContainText("Alarm criterion v2: each machine, plus pooled clean eligibility");
+  await card.getByRole("button", { name: "Machine alarm evidence", exact: false }).click();
+  await expect(card).toContainText("same 2 of 4 machines");
+  const figures = card.locator("figure");
+  await expect(figures.filter({ hasText: "Pooled alarm burden" })).toContainText("5.5%");
+  await expect(figures.filter({ hasText: "Pooled alarm burden" })).toContainText("9.1%");
+  await expect(figures.filter({ hasText: "Mean machine alarm burden" })).toContainText("25.5%");
+  await expect(figures.filter({ hasText: "Mean machine alarm burden" })).toContainText("41.0%");
+  await expect(figures.filter({ hasText: "Worst machine alarm burden" })).toContainText("50.0%");
+  await expect(figures.filter({ hasText: "Worst machine alarm burden" })).toContainText("80.0%");
+  const table = card.getByRole("table", { name: "Machine alarm counts" });
+  await expect(table.getByRole("row", { name: /Machine-long-history/ })).toContainText("1 / 100 alarm / eligible cycles");
+  await expect(table.getByRole("row", { name: /Machine-short-history/ })).toContainText("Missed");
+  await expect(table.getByRole("row", { name: /Machine-unknown-window/ })).toContainText("Unavailable: window not recorded");
+  await expect(table.getByRole("row", { name: /Machine-zero-window/ })).toContainText("Unavailable: no eligible window");
+  await expect(table.getByRole("row", { name: /Machine-zero-window/ })).toContainText("0 / 0 alarm / eligible cycles");
+});
+
+test("no eligible machine windows leaves all alarm summaries unavailable", async ({ page }) => {
+  const finding = machineFinding();
+  finding.equipment_alarms = finding.equipment_alarms!.slice(2);
+  await fixture(page, { ...finished(), findings: [finding] });
+  await page.goto("/investigations/inv-1");
+  const card = page.getByRole("article", { name: /^Measured failure/ });
+  await card.getByRole("button", { name: "Machine alarm evidence", exact: false }).click();
+  await expect(card).toContainText("same 0 of 2 machines");
+  await expect(card.locator("figure").filter({ hasText: "Comparison unavailable" })).toHaveCount(3);
+});
+
+test("historical v1 finding retains pooled interpretation without invented machine counts", async ({ page }) => {
+  await fixture(page, finished());
+  await page.goto("/investigations/inv-1");
+  const card = page.getByRole("article", { name: /^Measured failure/ });
+  await expect(card).toContainText("Historical pooled alarm criterion (v1)");
+  await card.getByRole("button", { name: "Machine alarm evidence", exact: false }).click();
+  await expect(card).toContainText("no counts are inferred");
+  await expect(card.getByRole("table", { name: "Machine alarm counts" })).toHaveCount(0);
+});
+
+for (const width of [320, 390, 768, 1024, 1440]) {
+  test(`machine evidence confines table overflow at ${width}px`, async ({ page }) => {
+    await fixture(page, { ...finished(), findings: [machineFinding()] });
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/investigations/inv-1");
+    await page.getByRole("button", { name: "Machine alarm evidence", exact: false }).click();
+    await expect(page.getByRole("table", { name: "Machine alarm counts" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
 
 test("configurations of the same model remain distinguishable and save the selected identifier", async ({ page }) => {
   const second = "logistic_regression/lr-other";

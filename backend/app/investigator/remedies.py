@@ -6,7 +6,7 @@ from uuid import uuid4
 from app.faults.evaluator import FixedDevelopmentEvaluator
 from app.faults.investigation import ExperimentRunner
 from app.faults.scenarios import FaultCase
-from app.investigator.findings import classify, loadCriterion, recordFindings
+from app.investigator.findings import alarmSummary, classify, loadCriterion, recordFindings
 from app.investigator.reduction import ensureTable as ensureReductions
 
 REMEDIES = {
@@ -21,10 +21,12 @@ class RemedyError(RuntimeError):
 
 def thresholdRemedy(evaluator, candidate, threshold):
     thresholds = {candidate: float(threshold)}
-    return FixedDevelopmentEvaluator(evaluator.snapshot(), thresholds, evaluator.policy), candidate
+    return FixedDevelopmentEvaluator(evaluator.snapshot(), thresholds, evaluator.policy, rawSource=evaluator.rawSource), candidate
 
 
 def augmentedRemedy(evaluator, *, approveTraining=False):
+    if evaluator.rawSource is not None:
+        raise ValueError('Augmented retraining is not implemented for raw vibration; use an explicit threshold comparison')
     if not approveTraining:
         raise PermissionError("Augmented retraining needs explicit approval")
     from app.models.candidates import AugmentedXGBoostCandidate
@@ -71,10 +73,18 @@ def caseSuite(store, investigation, evaluator, regressions):
 def outcome(evaluation, finding, candidate):
     model = next(item for item in evaluation.models if item.candidate == candidate)
     faulted = model.faulted
-    return {"status": finding.status, "evaluated": evaluation.evaluated_histories, "exclusions": len(evaluation.exclusions),
+    result = {"status": finding.status, "evaluated": evaluation.evaluated_histories, "exclusions": len(evaluation.exclusions),
         "cleanDetection": finding.clean_detection, "faultedDetection": finding.faulted_detection,
         "cleanBurden": finding.clean_burden, "faultedBurden": finding.faulted_burden,
-        "faultedMedianLead": faulted.median_lead_time if faulted else None}, sorted(pair.equipment_id for pair in model.pairs)
+        "faultedMedianLead": faulted.median_lead_time if faulted else None}
+    if finding.criterion.version == 2:
+        alarms = alarmSummary([pair.faulted_alarm for pair in model.pairs])
+        if finding.criterion.alarm_scope == 'per_equipment':
+            result['withinAlarmCap'] = alarms['missing'] == 0 and alarms['worst'] is not None and alarms['worst'] <= finding.criterion.max_alarm_burden
+        else:
+            result['withinAlarmCap'] = faulted is not None and faulted.early_alarm_burden is not None and faulted.early_alarm_burden <= finding.criterion.max_alarm_burden
+        result['equipmentAlarm'] = alarms
+    return result, sorted(pair.equipment_id for pair in model.pairs)
 
 
 def cleanSummary(metrics):
@@ -84,6 +94,20 @@ def cleanSummary(metrics):
 
 def stillFailing(rows):
     return sum(row["original"]["status"] == row["remedy"]["status"] == "measured_failure" for row in rows)
+
+
+def remedyMeetsCriteria(clean, rows, criterion):
+    meets = (clean['detection'] >= criterion.min_clean_detection and clean['alarmBurden'] is not None
+        and clean['alarmBurden'] <= criterion.max_alarm_burden and not any(row['degraded'] for row in rows))
+    if criterion.version == 1:
+        return meets
+    if not meets or clean['histories'] < criterion.min_histories or not rows:
+        return False
+    if criterion.alarm_scope == 'per_equipment':
+        alarms = clean.get('equipmentAlarm')
+        if not alarms or alarms['missing'] or alarms['worst'] is None or alarms['worst'] > criterion.max_alarm_burden:
+            return False
+    return all(row['matchedCohort'] and row['remedy']['status'] == 'no_measured_failure' and row['remedy'].get('withinAlarmCap') for row in rows)
 
 
 def compareRemedy(store, evaluator, investigation, kind, *, threshold=None, approveTraining=False, regressions=()) -> dict:
@@ -121,8 +145,10 @@ def compareRemedy(store, evaluator, investigation, kind, *, threshold=None, appr
         evaluateSeconds = time.monotonic() - started
 
     clean = {"original": cleanSummary(evaluator.cleanMetrics()[criterion.candidate]), "remedy": cleanSummary(remedy.cleanMetrics()[remedyCandidate])}
-    meets = (clean["remedy"]["detection"] >= criterion.min_clean_detection and clean["remedy"]["alarmBurden"] is not None
-        and clean["remedy"]["alarmBurden"] <= criterion.max_alarm_burden and not any(row["degraded"] for row in rows))
+    if criterion.version == 2:
+        for label, context, candidate in [('original', evaluator, criterion.candidate), ('remedy', remedy, remedyCandidate)]:
+            clean[label]['equipmentAlarm'] = alarmSummary([row['exposure'] for row in context.cleanEquipment()[candidate]])
+    meets = remedyMeetsCriteria(clean['remedy'], rows, criterion)
     report = {"id": uuid4().hex, "investigation": investigation, "kind": kind, "description": REMEDIES[kind],
         "threshold": threshold, "originalContext": evaluator.context_fingerprint, "remedyContext": remedy.context_fingerprint,
         "originalCandidate": criterion.candidate, "remedyCandidate": remedyCandidate, "criterion": criterion.fingerprint,

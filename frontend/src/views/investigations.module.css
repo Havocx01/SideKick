@@ -1,3 +1,8 @@
+.equipmentComparisons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); min-width: 0; }
+.equipmentTable { min-width: 760px; }
+.equipmentTable th[scope="row"] { min-width: 120px; overflow-wrap: anywhere; font-weight: 500; }
+.equipmentTable td { font-variant-numeric: tabular-nums; }
+.equipmentTable td:nth-child(3), .equipmentTable td:nth-child(5) { min-width: 220px; }
 .form, .stack { display: grid; gap: var(--space-5); min-width: 0; }
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .fields > *, .form > *, .stack > * { min-width: 0; }
@@ -185,3 +190,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .disclosureTrigger > svg { transition: none; } }
+
+@media (max-width: 600px) {
+  .equipmentComparisons { grid-template-columns: minmax(0, 1fr); }
+}

@@ -8,7 +8,7 @@ from typing import Literal
 
 import joblib
 import numpy as np
-from pydantic import Field
+from pydantic import Field, model_serializer, model_validator
 
 from app.experiments.provenance import source_digest
 from app.faults.scenarios import ComponentApplication, FaultCase, FaultPolicy, apply_case, fingerprint
@@ -33,12 +33,43 @@ class HistoryApplication(Strict):
     components: list[ComponentApplication]
 
 
+class AlarmExposure(Strict):
+    eligible_cycles: int = Field(ge=0, strict=True)
+    alarm_eligible_cycles: int = Field(ge=0, strict=True)
+    scored_cycles: int = Field(ge=0, strict=True)
+
+    @model_validator(mode='after')
+    def checkCounts(self):
+        if self.alarm_eligible_cycles > self.eligible_cycles or self.eligible_cycles > self.scored_cycles:
+            raise ValueError('Alarm exposure counts must fit their observed denominators')
+        return self
+
+    @property
+    def burden(self):
+        return self.alarm_eligible_cycles / self.eligible_cycles if self.eligible_cycles else None
+
+
+def alarmExposure(scoring):
+    return AlarmExposure(eligible_cycles=scoring.eligible_cycles, alarm_eligible_cycles=scoring.alarm_eligible_cycles,
+        scored_cycles=scoring.scored_cycles)
+
+
 class MatchedOutcome(Strict):
     equipment_id: str
     clean: EngineOutcome
     faulted: EngineOutcome
     clean_prediction_digest: str
     faulted_prediction_digest: str
+    clean_alarm: AlarmExposure | None = None
+    faulted_alarm: AlarmExposure | None = None
+
+    @model_serializer(mode='wrap')
+    def serializeValues(self, handler):
+        values = handler(self)
+        for field in ('clean_alarm', 'faulted_alarm'):
+            if getattr(self, field) is None:
+                values.pop(field, None)
+        return values
 
 
 class ModelEvaluation(Strict):
@@ -69,6 +100,14 @@ class FaultEvaluation(Strict):
     exclusions: list[Exclusion]
     applications: list[HistoryApplication]
     models: list[ModelEvaluation] = Field(min_length=1, max_length=10)
+    raw_source: dict | None = None
+
+    @model_serializer(mode='wrap')
+    def serializeValues(self, handler):
+        values = handler(self)
+        if self.raw_source is None:
+            values.pop('raw_source', None)
+        return values
 
 
 def prediction_digest(scores, cycles) -> str:
@@ -84,8 +123,15 @@ def checked_scores(candidate, design):
 
 
 class FixedDevelopmentEvaluator:
-    def __init__(self, training, thresholds: dict[str, float], policy: FaultPolicy):
+    def __init__(self, training, thresholds: dict[str, float], policy: FaultPolicy, *, rawSource=None):
         self._policy = FaultPolicy.model_validate(policy.model_dump(mode="json"))
+        self._rawSource = deepcopy(rawSource)
+        if self._rawSource is not None:
+            from app.faults.vibration import RawVibrationSource
+
+            if type(self._rawSource) is not RawVibrationSource:
+                raise ValueError('Raw evaluation needs a prepared vibration source')
+            self._rawSource.validate(training.dataset)
         self._validate_context(training, thresholds)
         # Keep the fitted context independent of later caller changes.
         self._training = deepcopy(training)
@@ -106,6 +152,10 @@ class FixedDevelopmentEvaluator:
             "data_hash": self._training.dataset.data_hash, "mapping": self._training.dataset.mapping.model_dump(mode="json"),
             "development_content": hashlib.sha256(developmentCsv.encode()).hexdigest(),
             "config": self._config.as_dict(), "splits": self._training.splits.model_dump(mode="json")})
+        self._rawScales = {}
+        if self._rawSource is not None:
+            self._context_fingerprint = fingerprint({'feature_context': self._context_fingerprint, 'raw_source': self._rawSource.fingerprint})
+            self._rawScales = {fold.fold_index: self._rawSource.scale(fold.train_engines, self._training.dataset) for fold in self._training.folds}
         self._prepared = []
         self._clean = {name: {} for name in self._thresholds}
         self._clean_digests = {name: {} for name in self._thresholds}
@@ -146,8 +196,36 @@ class FixedDevelopmentEvaluator:
     def snapshot(self):
         return deepcopy(self._training)
 
+    @property
+    def rawSource(self):
+        return deepcopy(self._rawSource)
+
     def cleanMetrics(self):
         return {name: aggregate(list(outcomes.values()), config=self._config) for name, outcomes in self._clean.items()}
+
+    def cleanEquipment(self):
+        return {name: [{'equipment_id': id, 'warning': 'detected' if row.outcome.detected else 'late' if row.outcome.late else 'missed',
+            'exposure': alarmExposure(row)} for id, row in sorted(outcomes.items())] for name, outcomes in self._clean.items()}
+
+    def calibrationScores(self, candidate, *, check=None):
+        from app.models.train import EngineScores
+
+        if candidate not in self._thresholds:
+            raise ValueError('Choose one of this context\'s fixed models')
+        result = {}
+        for fold, blocks in self._prepared:
+            if check is not None:
+                check()
+            design = design_from_blocks(blocks, fold.builder.feature_names())
+            scores = checked_scores(fold.candidates[candidate], design)
+            if check is not None:
+                check()
+            for id in fold.validation_engines:
+                if check is not None:
+                    check()
+                mask = design.equipment_id == id
+                result[id] = EngineScores(id, design.cycle[mask], design.rul[mask], scores[mask], design.y[mask])
+        return result
 
     def is_cached(self, scenario_id: str) -> bool:
         return scenario_id in self._cache
@@ -192,7 +270,8 @@ class FixedDevelopmentEvaluator:
         external = len(training.folds) == 1 and not training.folds[0].train_engines
         if not (2 <= len(training.folds) <= 10 or external) or len(training.folds) != len(training.splits.folds):
             raise ValueError("Fitted fold count is outside the evaluation limit")
-        if not set(self.policy.allowed_sensors) <= set(training.dataset.sensors):
+        sensors = self._rawSource.sensors if self._rawSource is not None else training.dataset.sensors
+        if not set(self.policy.allowed_sensors) <= set(sensors):
             raise ValueError("Policy sensors are outside the fitted mapping")
         indices = set()
         for fold in training.folds:
@@ -214,34 +293,50 @@ class FixedDevelopmentEvaluator:
             if any(name not in fold.candidates or not fold.candidates[name].fitted or fold.candidates[name].name != name for name in thresholds):
                 raise ValueError("Every selected model must already be fitted in every fold")
 
-    def _inject(self, fold, block, equipment, case):
-        injection = apply_case(self._training.dataset.sensor_matrix(equipment), block.rul, case, fold.builder, self._config)
+    def _inject(self, fold, block, equipment, case, *, check=None):
+        if self._rawSource is not None:
+            injection = self._rawSource.apply(equipment, block.rul, case, fold.builder, self._config,
+                rawScale=self._rawScales[fold.fold_index], check=check)
+        else:
+            injection = apply_case(self._training.dataset.sensor_matrix(equipment), block.rul, case, fold.builder, self._config)
         if not injection.applied:
             return None, list(injection.reasons)
-        features = block.features.copy()
+        features = fold.builder.build_engine(injection.values) if self._rawSource is not None else block.features.copy()
+        if self._rawSource is None:
+            for atom in case.components:
+                index = fold.builder.preprocessor.index_of(atom.sensor)
+                fold.builder.rebuild_sensor(features, injection.values[:, index], atom.sensor)
         for atom in case.components:
-            index = fold.builder.preprocessor.index_of(atom.sensor)
-            fold.builder.rebuild_sensor(features, injection.values[:, index], atom.sensor)
-        for atom in case.components:
-            columns = fold.builder.block(atom.sensor)
-            if np.array_equal(features[block.scorable, columns], block.features[block.scorable, columns], equal_nan=True):
+            sensors = [sensor for sensor in fold.builder.sensors if sensor.startswith(f'{atom.sensor}_')] if self._rawSource is not None else [atom.sensor]
+            if all(np.array_equal(features[block.scorable, fold.builder.block(sensor)],
+                    block.features[block.scorable, fold.builder.block(sensor)], equal_nan=True) for sensor in sensors):
                 return None, ["A component changed no scorable features"]
         return features, list(injection.components)
 
-    def preview(self, case: FaultCase) -> dict:
+    def preview(self, case: FaultCase, *, check=None) -> dict:
         """Which development histories a case would change, without scoring or using the evaluation budget."""
         case = FaultCase.model_validate(case.model_dump(mode="json"))
         self.policy.check(case, self._config)
+        deadline = time.monotonic() + self.policy.max_seconds
+
+        def checkpoint():
+            if check is not None:
+                check()
+            if time.monotonic() >= deadline:
+                raise EvaluationStopped('Applicability preview reached its cooperative time limit')
+
         reasons, applicable = {}, 0
         for fold, blocks in self._prepared:
             for equipment in fold.validation_engines:
-                features, outcome = self._inject(fold, blocks[equipment], equipment, case)
+                checkpoint()
+                features, outcome = self._inject(fold, blocks[equipment], equipment, case, check=checkpoint)
                 if features is None:
                     for reason in outcome:
                         reasons[reason] = reasons.get(reason, 0) + 1
                 else:
                     applicable += 1
         expected = len(self._training.splits.development)
+        checkpoint()
         return {"applicable": applicable, "expected": expected, "coverage": applicable / expected, "reasons": reasons}
 
     def timing(self) -> dict:
@@ -282,7 +377,7 @@ class FixedDevelopmentEvaluator:
             for equipment in fold.validation_engines:
                 check()
                 block = blocks[equipment]
-                features, outcome = self._inject(fold, block, equipment, case)
+                features, outcome = self._inject(fold, block, equipment, case, check=check)
                 if features is None:
                     exclusions.append(Exclusion(equipment_id=equipment, reasons=outcome))
                     continue
@@ -310,7 +405,8 @@ class FixedDevelopmentEvaluator:
                 alarm_burden_delta=(faulted.early_alarm_burden - clean.early_alarm_burden
                     if faulted and faulted.early_alarm_burden is not None and clean.early_alarm_burden is not None else None),
                 pairs=[MatchedOutcome(equipment_id=e, clean=self._clean[name][e].outcome, faulted=scored[name][e].outcome,
-                    clean_prediction_digest=self._clean_digests[name][e], faulted_prediction_digest=digests[name][e]) for e in equipment]))
+                    clean_prediction_digest=self._clean_digests[name][e], faulted_prediction_digest=digests[name][e],
+                    clean_alarm=alarmExposure(self._clean[name][e]), faulted_alarm=alarmExposure(scored[name][e])) for e in equipment]))
         check()
         count, expected = len(applications), len(self._training.splits.development)
         result = FaultEvaluation(scenario_id=case.scenario_id, scenario=case, policy=self.policy,
@@ -318,5 +414,8 @@ class FixedDevelopmentEvaluator:
             source_digest=self._source_digest, data_hash=self._training.dataset.data_hash, config_fingerprint=self._config.fingerprint(),
             status="complete" if count == expected else "partial" if count else "not_applicable",
             expected_histories=expected, evaluated_histories=count, exclusions=exclusions, applications=applications, models=models)
+        if self._rawSource is not None:
+            result.raw_source = {'domain': 'raw_vibration', 'fingerprint': self._rawSource.fingerprint,
+                'note': 'Measurement faults were applied to accelerometer samples before recomputing all derived features. These are not simulated mechanical faults.'}
         self._cache[case.scenario_id] = result.model_copy(deep=True)
         return result.model_copy(deep=True)

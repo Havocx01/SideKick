@@ -1,0 +1,72 @@
+services:
+  workspace:
+    build:
+      context: .
+      target: hosted
+    env_file:
+      - ${SIDEKICK_HOSTED_ENV_FILE:-.env.hosted}
+    environment:
+      SIDEKICK_MODE: full
+      SIDEKICK_ARTIFACTS_DIR: /workspace/artifacts
+      SIDEKICK_DATA_DIR: /workspace/data
+      SIDEKICK_MLFLOW: "0"
+      FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - workspace:/workspace
+    expose:
+      - "8000"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: 2
+    mem_limit: 2g
+    memswap_limit: 2g
+    pids_limit: 128
+    restart: unless-stopped
+    stop_grace_period: 35s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 8s
+      start_period: 30s
+      retries: 3
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      SIDEKICK_HOSTNAME: ${SIDEKICK_HOSTNAME:?Set SIDEKICK_HOSTNAME in the hosted environment file}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - proxy-data:/data
+      - proxy-config:/config
+    depends_on:
+      workspace:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cpus: 0.5
+    mem_limit: 128m
+    pids_limit: 64
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  workspace:
+  proxy-data:
+  proxy-config:

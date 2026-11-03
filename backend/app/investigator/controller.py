@@ -11,8 +11,9 @@ from openai import AsyncOpenAI, OpenAIError
 from pydantic import Field, ValidationError, model_validator
 
 from app.assistant.transport import client_options, nebius_options, provider_identity, request_structured, strict_schema
+from app.faults.evaluator import EvaluationStopped
 from app.faults.investigation import ExperimentRunner, LeaseLost
-from app.investigator.findings import classify, loadCriterion
+from app.investigator.findings import alarmSummary, classify, loadCriterion
 from app.investigator.proposals import ProviderProposal, validateProposal
 from app.investigator.records import Frozen
 
@@ -198,8 +199,21 @@ class NemotronController:
                         status = self.finishCall(investigation, token, call, "stopped", modelReason=decision.stopReason, meta=meta)
                         reason = "cancelled" if status == "cancelled" else "model_stopped"
                         break
+                    def checkProposal():
+                        stopped = self.controlStop(investigation, token, deadline, cancelled)
+                        if stopped:
+                            raise ControllerStopped(stopped)
+
                     try:
-                        proposal = self.decodeProposal(decision.proposal, record)
+                        proposal = self.decodeProposal(decision.proposal, record, check=checkProposal)
+                    except ControllerStopped as error:
+                        reason = str(error)
+                        self.finishCall(investigation, token, call, reason, meta=meta)
+                        break
+                    except EvaluationStopped:
+                        reason = 'time_limit'
+                        self.finishCall(investigation, token, call, reason, meta=meta)
+                        break
                     except ValueError as error:
                         self.finishCall(investigation, token, call, "rejected", error="invalid_proposal", feedback=feedback(error), meta=meta)
                         continue
@@ -300,7 +314,7 @@ class NemotronController:
                 db.execute("UPDATE controller_state SET model_stop_reason=? WHERE investigation=?", (modelReason, investigation))
         return status
 
-    def decodeProposal(self, proposal, record):
+    def decodeProposal(self, proposal, record, *, check=None):
         channels = {f"channel-{index}": sensor for index, sensor in enumerate(record.policy.allowed_sensors, 1)}
         aliases = {sensor: alias for alias, sensor in channels.items()}
         payload = proposal.toProposal().model_dump(mode="json")
@@ -317,7 +331,7 @@ class NemotronController:
                 raise ValueError(f"Unknown result reference {unknown[0][:32]}; basedOn may cite only {valid}")
             payload["hypothesis"]["basedOn"] = [refs[ref] for ref in payload["hypothesis"]["basedOn"]]
         accepted = validateProposal(json.dumps(payload), record, self.evaluator)
-        preview = self.evaluator.preview(accepted.scenario)
+        preview = self.evaluator.preview(accepted.scenario, check=check)
         if preview["applicable"] == 0:
             reason = max(preview["reasons"], key=preview["reasons"].get) if preview["reasons"] else "no readings changed"
             for sensor, alias in aliases.items():
@@ -351,7 +365,13 @@ class NemotronController:
                         group["worstDetectionDelta"] = min(deltas + ([group["worstDetectionDelta"]] if group["worstDetectionDelta"] is not None else []))
                     entry.update({"ref": refs[completed[item.id]], **self.resultSummary(result, models)})
                     if criterion is not None:
-                        entry["finding"] = classify(result, criterion).status
+                        finding = classify(result, criterion)
+                        entry["finding"] = finding.status
+                        if criterion.version == 2:
+                            entry['findingReasons'] = list(finding.reasons)
+                            for row, model in zip(entry['models'], result.models, strict=True):
+                                row['cleanEquipmentAlarm'] = alarmSummary([pair.clean_alarm for pair in model.pairs])
+                                row['faultedEquipmentAlarm'] = alarmSummary([pair.faulted_alarm for pair in model.pairs])
                         group["measuredFailures"] += entry["finding"] == "measured_failure"
                 if position >= len(owners) - 12:
                     experiments.append(entry)
@@ -380,9 +400,22 @@ class NemotronController:
             "remainingExperiments": state.budget.max_experiments - state.slots_used,
             "remainingCalls": max(0, limits.maxCalls - count), "remainingCompletionTokens": max(0, limits.maxCompletionTokens - reserved),
             "note": "Development-only measurement corruptions; bounds are not equipment-validated."}
+        if self.evaluator.rawSource is not None:
+            packet['measurement'] = {'domain': 'raw_vibration', 'faultLocation': 'Accelerometer samples, before all derived features are recomputed',
+                'stuck': 'Digitizer holds the final sample of the preceding completed recording',
+                'dropout': 'Every derived feature for the missing axis is marked missing',
+                'drift': 'Additive sample offset, scaled using raw sample variation from the training groups only',
+                'timeUnit': 'Completed source recording; gaps between acquired bursts are not simulated',
+                'note': 'Measurement corruption only; this does not simulate mechanical damage or certify physical plausibility'}
         if criterion is not None:
             packet["criterion"] = {"model": models[criterion.candidate], "minLostWarnings": criterion.min_lost_warnings,
                 "maxAlarmBurden": criterion.max_alarm_burden, "minBurdenIncrease": criterion.min_burden_increase, "minCoverage": criterion.min_coverage}
+            if criterion.version == 2:
+                packet['criterion'].update(version=2, alarmScope=criterion.alarm_scope,
+                    minCleanDetection=criterion.min_clean_detection, minHistories=criterion.min_histories)
+                equipment = {models[name]: rows for name, rows in self.evaluator.cleanEquipment().items()}
+                for row in clean:
+                    row['equipmentAlarm'] = alarmSummary([item['exposure'] for item in equipment[row['model']]])
         return packet
 
     @staticmethod

@@ -45,6 +45,7 @@ def health(config: Settings = Depends(settings)) -> dict:
 
     return {
         "status": "ok",
+        "requires_sign_in": config.hosted,
         "mode": config.mode,
         "version": __version__,
         "revision": os.environ.get("RENDER_GIT_COMMIT", os.environ.get("SIDEKICK_REVISION", ""))[:12] or None,
@@ -65,7 +66,7 @@ def health(config: Settings = Depends(settings)) -> dict:
             if config.mode == "replay"
             else "Hosted synthetic experiments. Results expire after 24 hours and may be lost on a server restart, idle shutdown or redeploy. Export evidence to keep it."
             if config.mode == "demo"
-            else "Full local deployment."
+            else "Private workspace with signed-in access." if config.hosted else "Full local deployment."
         ),
     }
 

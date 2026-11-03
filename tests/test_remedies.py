@@ -7,7 +7,7 @@ from app.faults.investigation import ExperimentRunner, InvestigationBudget, Inve
 from app.faults.profiles import loadPolicy
 from app.investigator.findings import FindingCriterion, recordFindings, saveCriterion
 from app.investigator.reduction import reduce, regressionCase
-from app.investigator.remedies import RemedyError, compareRemedy
+from app.investigator.remedies import RemedyError, compareRemedy, remedyMeetsCriteria
 from test_compound_faults import component, fitted as fitted  # noqa: F401
 
 LR = "logistic_regression/lr-probe"
@@ -108,3 +108,27 @@ def test_cli_compares_a_remedy(fitted, tmp_path, capsys):
     assert cli.main(["--store", str(tmp_path / "store"), "--remedy", investigation, "threshold", "--threshold", "0.05"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["kind"] == "threshold" and report["improved"] == 1
+
+
+@pytest.mark.parametrize('problem', ['over_cap', 'missing', 'unresolved', 'inconclusive'])
+def test_v2_remedy_acceptance_cannot_hide_machine_cap_or_evidence_failures(problem):
+    criterion = FindingCriterion(version=2, candidate=LR, alarm_scope='per_equipment')
+    clean = {'detection': 1., 'alarmBurden': .01, 'histories': 22,
+        'equipmentAlarm': {'histories': 22, 'available': 22, 'missing': 0, 'mean': .01, 'worst': .02}}
+    cases = [{'matchedCohort': True, 'degraded': False, 'remedy': {'status': 'no_measured_failure', 'withinAlarmCap': True}}]
+    assert remedyMeetsCriteria(clean, cases, criterion)
+    if problem == 'over_cap':
+        clean['equipmentAlarm']['worst'] = .2
+    elif problem == 'missing':
+        clean['equipmentAlarm']['missing'] = 1
+    else:
+        cases[0]['remedy']['status'] = 'measured_failure' if problem == 'unresolved' else 'inconclusive'
+    assert not remedyMeetsCriteria(clean, cases, criterion)
+
+
+def test_actual_v2_comparison_rejects_an_unresolved_failure(fitted, tmp_path):
+    engine, store, investigation = investigate(fitted, tmp_path, [STUCK_PAIR], version=2, alarm_scope='per_equipment')
+    report = compareRemedy(store, engine, investigation, 'threshold', threshold=.95)
+    assert report['stillFailing'] >= 1
+    assert report['meetsCriteria'] is False
+    assert 'equipmentAlarm' in report['clean']['remedy']

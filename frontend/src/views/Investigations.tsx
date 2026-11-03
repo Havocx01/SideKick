@@ -13,6 +13,7 @@ import { errorText, findingTones, stops } from "../components/investigations/cas
 import { ContextSetup } from "../components/investigations/ContextSetup";
 import { Disclosure } from "../components/investigations/Disclosure";
 import { WarningComparison } from "../components/investigations/WarningComparison";
+import { CleanAlarmSummary, ThresholdCheck } from "../components/investigations/ThresholdCheck";
 import styles from "./investigations.module.css";
 
 export function Investigations() {
@@ -124,6 +125,7 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
   const [objective, setObjective] = useState("Find sensor faults that cost useful warnings.");
   const [experiments, setExperiments] = useState("16");
   const [seed, setSeed] = useState("3");
+  const [alarmScope, setAlarmScope] = useState<"pooled" | "per_equipment">("pooled");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const target = models.includes(candidate) ? candidate : firstModel;
@@ -139,7 +141,7 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
     }
     setBusy(true); setError("");
     try {
-      const created = await investigations.create({ context: context.name, objective, maxExperiments: budget, seed: initialChecks, criterion: { candidate: target } });
+      const created = await investigations.create({ context: context.name, objective, maxExperiments: budget, seed: initialChecks, criterion: { version: 2, candidate: target, alarm_scope: alarmScope, min_clean_detection: .8, max_alarm_burden: .05 } });
       navigate(`/investigations/${created.id}`);
     } catch (failure) { setError(errorText(failure)); setBusy(false); }
   }
@@ -152,9 +154,9 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
           const [family, ...config] = name.split("/");
           return { value: name, label: candidateLabel(family ?? name, config.join("/") || undefined) };
         })} />
-        <div className={styles.baseline}><span>Before sensor faults</span><dl aria-label="Performance before sensor faults">
+        <div className={styles.baseline} aria-label="Performance before sensor faults"><span>Before sensor faults</span><dl>
           <div><dt>Useful warnings</dt><dd>{percent(clean?.detection)}</dd></div><div><dt>Early alarms</dt><dd>{percent(clean?.alarmBurden, 1)}</dd></div>
-          <div><dt>Histories</dt><dd>{clean?.histories}</dd></div></dl></div>
+          <div><dt>Histories</dt><dd>{clean?.histories}</dd></div></dl><CleanAlarmSummary clean={clean} /></div>
       </div>
       {target.startsWith("age_baseline/") && <p className={styles.footnote}>The age baseline uses elapsed age, not sensor readings. Select a sensor-based model to investigate the effect of sensor faults.</p>}
       <Disclosure title="More options" description={`${setupLabel(context.name)} · up to ${experiments || "?"} tests · ${seed || "0"} initial checks`}>
@@ -168,6 +170,15 @@ function CreateForm({ contexts, initial }: { contexts: ContextInfo[]; initial: C
             <td className="num">{percent(context.clean[name]?.alarmBurden, 1)}</td><td className="num">{context.clean[name]?.histories}</td></tr>)}</tbody></table></div>
         <p className={styles.footnote}>Fault profile: {context.profile ?? "None"}. Its relationships are declared assumptions, not proof of physical causes. Performance is measured on development histories before any sensor fault.</p>
       </Disclosure>
+      <Select label="Alarm budget scope" value={alarmScope} onValueChange={value => setAlarmScope(value as "pooled" | "per_equipment")} options={[
+        { value: "pooled", label: "Pooled cycles" }, { value: "per_equipment", label: "Each machine" }
+      ]} />
+      <p className={styles.footnote}>Provisional development criterion: at least 80% useful warnings without sensor faults and a 5% early alarm budget. {alarmScope === "per_equipment"
+        ? "Each machine must meet the clean alarm budget; missing machine windows make the result inconclusive."
+        : "The alarm budget is measured across pooled eligible cycles. Individual machines can exceed it."} These limits require engineer review before operational use.</p>
+      <ThresholdCheck key={JSON.stringify([context.name, context.contextFingerprint, target, alarmScope])} context={context.name} disabled={busy || !target} criterion={{
+        version: 2, candidate: target, alarm_scope: alarmScope, min_clean_detection: .8, max_alarm_burden: .05
+      }} />
       {error && <p role="alert" className={styles.error}>{error}</p>}
       <div className={styles.actions}><Button type="submit" variant="primary" loading={busy}>Create investigation</Button></div>
     </form>

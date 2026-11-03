@@ -11,7 +11,7 @@ from app.investigator.schemas import (ContextInfo, InvestigationCreate, Investig
     RemedyRequest, ReplayCheck, ResearchRequest, StartRequest)
 from app.investigator.service import Conflict, InvestigationService
 from app.investigator.preparation import PreparationBusy
-from app.investigator.schemas import ContextPreparation, ContextPreparationRequest, ContextPreparationState
+from app.investigator.schemas import ContextPreparation, ContextPreparationRequest, ContextPreparationState, ThresholdCheck, ThresholdCheckRequest
 
 router = APIRouter(prefix="/api/investigations", tags=["investigations"])
 
@@ -54,6 +54,11 @@ def contexts(request: Request):
 @router.get("/contexts/preparation", response_model=ContextPreparationState)
 def preparationState(request: Request):
     return service(request).preparation.state(library_owner(request))
+
+
+@router.post('/contexts/{context}/threshold-check', response_model=ThresholdCheck)
+def thresholdCheck(context: str, payload: ThresholdCheckRequest, request: Request):
+    return call(service(request).checkThreshold, context, payload)
 
 
 @router.post("/contexts/preparation", response_model=ContextPreparation, status_code=202)

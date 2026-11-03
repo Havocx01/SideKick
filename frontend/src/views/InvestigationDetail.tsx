@@ -13,6 +13,7 @@ import { percent } from "../format";
 import { caseTitle, describeCase, effectText, errorText, faultKinds, findingTones, histories, requestId, stops } from "../components/investigations/cases";
 import { Disclosure } from "../components/investigations/Disclosure";
 import { ExportMenu } from "../components/investigations/ExportMenu";
+import { EquipmentAlarms } from "../components/investigations/EquipmentAlarms";
 import { WarningComparison } from "../components/investigations/WarningComparison";
 import { RollingNumber } from "../components/cult/RollingNumber";
 import styles from "./investigations.module.css";
@@ -124,6 +125,7 @@ function Results({ data, busy, act, onRun }: { data: InvestigationView; busy: st
     {!data.active && <Button variant="primary" onClick={onRun}>Choose how to run tests</Button>}</div>;
   return <div className={styles.results}>
     <h2 className="sr-only">Findings</h2>
+    <p className={styles.footnote}>Alarm budget scope: {String(data.criterion.version ?? 1) === "1" ? "pooled (historical v1)" : data.criterion.alarm_scope === "per_equipment" ? "each machine (v2)" : "pooled (v2)"}.</p>
     {flagged.map(finding => <FindingCard key={finding.attempt_id} finding={finding} data={data} busy={busy} act={act} />)}
     {passed.length > 0 && <section className={styles.passed} aria-label="Tests without a measured failure">
       <h3>{passed.length} {passed.length === 1 ? "test" : "tests"} without a measured failure</h3>
@@ -167,6 +169,8 @@ function PassedRow({ finding, data, busy, act }: { finding: Finding; data: Inves
 
 function Measured({ finding }: { finding: Finding }) {
   return <>
+    <p className={styles.footnote}>{String(finding.criterion.version ?? "1") === "1" ? "Historical pooled alarm criterion (v1)." : `Alarm criterion v2: ${finding.criterion.alarm_scope === "per_equipment" ? "each machine, plus pooled clean eligibility" : "pooled eligible cycles"}.`} Clean useful-warning minimum {percent(finding.criterion.min_clean_detection ?? .8)}; early alarm budget {percent(finding.criterion.max_alarm_burden ?? .05)}. Provisional development limits.</p>
+    <EquipmentAlarms evidence={finding.equipment_alarms} />
     <div className={styles.comparisonGrid}><WarningComparison before={finding.clean_detection} after={finding.faulted_detection} />
       <WarningComparison label="Early alarm burden" before={finding.clean_burden} after={finding.faulted_burden} lowerIsBetter /></div>
     {(finding.effects?.length ?? 0) > 0 && <p className={styles.effects}>{finding.effects?.map(effect => effectText(effect.kind, effect.histories.length)).join(" · ")}</p>}

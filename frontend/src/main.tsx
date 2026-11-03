@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { Layout } from "./components/Layout";
 import { Start } from "./views/Overview";
+import { SessionGate } from "./components/SessionGate";
 import "./fonts.css";
 import "@/registry/foundation.css";
 import "./styles.css";
@@ -37,6 +38,6 @@ if (!root) throw new Error("no #root element");
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <SessionGate><RouterProvider router={router} /></SessionGate>
   </React.StrictMode>
 );

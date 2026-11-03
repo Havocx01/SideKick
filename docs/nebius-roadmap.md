@@ -48,6 +48,21 @@ Phases 0 to 11 and the packaging work in phase 13 are implemented on `feat/submi
 
 Known limits: findings come from synthetic development data; the 0.95 demonstration threshold is deliberately fragile; Windows and Linux model fits differ in the last bits, so strict replay is per platform; no field or financial benefit is claimed.
 
+## Development follow-up on 31 October 2026
+
+Later development work is tracked separately from the original submission period:
+
+| Work | Current state |
+|---|---|
+| Fixed vibration features and LR/XGBoost comparison | Completed on development data; no accepted model or alarm remedy |
+| Engineer confirmation of operating requirements | Pending a real reviewer; provisional limits preserved |
+| Per-machine investigation evidence and threshold search | Implemented and checked on desktop/mobile; historical criteria preserved |
+| Raw accelerometer measurement faults | Implemented for whole acquired bursts with source binding, replay, reduction and threshold remedies; all measured-data fault findings inconclusive |
+| Human usefulness and fresh-equipment validation | Pending; no human responses or successful new-cohort claim |
+| Private full hosting | Owner/session/storage/budget configuration implemented; public provisioning and deployment verification remain open |
+
+See [bearing development checks](bearing-development.md) and [private hosting](hosted-workspace.md). The alarm problem remains unresolved under the unchanged per-machine requirements. Raw augmentation, partial-burst faults, startup-relative inputs and fresh raw validation from feature CSVs alone remain unsupported.
+
 ## Implementation principles
 
 - Nemotron proposes hypotheses and experiments. Deterministic code calculates measurements and qualification.

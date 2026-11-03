@@ -81,6 +81,8 @@ class RemoteExecutor:
         # Context packages contain raw development data, so sending them anywhere needs explicit consent.
         if not transferConsent:
             raise PermissionError("Remote execution sends the private context package; explicit transfer consent is required")
+        if evaluator.rawSource is not None:
+            raise RemoteJobError('Remote execution of raw vibration requires a separately packaged source archive; local file references cannot be transferred')
         self.evaluator, self.context = evaluator, Path(context)
         self.outbox, self.inbox = Path(outbox), Path(inbox)
         self.outbox.mkdir(parents=True, exist_ok=True)

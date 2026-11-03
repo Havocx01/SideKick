@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from pydantic import BaseModel
 
 from app.config import validate_nebius_url
+from app.hosted import reserveInference
 
 
 def provider_name(settings) -> str:
@@ -126,8 +127,10 @@ def responseMeta(response) -> dict:
 
 async def request_structured(client, settings, *, history, response_model, max_output_tokens, meta=None):
     provider_name(settings)
+    options = nebius_options(settings, max_output_tokens)
+    reserveInference(settings, options["max_tokens"])
     response = await client.chat.completions.create(model=settings.assistant_model, messages=chat_messages(history),
-        **nebius_options(settings, max_output_tokens), response_format={"type": "json_schema", "json_schema": {
+        **options, response_format={"type": "json_schema", "json_schema": {
             "name": response_model.__name__, "strict": True, "schema": strict_schema(response_model)}})
     if meta is not None:
         meta.update(responseMeta(response))
@@ -142,8 +145,10 @@ async def request_structured(client, settings, *, history, response_model, max_o
 
 async def request_tool_calls(client, settings, *, history, tools, forced, max_output_tokens):
     provider_name(settings)
+    options = nebius_options(settings, max_output_tokens)
+    reserveInference(settings, options["max_tokens"])
     response = await client.chat.completions.create(model=settings.assistant_model, messages=chat_messages(history),
-        **nebius_options(settings, max_output_tokens), tools=[{"type": "function", "function": {
+        **options, tools=[{"type": "function", "function": {
             key: value for key, value in spec.items() if key != "type"}} for spec in tools],
         tool_choice={"type": "function", "function": {"name": forced}} if forced else "auto", parallel_tool_calls=False)
     message = complete_message(response, tools=True)

@@ -10,7 +10,7 @@ import time
 from app.faults.investigation import ExperimentRunner, InvestigationBudget, InvestigationStore
 from app.faults.replay import load_trusted_context
 from app.investigator.controller import ControllerLimits, NemotronController, controllerStatus
-from app.investigator.findings import loadCriterion, recordFindings, replayCheck, saveCriterion, summarize
+from app.investigator.findings import checkCriterion, loadCriterion, recordFindings, replayCheck, saveCriterion, summarize
 from app.investigator.publication import publicExport
 from app.investigator.preparation import ContextPreparer
 from app.investigator.reduction import ensureTable as ensureReductions, reduce
@@ -18,6 +18,7 @@ from app.investigator.remedies import compareRemedy, ensureTable as ensureRemedi
 from app.investigator.research import ResearchReport, checkSettings, ensureTable as ensureResearch, runResearch, savedResearch
 from app.investigator.schemas import CleanMetrics, ContextInfo, InvestigationEvent, InvestigationSummary, InvestigationView, ProposalDetail
 from app.investigator.search import seedSuite
+from app.investigator.thresholds import assessThresholds
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
@@ -50,6 +51,7 @@ class InvestigationService:
         self.active: dict[str, tuple[str, threading.Thread]] = {}
         self.stopping = threading.Event()
         self.lock = threading.Lock()
+        self.thresholdLock = threading.Lock()
         with self.store.transaction() as db:
             db.execute("CREATE TABLE IF NOT EXISTS investigation_owners(investigation TEXT PRIMARY KEY REFERENCES investigation_runs(id),"
                 " owner TEXT NOT NULL, context TEXT NOT NULL, created REAL NOT NULL)")
@@ -88,12 +90,41 @@ class InvestigationService:
             except (ValueError, OSError) as error:
                 logging.getLogger(__name__).warning("Skipping unavailable fitted context %s: %s", path.name, error)
                 continue
-            clean = {name: CleanMetrics(detection=item.detection_fraction, alarmBurden=item.early_alarm_burden, medianLead=item.median_lead_time,
-                histories=item.engines) for name, item in engine.cleanMetrics().items()}
+            equipment, clean = engine.cleanEquipment(), {}
+            for name, item in engine.cleanMetrics().items():
+                burdens = [row['exposure'].burden for row in equipment[name] if row['exposure'].burden is not None]
+                clean[name] = CleanMetrics(detection=item.detection_fraction, alarmBurden=item.early_alarm_burden, medianLead=item.median_lead_time,
+                    histories=item.engines, equipment=equipment[name], meanEquipmentBurden=sum(burdens)/len(burdens) if burdens else None,
+                    worstEquipmentBurden=max(burdens) if burdens else None)
             contexts.append(ContextInfo(name=path.name, contextFingerprint=engine.context_fingerprint,
                 profile=engine.policy.profile.id if engine.policy.profile else None, sensors=list(engine.policy.allowed_sensors),
                 thresholds=engine.thresholds, clean=clean))
         return contexts
+
+    def checkThreshold(self, name, request):
+        """Cooperative budget across setup/prediction; a single load or scoring call cannot be interrupted."""
+        if not self.thresholdLock.acquire(blocking=False):
+            raise Conflict('A threshold check is already running. Try again when it finishes.')
+        started = time.monotonic()
+        deadline = started+30
+
+        def check():
+            if self.stopping.is_set():
+                raise ValueError('The investigation workspace is stopping')
+            if time.monotonic() >= deadline:
+                raise ValueError('Threshold check exceeded its time allowance')
+
+        try:
+            check()
+            engine = self.evaluator(name)
+            deadline = min(deadline, started+engine.policy.max_seconds)
+            check()
+            criterion = checkCriterion(request.criterion, engine.thresholds)
+            scores = engine.calibrationScores(criterion.candidate, check=check)
+            return assessThresholds(scores, engine.thresholds[criterion.candidate], criterion, engine.config,
+                engine.context_fingerprint, deadline=deadline, checkpoint=check)
+        finally:
+            self.thresholdLock.release()
 
     def event(self, investigation, kind, detail=None, requestId=None):
         with self.store.transaction() as db:

@@ -49,3 +49,18 @@ RUN pip install --no-cache-dir -r requirements-train.txt -c runtime-constraints.
     && mkdir -p /app/artifacts /app/data \
     && chown -R sidekick:sidekick /app/artifacts /app/data
 USER sidekick
+
+FROM demo AS hosted
+
+USER root
+RUN mkdir -p /workspace/artifacts /workspace/data && chown -R sidekick:sidekick /workspace
+COPY scripts/check_hosted_config.py ./scripts/
+ENV SIDEKICK_MODE=full \
+    SIDEKICK_ARTIFACTS_DIR=/workspace/artifacts \
+    SIDEKICK_DATA_DIR=/workspace/data \
+    SIDEKICK_ASSISTANT_LIVE_ENABLED=0
+USER sidekick
+CMD ["sh", "-c", "python scripts/check_hosted_config.py && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers"]
+
+# Keep ordinary builds on the restricted public demo.
+FROM demo AS public

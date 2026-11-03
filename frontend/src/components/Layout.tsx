@@ -13,6 +13,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Toaster } from "@/components/ui/toast";
 import { TrainingNotifications } from "./TrainingNotifications";
 import { WorkspaceAiPermission } from "./WorkspaceAiPermission";
+import { SessionControls, useWorkspaceSession } from "./SessionGate";
 const AnalysisInspector = lazy(() => import("./AnalysisInspector").then(module => ({ default: module.AnalysisInspector })));
 const CanvasFractalGrid = lazy(() => import("./cult/CanvasFractalGrid").then(module => ({ default: module.CanvasFractalGrid })));
 
@@ -22,6 +23,7 @@ export function Layout() {
   return <MotionConfig reducedMotion={reduced ? "always" : "never"}><AnalysisProvider><Workspace /></AnalysisProvider></MotionConfig>;
 }
 function Workspace() {
+  const session = useWorkspaceSession();
   const analysis = useAnalysis();
   const health = useApi(() => api.health(), []);
   const id = useExperimentId();
@@ -47,7 +49,7 @@ function Workspace() {
     { title: "Pilot", views: pilotReady ? [{ to: `${prefix}/pilot`, label: "Equipment pilot", icon: ClipboardCheck }] : [] }
   ];
   const views = sections.flatMap(section => section.views);
-  const workspace = health.data?.mode === "replay" ? "Recorded demo" : health.data?.mode === "demo" ? "Hosted sample workspace" : "Local workspace";
+  const workspace = session ? "Private workspace" : health.data?.mode === "replay" ? "Recorded demo" : health.data?.mode === "demo" ? "Hosted sample workspace" : "Local workspace";
   const workspacePath = location.pathname === "/walkthrough" ? "/" : location.pathname;
   const activeView = views.find(view => view.to === workspacePath);
   const currentView = activeView?.label ?? (location.pathname === "/walkthrough" ? "Guided walkthrough" : location.pathname.endsWith("/pilot") ? "Equipment pilot" : location.pathname === "/new" ? "New experiment" : location.pathname.startsWith("/investigations") ? "Investigation" : "Experiment progress");
@@ -96,7 +98,6 @@ function Workspace() {
             </div>
           ))}
         </nav>
-        {/* {id && <Link className="benchmark-return" to="/comparison" aria-label="Recorded benchmark" title="Recorded benchmark"><ArrowLeft size={14} aria-hidden="true" /><span>Recorded benchmark</span></Link>} */}
         <div className="sidebar-foot">
           <div className="workspace-summary" role="status">
             <div className="workspace-status"><span aria-hidden="true" className={health.data ? "status-dot connected" : "status-dot"} /><span>{health.data ? workspace : health.error ? "Server unavailable" : "Connecting"}</span></div>
@@ -127,7 +128,7 @@ function Workspace() {
               </div>
             </details>
           ) : null}
-            {health.data?.mode === "full" && <WorkspaceAiPermission />}<ThemeToggle /><MotionToggle />
+            <SessionControls />{health.data?.mode === "full" && <WorkspaceAiPermission />}<ThemeToggle /><MotionToggle />
           </div>
         </header>
         <div className={`workspace-body${isOverview ? " overview-workspace" : ""}`}>
