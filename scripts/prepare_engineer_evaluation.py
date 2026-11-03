@@ -319,7 +319,7 @@ def prepare(output: Path, bundle_path: Path = REPO_ROOT / "evidence/bundle.json"
 
 Status: prepared offline; no engineer evaluation conducted. No training or AI requests were made. Historical and synthetic cases do not establish field reliability.
 
-1. Agree the equipment decision, reviewer, success criteria, failure definition and data policy using docs/sidekick-engineer-evaluation.md.
+1. Agree the equipment decision, reviewer, success criteria, failure definition and data policy using the equipment evaluation guidance in README.md.
 2. Give the facilitator folder only to the facilitator. Have an engineer check answer-key relevance before scoring. Manual pages contain raw server evidence, not a model-generated reference answer.
 3. Use reviewer/manual.html or reviewer/local.html for the assigned method. Score sheets include AI rows, but AI outputs are absent: mark those rows not_available unless separately authorized saved outputs are supplied and their context/fingerprints checked. Do not present local output as AI.
 4. method-order.csv rotates the three methods across reviewers. This pack reuses contexts: do not show one reviewer the identical case under all three methods in one session. Assign independent reviewers, or use separately adjudicated equivalent cases; record familiarity and learning effects. With one engineer, report exploratory observations only.

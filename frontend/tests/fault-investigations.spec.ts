@@ -214,15 +214,15 @@ for (const selection of ["Model setup", "Model under test", "Alarm budget scope"
     await expect(check.getByRole("status")).toHaveText("A threshold meets the development limits");
     if (selection === "Model setup") await page.getByRole("button", { name: "More options", exact: false }).click();
     await page.getByRole("combobox", { name: selection, exact: true }).click();
-    await page.getByRole("option", { name: selection === "Model setup" ? "other-setup" : selection === "Model under test" ? "Logistic regression · lr-other" : "Each machine", exact: true }).click();
+    await page.getByRole("option", { name: selection === "Model setup" ? "other-setup" : selection === "Model under test" ? "Logistic regression Â· lr-other" : "Each machine", exact: true }).click();
     await expect(check.getByRole("status")).toHaveCount(0);
     expect(state.posts).toHaveLength(1);
     let release!: () => void;
     state.thresholdGate = new Promise<void>(resolve => { release = resolve; });
     await check.getByRole("button", { name: "Check warning threshold", exact: true }).click();
-    await expect(check.getByRole("status")).toHaveText("Checking recorded development scores…");
+    await expect(check.getByRole("status")).toHaveText("Checking recorded development scoresâ€¦");
     await page.getByRole("combobox", { name: selection, exact: true }).click();
-    await page.getByRole("option", { name: selection === "Model setup" ? "synthetic" : selection === "Model under test" ? "Logistic regression · lr-probe" : "Pooled cycles", exact: true }).click();
+    await page.getByRole("option", { name: selection === "Model setup" ? "synthetic" : selection === "Model under test" ? "Logistic regression Â· lr-probe" : "Pooled cycles", exact: true }).click();
     await expect(check.getByRole("status")).toHaveCount(0);
     const response = page.waitForResponse(value => value.url().endsWith("/threshold-check"));
     release();

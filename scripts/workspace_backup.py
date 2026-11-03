@@ -371,7 +371,7 @@ def main(argv=None) -> int:
         else:
             receipt = restore_backup(args.archive, args.destination)
             print(f"Restored into new workspace: {args.destination.expanduser().resolve()}")
-            print("Original workspace retained. See docs/workspace-backup.md for startup settings and ownership limitations.")
+            print("Original workspace retained. See README.md for startup settings and ownership limitations.")
         print(f"{len(receipt['files'])} files; {receipt['total_bytes']:,} expanded bytes; saved {receipt['created_at']}")
         return 0
     except (BackupError, OSError, sqlite3.Error) as exc:

@@ -1,49 +1,32 @@
 # Sidekick
 
-Investigate whether equipment-warning models still warn in time when sensors go missing, freeze or drift.
+Sidekick tests whether equipment-warning models still warn in time when sensors go missing, freeze or drift. Its React interface and FastAPI backend support model preparation, reproducible experiments, failure reduction, remedy comparisons and evidence exports. Optional NVIDIA Nemotron requests through Nebius propose experiments; deterministic code measures the outcomes.
 
-Sidekick combines NVIDIA Nemotron experiment proposals with deterministic sensor-fault evaluation. Engineers can reproduce failures, reduce them to simpler scenarios, compare remedies and export the evidence behind the next decision.
+[Public demo](https://sidekick-e9lu.onrender.com/) · [MIT license](LICENSE)
 
-[Public demo](https://sidekick-e9lu.onrender.com/) · [Reviewer guide](SUBMISSION.md) · [Submission details](docs/nebius-submission.md) · [MIT license](LICENSE)
+## Run locally
 
-## Start here
+Install Python 3.11+ and Node.js 22.12+ or 20.19+. Download or clone the repository, then double-click **Start Sidekick.cmd** on Windows. On macOS/Linux, run:
 
-**Explore without installing:** open the public demo and choose **Investigations** to inspect recorded synthetic investigations. These are labelled **Recorded, not live**. The hosted app also offers the earlier walkthrough and restricted sample training. New Nemotron searches, fault research, private uploads and full validation run locally.
+```sh
+python3 scripts/launch.py
+```
 
-**Run on Windows:**
+The launcher creates `.venv`, installs dependencies, builds the interface and opens http://127.0.0.1:8140. The first launch needs internet. Keep its terminal open; Ctrl+C stops the server. No API key is needed for recorded evidence or local training.
 
-1. Download the [main-branch ZIP](https://github.com/Havocx01/SideKick/archive/refs/heads/main.zip) and extract it.
-2. Install Python 3.11+ and Node.js 22.12+ or 20.19+ if they are not already available.
-3. Double-click **Start Sidekick.cmd**. It prepares dependencies, builds the interface and opens [localhost:8140](http://127.0.0.1:8140).
+Open **Investigations**, choose **Prepare sample models**, and review their baseline performance. Create an investigation, choose a model and pooled or per-machine alarm limits, then run saved proposals. Results and budgets persist across refreshes and restarts. Threshold checks report development tradeoffs without applying changes.
 
-Keep the launcher window open; Ctrl+C stops the server. The first launch needs internet. On macOS or Linux, run `python3 scripts/launch.py`. No API key is needed for recorded evidence or local training. Restart the app after changing server settings.
-
-Open **Investigations** and choose **Prepare sample models**. Sidekick generates a synthetic rotating-machine sample, fits the models and checks their baseline performance in the background. You can leave the page and return to the saved preparation status. This runs locally without an API key; your existing investigations stay intact.
-
-For a prefilled demonstration with a failure, reduction and remedy comparison, you can optionally run:
+For a complete synthetic demonstration without paid requests:
 
 ```powershell
 .venv\Scripts\python.exe scripts/demo_investigation.py
 ```
 
-Then open **Investigations** and select the saved concern beginning **Demo: find sensor faults**. The command trains a synthetic fixture, evaluates supplied cases, reproduces and reduces a failure, compares a threshold remedy, assesses a frozen procedure on fresh synthetic histories and exports public evidence. It makes no provider calls. Its 0.95 warning threshold is deliberately fragile so the demonstration contains a failure; it is not a recommended setting. With the Nebius key in `.env`, add `--allow-nebius` to let Nemotron propose further cases within 4 calls and 16,384 completion tokens.
+On macOS/Linux, substitute `.venv/bin/python` for the Windows virtual-environment path. The example deliberately uses a fragile 0.95 threshold to demonstrate failure, replay, reduction, remedies and fresh-history assessment. It is not a recommended operating threshold.
 
-## Investigation workflow
+## Optional AI
 
-1. Prepare sample models in the app, or select an existing model setup. Review performance before sensor faults, enter your concern and set the experiment budget. Model IDs, warning thresholds and profile assumptions remain available under setup details.
-2. Run supplied proposals locally, or explicitly allow **Start Nemotron search**. Nemotron receives the concern, channel aliases, reviewed descriptions, bounds and aggregate results.
-3. Choose pooled or per-machine alarm limits, then inspect matched clean/faulted warnings, pooled/mean/worst burden, individual denominators and missing windows. The threshold check searches without applying changes. Code classifies findings; model explanations remain hypotheses.
-4. Replay a result, reduce a measured failure, compare a threshold change or explicitly approved augmented retraining, and export a regression case.
-5. Freeze the chosen procedure before assessing fresh histories. Previously exposed histories cannot become a new independent holdout.
-6. Optionally choose **Research this fault** to retrieve external references through Tavily and ask Nemotron for cited follow-up suggestions. Research is separate from measured findings.
-
-The runner saves proposals, canonical scenario IDs, attempts, checksums, call/token allowances and lifecycle events in SQLite. Duplicate requests, reopening a page or restarting the server do not reset paid-work counters. Cancellation and lease checks control publication. A saved model stop is not proof of robustness.
-
-## NVIDIA, Nebius and Tavily
-
-The investigation model is **`nvidia/nemotron-3-super-120b-a12b`**, served through **Nebius Token Factory**. The OpenAI Python SDK provides compatible transport; Nemotron proposes the experiments. Token Factory supplies hosted inference without a separate model-serving deployment. We have not established a development-speed improvement numerically.
-
-Create a local `.env` from [.env.example](.env.example), then configure:
+Copy [.env.example](.env.example) to `.env` and configure your own server-side credentials:
 
 ```dotenv
 SIDEKICK_MODE=full
@@ -54,43 +37,80 @@ NEBIUS_API_KEY=
 TAVILY_API_KEY=
 ```
 
-Fill in your own server-side keys; Tavily is optional. Keep `.env` out of Git. Enable workspace AI permission and approve the specific action in the interface. Setting a key or opening a saved investigation never starts inference. Shell environment variables override `.env`.
+Restart after changing settings. Shell environment variables override `.env`. Enable workspace AI permission and approve the specific action in the interface. Setting a key or opening saved results starts no inference. Tavily is optional and used only for requested fault research. The OpenAI SDK supplies compatible transport to Nebius; no OpenAI key is needed.
 
-Each fault-research action permits one Tavily search and one Nemotron request, with a total completion ceiling of 5,120 tokens. Saved research, including a failed or interrupted attempt, is reused without automatic paid retries. Source excerpts are untrusted context; citations do not prove a physical cause or validate a fault policy. The initial live search returned unrelated pages and the model declined sensor-specific advice. The final filter rejects those captured sources offline; useful live retrieval remains unverified.
+Nemotron receives the concern, aliased channels, reviewed descriptions, bounds and aggregate results. Research sends a query to Tavily and source excerpts to Nemotron. Review each transfer before approving. Saved call/token allowances and failures do not reset on restart. Each research action permits one search and one model request with a 5,120-token completion ceiling. Citations are suggestions, not measured fault evidence.
 
-Token Factory is the default and only live model provider. No OpenAI account or key is needed; the OpenAI SDK is used only for compatible transport to Nebius. See the [provider setup guide](docs/nebius-phase-1.md). Containerized experiment workers are implemented, but deployment on Nebius Serverless Jobs or Endpoints is not claimed.
+## Data and equipment evaluation
 
-## Recorded results and limits
+The CSV workflow accepts files up to 10 MiB with at least 25 complete run-to-failure histories. Use distinct equipment IDs, integer operating cycles, numeric sensors and documented failure cycles. If failure cycles are omitted, explicitly confirm that every history ends in failure. The minimum leaves little development data; it does not establish a strong study. Timestamps and censored histories require a supported adaptation.
 
-These synthetic results are tied to their saved fitted contexts and recorded code revisions. They are historical evidence, not guarantees for a newly prepared model:
+Before a study, agree the equipment family, failure definition, warning windows, alarm limits, fault assumptions and decision with a qualified reviewer. Keep equipment-separated development and reserved histories. Freeze a procedure before assessing untouched histories once; an interrupted assessment still exposes them. Retuning requires different unseen histories. Record excluded records, unavailable alarm windows, reviewer observations and limitations. Missing windows are not zero alarms.
 
-| Recorded evaluation | Result |
-| --- | --- |
-| [Nemotron on the default context](evidence/investigations/nemotron-live-default.json) | Three accepted proposals, with later proposals citing earlier results, each evaluated on 22/22 histories. No qualifying failure; 1,121 reported completion tokens. |
-| [A failure Nemotron chose](evidence/investigations/nemotron-live-browser.json) | Started from the browser at the deliberately fragile 0.95 threshold. Stuck ambient temperature with bearing-temperature drift cost 1 of 22 useful warnings; it replayed, reduced and was resolved by a 0.5 threshold, but did not reproduce on 12 fresh histories. |
-| [Supplied compound-fault demonstration](evidence/investigations/nemotron-live-demo.json) | Stuck vibration and oil-particle channels reduced useful warnings from 22/22 to 18/22. It replayed, reduced and was resolved by a 0.5 threshold in development, but both it and its reduction still failed on 12 fresh histories. Supplied, not chosen by Nemotron. |
-| [Automatically selected thresholds](evidence/investigations/synthetic-recorded.json) | None of six supplied cases met the failure criterion. |
+Recorded investigations are synthetic evidence tied to saved models and revisions. Their supplied faults and fragile thresholds do not establish field reliability, savings or an advantage over simpler search. The measured-bearing development study has no accepted remedy under its provisional per-machine limits. A synthetic 0.2 cutoff selected in development also failed a later 120-history check: worst-machine alarm burden reached 6.78%, above the 5% limit. No production threshold was changed.
 
-The project includes fixed, random, hill-climbing and recorded-Nemotron search comparisons. The available live comparison does not establish that Nemotron outperforms simpler search.
+Raw vibration experiments require verified, source-bound recordings. Partial-burst faults, raw remote execution, raw augmentation and fresh raw validation from feature CSVs alone are unsupported. Fitted contexts require matching source, dependencies and platform; prepare new contexts after source changes. Historical records remain readable.
 
-[Measured bearing development checks](docs/bearing-development.md), dated October 31, added a fixed vibration feature comparison and raw-accelerometer faults. All four model arms remain unqualified under the per-machine requirements, and all 32 raw fault findings are inconclusive. Richer features did not solve the alarm problem. These are development results with provisional requirements, not fresh-equipment or field validation.
+## Development and tests
 
-The earlier NASA C-MAPSS evidence demonstrates the original single-sensor workflow. It is simulated-engine evidence and already exposed. Neither those results nor the synthetic investigations establish ABB field performance, maintenance savings or deployment approval. Fault-profile relationships are declared prototype assumptions until independently supported.
+The repository keeps app source, launch/maintenance scripts, deployment files, required recorded evidence, tests and CI. Local datasets and saved work belong in ignored `data/` and `artifacts/`; generated reports belong in ignored `output/`. Never commit credentials or private equipment data.
 
-## Development and reproducibility
+Run `./tasks.ps1 help` for PowerShell tasks; Unix equivalents are in `Makefile`. `./tasks.ps1 web` starts frontend development and `./tasks.ps1 api` serves the built app. `docker compose up --build` starts local development services at http://localhost:5173.
 
-The stack is React/TypeScript/Vite, Python/FastAPI/Pydantic, SQLite, NumPy, pandas, SciPy, scikit-learn and XGBoost. The project includes browser and API workflows, a CLI, private trusted replay packages and separate aggregate public exports.
+Run backend checks from the root:
 
-- `tasks.ps1 web` starts frontend development; `tasks.ps1 api` serves the built app locally. `make` equivalents are available.
-- `docker compose up --build` starts local development services at [localhost:5173](http://localhost:5173).
-- Deployment contexts, coordinators and remote workers use Python 3.11.9 on Linux with [pinned numerical dependencies](docker/runtime-constraints.txt). Native Windows packages are not assumed to replay identically on Linux.
-- Contexts are bound to their source and dependencies. Old fitted contexts are excluded from new-run selection; their saved investigation records remain readable. Generate a new context after source changes.
-- Full mode runs locally without sign-in by default. The [private hosting configuration](docs/hosted-workspace.md) adds a configured owner, secure sessions, persistent storage and durable daily AI allowances. Actual public deployment verification remains separate from local checks.
+```powershell
+.venv\Scripts\python.exe -m pip install -r backend/requirements-dev.txt
+.venv\Scripts\python.exe -m ruff check --config pyproject.toml backend/app tests scripts
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe scripts/generate_types.py
+git diff --exit-code frontend/src/api/types.ts
+```
 
-See [verification commands](TESTING.md), [compound evaluation](docs/nebius-phase-2.md), [investigation API/CLI and research](docs/nebius-phase-3.md), and [backup and recovery](docs/workspace-backup.md). Routine tests run offline. Paid inference requires an explicit live action.
+Then run frontend checks:
 
-## Earlier project and hackathon updates
+```powershell
+$env:SIDEKICK_TEST_PYTHON = (Resolve-Path '.venv/Scripts/python.exe').Path
+Set-Location frontend
+npm ci
+npm run lint
+npm run typecheck
+npm run test:protocol
+npm run build
+npx playwright install chromium
+npm test
+```
 
-Sidekick V2 began as an ABB Accelerator 2026 project for comparing equipment-warning models under fixed single-sensor faults. The Nebius x NVIDIA adaptation adds compound evaluation, a durable adaptive controller, fault profiles, findings, reduction, remedies, search comparisons, a browser/API workbench, fresh-history validation, recorded public evidence and optional Tavily research. [Submission details](docs/nebius-submission.md) distinguish the earlier work, new implementation and verified results.
+On Unix, export `SIDEKICK_TEST_PYTHON` with the absolute `.venv/bin/python` path. Browser tests use isolated workspaces. Keep `SIDEKICK_ASSISTANT_LIVE_ENABLED=0` and `SIDEKICK_ASSISTANT_LIVE_EVAL=0` for routine tests, which mock paid services. CI also builds and checks worker/public-demo containers. Preserve `evidence/bundle.json` byte-for-byte; checksums establish integrity, not authenticity.
 
-The project is licensed under [MIT](LICENSE). Dataset and dependency terms still apply to their respective materials.
+## Hosting
+
+The default Docker image and `render.yaml` serve the restricted public demo. `Dockerfile` also provides `replay`, `demo` and private `hosted` targets. Container contexts/workers use Python 3.11.9 on Linux with [pinned dependencies](docker/runtime-constraints.txt). Native Windows fits may differ in the last bits.
+
+For a private full workspace, use a Docker host, a domain pointing to it and ports 80/443. Configure access and start the prepared stack:
+
+```powershell
+.venv\Scripts\python.exe scripts/create_hosted_login.py --owner adam --origin https://workspace.example.com
+node scripts/check_hosted_compose.mjs
+docker compose --env-file .env.hosted -f compose.hosted.yaml up --build -d
+```
+
+Replace the example origin. The helper prompts for a password, writes its salted hash to `.env.hosted`, and sets paid allowances to zero. Keep that file private. Caddy supplies HTTPS; named volumes persist the workspace and certificates. Each deployment owns one workspace; changing owners requires separate storage. Preserve volumes on updates. Verify real HTTPS, sign-in/out, private-route denial, restart persistence and backup/restore before relying on a deployment. `/api/health` reports the deployed revision.
+
+Paid actions additionally require explicit finite `SIDEKICK_HOSTED_MAX_CALLS`, `SIDEKICK_HOSTED_MAX_COMPLETION_TOKENS` and `SIDEKICK_HOSTED_MAX_SEARCHES` allowances. Reservations persist across failures and reset by UTC date; they are not billing guarantees. Per-action approval still applies. Sessions expire within eight hours; password changes invalidate sessions without deleting saved work.
+
+## Backup and recovery
+
+Stop the app and finish or cancel jobs before backing up:
+
+```powershell
+.\tasks.ps1 backup -OutputPath 'D:\Sidekick backups\workspace.zip'
+.\tasks.ps1 verify-backup -Archive 'D:\Sidekick backups\workspace.zip'
+.\tasks.ps1 restore -Archive 'D:\Sidekick backups\workspace.zip' -Destination 'D:\Sidekick recovered'
+```
+
+Backups preserve datasets, artifacts, SQLite records, exposure history and recorded evidence. They exclude app code, environment credentials and browser cookies. Archives contain private data and are not encrypted; store them securely on separate storage. Restore only trusted archives into a new directory. The original workspace is retained.
+
+To use a restored workspace, set `SIDEKICK_DATA_DIR`, `SIDEKICK_ARTIFACTS_DIR` and `SIDEKICK_BUNDLE_PATH` to its `data`, `artifacts` and `evidence/bundle.json` paths, then start the API using compatible source and dependencies. Original ownership remains enforced; recovery does not transfer browser sessions or reset exposure history. Retain newer exposure records when recovering an older snapshot.
+
+Sidekick began as an ABB Accelerator project and later added the Nemotron workbench. The project is MIT licensed; dataset and dependency terms apply separately.
